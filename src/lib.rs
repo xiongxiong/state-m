@@ -7,23 +7,6 @@ use tokio::{
 };
 use tracing::instrument;
 
-pub struct Source<S> {
-    pub value: Arc<S>,
-    sender: Arc<broadcast::Sender<S>>,
-}
-
-impl<S> Source<S> {
-    pub fn reader(&self) -> Reader<S> {
-        Reader {
-            sender: self.sender.clone(),
-        }
-    }
-}
-
-pub struct Reader<S> {
-    sender: Arc<broadcast::Sender<S>>,
-}
-
 #[derive(Debug)]
 pub struct StateMachine<Tag>
 where
@@ -52,6 +35,20 @@ where
     pub fn new() -> Self {
         Default::default()
     }
+
+    pub fn new_source<S>(&self, tag: Tag, source: Source<S>)
+    where
+        S: 'static + Send + Sync,
+    {
+        self.sources.insert(tag, Box::new(source));
+    }
+
+    pub fn new_target<T>(&self, tag: Tag, target: EventStore<T>)
+    where
+        T: 'static + Send + Sync,
+    {
+        self.targets.insert(tag, Box::new(target));
+    }
 }
 
 pub trait AsStateMachine<Tag>
@@ -59,6 +56,23 @@ where
     Tag: Eq + Hash,
 {
     fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
+}
+
+pub struct Source<S> {
+    pub value: Arc<S>,
+    sender: Arc<broadcast::Sender<S>>,
+}
+
+impl<S> Source<S> {
+    pub fn reader(&self) -> Reader<S> {
+        Reader {
+            sender: self.sender.clone(),
+        }
+    }
+}
+
+pub struct Reader<S> {
+    sender: Arc<broadcast::Sender<S>>,
 }
 
 pub trait AsSource<S, Tag> {
@@ -100,6 +114,10 @@ where
 {
     async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
 
+    /// subscribe
+    /// stage [1] -- receive from source's broadcast channel
+    /// stage [2] -- convert to target type and send to mpsc channel
+    /// stage [3] -- receive from mpsc channel and process it
     #[instrument(name = "AsTarget::subscribe", skip_all, fields(tag, chan_cap))]
     async fn subscribe(
         self: Arc<Self>,
