@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use std::{fmt::Debug, pin::Pin, sync::Arc};
+use dashmap::DashMap;
+use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, pin::Pin, sync::Arc};
 use tokio::{
     select,
     sync::{Mutex, RwLock, broadcast, mpsc},
@@ -23,11 +24,44 @@ pub struct Reader<S> {
     sender: Arc<broadcast::Sender<S>>,
 }
 
-pub trait AsStateMachine {
-    fn state_machine(self: Arc<Self>) -> Arc<Mutex<()>>;
+#[derive(Debug)]
+pub struct StateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    sources: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
+    targets: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
 }
 
-pub trait AsSource<S> {
+impl<Tag> Default for StateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    fn default() -> Self {
+        Self {
+            sources: Default::default(),
+            targets: Default::default(),
+        }
+    }
+}
+
+impl<Tag> StateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+pub trait AsStateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
+}
+
+pub trait AsSource<S, Tag> {
     /// 通道容量
     const CHAN_CAP: usize = 10;
 }
@@ -57,12 +91,12 @@ where
 }
 
 #[async_trait]
-pub trait AsTarget<S, T, Tag>: AsStateMachine
+pub trait AsTarget<S, T, Tag>: AsStateMachine<Tag>
 where
     Self: 'static,
     S: 'static + Debug + Clone + Send,
     T: 'static + Debug + Clone + PartialEq + Send + Sync,
-    Tag: 'static + Debug + Send,
+    Tag: 'static + Debug + Eq + Hash + Send + Sync,
 {
     async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
 
