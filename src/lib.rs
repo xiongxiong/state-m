@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use std::{pin::Pin, sync::Arc};
-use tokio::sync::broadcast;
+use std::{fmt::Debug, pin::Pin, sync::Arc};
+use tokio::sync::{Mutex, broadcast};
 
 pub struct Source<S> {
     pub value: Arc<S>,
@@ -22,20 +22,21 @@ pub struct Reader<S> {
 }
 
 pub trait AsStateMachine {
-    type ChangeEvent;
+    fn lock() -> Arc<Mutex<()>>;
 }
 
 #[async_trait]
 pub trait AsSubscriber<S, T>: AsStateMachine
 where
-    T: Into<Self::ChangeEvent>,
+    T: Debug + Clone,
 {
+    async fn on_change(&self, new_value: T, old_value: Option<T>);
+
     async fn subscribe(
         &self,
         reader: &Reader<T>,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send,
     ) {
-        //
     }
 }
 
