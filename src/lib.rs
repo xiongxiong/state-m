@@ -13,6 +13,7 @@ use tokio::{
     select,
     sync::{Mutex, RwLock, broadcast, mpsc},
 };
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 #[derive(Debug)]
@@ -235,6 +236,14 @@ where
     }
 }
 
+pub struct SubscribeHandle(CancellationToken);
+
+impl SubscribeHandle {
+    pub fn unsubscribe(&self) {
+        self.0.cancel();
+    }
+}
+
 #[async_trait]
 pub trait UseStateTarget<S, T, Tag>: HasStateTarget<S, T, Tag>
 where
@@ -254,15 +263,20 @@ where
         tag: Tag,
         chan_cap: usize,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
-    ) {
+    ) -> SubscribeHandle {
         let t_store: EventStore<T> = EventStore::new();
         (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) = mpsc::channel::<T>(chan_cap);
+        let cancel_token = CancellationToken::new();
+        let handle = SubscribeHandle(cancel_token.clone());
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
                 select! {
+                    _ = cancel_token.cancelled() => {
+                        break;
+                    }
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq)) => {
@@ -305,6 +319,7 @@ where
             }
             tracing::info!("Subscription end -- {:?}", tag);
         });
+        handle
     }
 }
 
