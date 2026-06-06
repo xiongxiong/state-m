@@ -176,6 +176,20 @@ where
         }
     }
 
+    pub async fn modify(&self, func: impl Fn(S) -> S) -> Result<(), SourceChangeError> {
+        let mut guard = self.value.write().await;
+        let s = func((*guard).clone());
+        if *guard != s {
+            self.sender
+                .send((s.clone(), false))
+                .map_err(|_| SourceChangeError::SendErr)?;
+            *guard = s;
+            Ok(())
+        } else {
+            Err(SourceChangeError::NotChange)
+        }
+    }
+
     pub async fn touch(&self) -> Result<(), broadcast::error::SendError<(S, bool)>> {
         let guard = self.value.read().await;
         self.sender.send(((*guard).clone(), false))?;
