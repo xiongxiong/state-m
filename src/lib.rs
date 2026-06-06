@@ -30,34 +30,66 @@ where
 
 impl<Tag> StateMachine<Tag>
 where
-    Tag: Eq + Hash,
+    Tag: Clone + Debug + Eq + Hash,
 {
     pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn new_source<S>(&self, tag: Tag, source: Source<S>)
+    pub(crate) fn new_source<S>(&self, tag: Tag, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
+        assert!(
+            !self.sources.contains_key(&tag),
+            "duplicate tag for source -- {:?}",
+            tag
+        );
         self.sources.insert(tag, Box::new(source));
     }
 
-    pub fn new_target<T>(&self, tag: Tag, target: EventStore<T>)
+    pub(crate) fn new_target<T>(&self, tag: Tag, target: EventStore<T>)
     where
         T: 'static + Send + Sync,
     {
+        assert!(
+            !self.sources.contains_key(&tag),
+            "duplicate tag for target -- {:?}",
+            tag
+        );
         self.targets.insert(tag, Box::new(target));
     }
 }
 
-pub trait AsStateMachine<Tag>
+#[async_trait]
+pub trait HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
-    fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
+    async fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
 }
 
+#[async_trait]
+pub trait UseStateSource<Tag>: HasStateMachine<Tag>
+where
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
+    async fn new_source<S>(self: Arc<Self>, tag: Tag, source: Source<S>)
+    where
+        S: 'static + Send + Sync,
+    {
+        (*self.state_machine().await.lock().await).new_source(tag, source);
+    }
+}
+
+impl<T, Tag> UseStateSource<Tag> for T
+where
+    T: HasStateMachine<Tag>,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
+}
+
+#[derive(Clone, Debug)]
 pub struct Source<S> {
     pub value: Arc<S>,
     sender: Arc<broadcast::Sender<S>>,
@@ -71,15 +103,12 @@ impl<S> Source<S> {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Reader<S> {
     sender: Arc<broadcast::Sender<S>>,
 }
 
-pub trait AsSource<S, Tag> {
-    /// 通道容量
-    const CHAN_CAP: usize = 10;
-}
-
+#[derive(Clone, Debug)]
 pub struct EventStore<T>(pub(crate) Arc<RwLock<Option<T>>>);
 
 impl<T> EventStore<T>
@@ -105,15 +134,13 @@ where
 }
 
 #[async_trait]
-pub trait AsTarget<S, T, Tag>: AsStateMachine<Tag>
+pub trait UseStateTarget<S, T, Tag>: HasStateTarget<S, T, Tag>
 where
     Self: 'static,
-    S: 'static + Debug + Clone + Send,
-    T: 'static + Debug + Clone + PartialEq + Send + Sync,
-    Tag: 'static + Debug + Eq + Hash + Send + Sync,
+    S: 'static + Clone + Debug + Send,
+    T: 'static + Clone + Debug + PartialEq + Send + Sync,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
-
     /// subscribe
     /// stage [1] -- receive from source's broadcast channel
     /// stage [2] -- convert to target type and send to mpsc channel
@@ -126,9 +153,10 @@ where
         chan_cap: usize,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
     ) {
+        let t_store: EventStore<T> = EventStore::new();
+        (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) = mpsc::channel::<T>(chan_cap);
-        let t_store: EventStore<T> = EventStore::new();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
@@ -158,8 +186,8 @@ where
                     res = rx_t.recv() => {
                         match res {
                             Some(t) => {
-                                let state_machine = self.clone().state_machine();
-                                let _lock = state_machine.lock();
+                                let state_machine = self.clone().state_machine().await;
+                                let _lock = state_machine.lock().await;
                                 if let Err(e) = self.clone().on_change(t, t_store.value().await).await {
                                     tracing::error!("stage [3] | change event proc error -- {}", e);
                                 }
@@ -174,6 +202,23 @@ where
             tracing::info!("Subscription end -- {:?}", tag);
         });
     }
+}
+
+impl<V, S, T, Tag> UseStateTarget<S, T, Tag> for V
+where
+    V: 'static + HasStateTarget<S, T, Tag>,
+    S: 'static + Clone + Debug + Send,
+    T: 'static + Clone + Debug + PartialEq + Send + Sync,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
+}
+
+#[async_trait]
+pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
