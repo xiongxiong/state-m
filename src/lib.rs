@@ -8,6 +8,7 @@ use std::{
     pin::Pin,
     sync::Arc,
 };
+use thiserror::Error;
 use tokio::{
     select,
     sync::{Mutex, RwLock, broadcast, mpsc},
@@ -140,15 +141,17 @@ where
 {
 }
 
+type NotCheckEq = bool;
+
 #[derive(Clone, Debug)]
 pub struct Source<S> {
-    value: Arc<S>,
-    sender: Arc<broadcast::Sender<S>>,
+    value: Arc<RwLock<S>>,
+    sender: Arc<broadcast::Sender<(S, NotCheckEq)>>,
 }
 
 impl<S> Source<S>
 where
-    S: Clone,
+    S: Clone + PartialEq,
 {
     pub fn reader(&self) -> Reader<S> {
         Reader {
@@ -156,14 +159,41 @@ where
         }
     }
 
-    pub fn value(&self) -> S {
-        (*self.value.as_ref()).clone()
+    pub async fn value(&self) -> S {
+        (*self.value.read().await).clone()
     }
+
+    pub async fn change(&self, s: S) -> Result<(), SourceChangeError> {
+        let mut guard = self.value.write().await;
+        if *guard != s {
+            self.sender
+                .send((s.clone(), false))
+                .map_err(|_| SourceChangeError::SendErr)?;
+            *guard = s;
+            Ok(())
+        } else {
+            Err(SourceChangeError::NotChange)
+        }
+    }
+
+    pub async fn touch(&self) -> Result<(), broadcast::error::SendError<(S, bool)>> {
+        let guard = self.value.read().await;
+        self.sender.send(((*guard).clone(), false))?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum SourceChangeError {
+    #[error("state source broadcast error")]
+    SendErr,
+    #[error("state source not change, no change detected")]
+    NotChange,
 }
 
 #[derive(Clone, Debug)]
 pub struct Reader<S> {
-    sender: Arc<broadcast::Sender<S>>,
+    sender: Arc<broadcast::Sender<(S, NotCheckEq)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -177,13 +207,13 @@ where
         EventStore(Arc::new(RwLock::new(None)))
     }
 
-    async fn store(&self, val: T) -> bool {
+    async fn store(&self, val: T, not_check_eq: bool) -> bool {
         let opt_t = Some(val);
         let res = *self.0.read().await != opt_t;
         if res {
             *self.0.write().await = opt_t;
         }
-        res
+        not_check_eq || res
     }
 
     pub async fn value(&self) -> Option<T> {
@@ -221,9 +251,9 @@ where
                 select! {
                     res = rx_s.recv() => {
                         match res {
-                            Ok(s) => {
+                            Ok((s, not_check_eq)) => {
                                 let t = convert(s).await;
-                                if t_store.store(t.clone()).await {
+                                if t_store.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send(t).await {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
@@ -279,12 +309,4 @@ where
     Tag: Eq + Hash,
 {
     async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(4, 4);
-    }
 }
