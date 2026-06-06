@@ -16,6 +16,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
+/// state machine
 #[derive(Debug)]
 pub struct StateMachine<Tag>
 where
@@ -57,6 +58,7 @@ where
         self.sources.insert(tag, Box::new(source));
     }
 
+    /// get source from state machine by tag
     pub async fn source<S>(&self, tag: &Tag) -> Source<S>
     where
         S: 'static + Clone,
@@ -91,6 +93,7 @@ where
         self.targets.insert(tag, Box::new(target));
     }
 
+    /// get current value of target from state machine
     pub async fn target_value<T>(&self, tag: &Tag) -> Option<T>
     where
         T: 'static + Clone + PartialEq,
@@ -114,6 +117,7 @@ where
     }
 }
 
+/// has state machine
 #[async_trait]
 pub trait HasStateMachine<Tag>
 where
@@ -122,11 +126,13 @@ where
     async fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
 }
 
+/// use state source
 #[async_trait]
 pub trait UseStateSource<Tag>: HasStateMachine<Tag>
 where
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
+    /// add state source to state machine
     async fn new_source<S>(self: Arc<Self>, tag: Tag, source: Source<S>)
     where
         S: 'static + Send + Sync,
@@ -144,6 +150,7 @@ where
 
 type NotCheckEq = bool;
 
+/// state source
 #[derive(Clone, Debug)]
 pub struct Source<S> {
     value: Arc<RwLock<S>>,
@@ -154,12 +161,14 @@ impl<S> Source<S>
 where
     S: Clone + PartialEq,
 {
+    /// get reader of state source, can be used to subscribe by state target
     pub fn reader(&self) -> Reader<S> {
         Reader {
             sender: self.sender.clone(),
         }
     }
 
+    /// get current value of state source
     pub async fn value(&self) -> S {
         (*self.value.read().await).clone()
     }
@@ -202,18 +211,22 @@ where
         }
     }
 
+    /// change state of source
     pub async fn change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Value(s)).await
     }
 
+    /// change state of source, and wait targets to finish actions upon the change event
     pub async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(true, Change::Value(s)).await
     }
 
+    /// change state of source by modifying it with a func
     pub async fn modify(&self, func: impl Fn(S) -> S + 'static) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Func(Box::new(func))).await
     }
 
+    /// change state of source by modifying it with a func, and wait targets to finish actions upon the change event
     pub async fn wait_modify(
         &self,
         func: impl Fn(S) -> S + 'static,
@@ -221,6 +234,7 @@ where
         self.change_ex(true, Change::Func(Box::new(func))).await
     }
 
+    /// create a change event without changing state of source really
     pub async fn touch(&self) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Touch).await
     }
@@ -245,14 +259,15 @@ pub struct Reader<S> {
     sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
 }
 
+/// store the latest state in target
 #[derive(Clone, Debug)]
-pub struct EventStore<T>(pub(crate) Arc<RwLock<Option<T>>>);
+struct EventStore<T>(pub(crate) Arc<RwLock<Option<T>>>);
 
 impl<T> EventStore<T>
 where
     T: Clone + PartialEq,
 {
-    pub fn new() -> Self {
+    fn new() -> Self {
         EventStore(Arc::new(RwLock::new(None)))
     }
 
@@ -265,24 +280,28 @@ where
         not_check_eq || res
     }
 
-    pub async fn value(&self) -> Option<T> {
+    async fn value(&self) -> Option<T> {
         (*self.0.read().await).clone()
     }
 }
 
-pub struct SubscribeHandle(CancellationToken);
+/// handle of subscription, can be used to unsubscribe
+pub struct Handle(CancellationToken);
 
-impl SubscribeHandle {
+impl Handle {
+    /// unsubscribe
     pub fn unsubscribe(&self) {
         self.0.cancel();
     }
 }
 
+/// define action upon state change
 #[async_trait]
 pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
+    /// action upon state change
     async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
 }
 
@@ -309,13 +328,13 @@ where
         reader: Reader<S>,
         tag: Tag,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
-    ) -> SubscribeHandle {
+    ) -> Handle {
         let t_store: EventStore<T> = EventStore::new();
         (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) = mpsc::unbounded_channel::<(T, Option<mpsc::UnboundedSender<()>>)>();
         let cancel_token = CancellationToken::new();
-        let handle = SubscribeHandle(cancel_token.clone());
+        let handle = Handle(cancel_token.clone());
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
@@ -393,7 +412,7 @@ where
         skip_all,
         fields(tag, chan_cap)
     )]
-    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> SubscribeHandle {
+    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle {
         UseStateConvTarget::subscribe(self, reader, tag, |t| Box::pin(async move { t })).await
     }
 }
