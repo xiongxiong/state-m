@@ -11,13 +11,13 @@ use std::{
 use thiserror::Error;
 use tokio::{
     select,
-    sync::{Mutex, RwLock, broadcast, mpsc},
+    sync::{MutexGuard, RwLock, broadcast, mpsc},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 /// state machine
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct StateMachine<Tag>
 where
     Tag: Eq + Hash,
@@ -59,7 +59,7 @@ where
     }
 
     /// get source from state machine by tag
-    pub async fn source<S>(&self, tag: &Tag) -> Source<S>
+    pub async fn source<S>(&self, tag: Tag) -> Source<S>
     where
         S: 'static + Clone,
     {
@@ -94,7 +94,7 @@ where
     }
 
     /// get current value of target from state machine
-    pub async fn target_value<T>(&self, tag: &Tag) -> Option<T>
+    pub async fn target_value<T>(&self, tag: Tag) -> Option<T>
     where
         T: 'static + Clone + PartialEq,
     {
@@ -123,7 +123,40 @@ pub trait HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
-    async fn state_machine(self: Arc<Self>) -> Arc<Mutex<StateMachine<Tag>>>;
+    async fn lock(&self) -> MutexGuard<'_, ()>;
+
+    async fn state_machine(&self) -> StateMachine<Tag>;
+}
+
+/// use state machine
+#[async_trait]
+pub trait UseStateMachine<Tag>: HasStateMachine<Tag>
+where
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
+    /// get state source
+    async fn source<S>(&self, tag: Tag) -> Source<S>
+    where
+        S: 'static + Clone,
+    {
+        self.state_machine().await.source(tag).await
+    }
+
+    /// get current value of target
+    async fn target_value<T>(&self, tag: Tag) -> Option<T>
+    where
+        T: 'static + Clone + PartialEq + Send + Sync,
+    {
+        self.state_machine().await.target_value(tag).await
+    }
+}
+
+#[async_trait]
+impl<T, Tag> UseStateMachine<Tag> for T
+where
+    T: HasStateMachine<Tag>,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
 }
 
 /// use state source
@@ -133,11 +166,11 @@ where
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// add state source to state machine
-    async fn new_source<S>(self: Arc<Self>, tag: Tag, source: Source<S>)
+    async fn new_source<S>(&self, tag: Tag, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
-        (*self.state_machine().await.lock().await).new_source(tag, source);
+        self.state_machine().await.new_source(tag, source);
     }
 }
 
@@ -153,7 +186,7 @@ type NotCheckEq = bool;
 /// state source
 #[derive(Clone, Debug)]
 pub struct Source<S> {
-    value: Arc<RwLock<S>>,
+    value: Arc<RwLock<Option<S>>>,
     sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
 }
 
@@ -161,6 +194,18 @@ impl<S> Source<S>
 where
     S: Clone + PartialEq,
 {
+    pub fn new() -> Self {
+        Self::create(None, 10)
+    }
+
+    pub fn create(init_value: Option<S>, capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel(capacity);
+        Self {
+            value: Arc::new(RwLock::new(init_value)),
+            sender: Arc::new(tx),
+        }
+    }
+
     /// get reader of state source, can be used to subscribe by state target
     pub fn reader(&self) -> Reader<S> {
         Reader {
@@ -169,7 +214,7 @@ where
     }
 
     /// get current value of state source
-    pub async fn value(&self) -> S {
+    pub async fn value(&self) -> Option<S> {
         (*self.value.read().await).clone()
     }
 
@@ -179,32 +224,34 @@ where
         change: Change<S>,
     ) -> Result<(), SourceChangeError> {
         let mut guard = self.value.write().await;
-        let (s, not_check_eq) = match change {
-            Change::Value(v) => (v, false),
-            Change::Func(func) => (func((*guard).clone()), false),
+        let (opt_s, not_check_eq) = match change {
+            Change::Value(v) => (Some(v), false),
+            Change::Func(func) => ((*guard).clone().map(|v| func(v)), false),
             Change::Touch => ((*guard).clone(), true),
         };
-        if not_check_eq || *guard != s {
-            if wait_to_end {
-                let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
-                self.sender
-                    .send((s.clone(), not_check_eq, Some(tx_w)))
-                    .map_err(|_| SourceChangeError::SendErr)?;
-                loop {
-                    select! {
-                        res = rx_w.recv()  => {
-                            if res.is_none() {
-                                break;
+        if not_check_eq || *guard != opt_s {
+            if let Some(s) = opt_s {
+                if wait_to_end {
+                    let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
+                    self.sender
+                        .send((s.clone(), not_check_eq, Some(tx_w)))
+                        .map_err(|_| SourceChangeError::SendErr)?;
+                    loop {
+                        select! {
+                            res = rx_w.recv()  => {
+                                if res.is_none() {
+                                    break;
+                                }
                             }
                         }
                     }
+                } else {
+                    self.sender
+                        .send((s.clone(), not_check_eq, None))
+                        .map_err(|_| SourceChangeError::SendErr)?;
                 }
-            } else {
-                self.sender
-                    .send((s.clone(), not_check_eq, None))
-                    .map_err(|_| SourceChangeError::SendErr)?;
+                *guard = Some(s);
             }
-            *guard = s;
             Ok(())
         } else {
             Err(SourceChangeError::NotChange)
@@ -302,7 +349,12 @@ where
     Tag: Eq + Hash,
 {
     /// action upon state change
-    async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
+    async fn on_change(
+        self: Arc<Self>,
+        tag: Tag,
+        new_value: T,
+        old_value: Option<T>,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -319,18 +371,20 @@ where
     /// stage [3] -- receive from mpsc channel and process it
     /// stage [4] -- (optional) feedback when the change event has been processed
     #[instrument(
-        name = "UseStateConvTarget::subscribe",
+        name = "UseStateConvTarget::convert_subscribe",
         skip_all,
         fields(tag, chan_cap)
     )]
-    async fn subscribe(
+    async fn convert_subscribe(
         self: Arc<Self>,
         reader: Reader<S>,
         tag: Tag,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
     ) -> Handle {
         let t_store: EventStore<T> = EventStore::new();
-        (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
+        self.state_machine()
+            .await
+            .new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) = mpsc::unbounded_channel::<(T, Option<mpsc::UnboundedSender<()>>)>();
         let cancel_token = CancellationToken::new();
@@ -368,9 +422,8 @@ where
                     res = rx_t.recv() => {
                         match res {
                             Some((t, opt_feedback)) => {
-                                let state_machine = self.clone().state_machine().await;
-                                let _lock = state_machine.lock().await;
-                                if let Err(e) = self.clone().on_change(t, t_store.value().await).await {
+                                let _lock = self.lock().await;
+                                if let Err(e) = self.clone().on_change(tag.clone(), t, t_store.value().await).await {
                                     tracing::error!("stage [3] | change event proc error -- {}", e);
                                 }
                                 if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {
@@ -407,13 +460,10 @@ where
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    #[instrument(
-        name = "UseStateSameTarget::subscribe",
-        skip_all,
-        fields(tag, chan_cap)
-    )]
+    #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
     async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle {
-        UseStateConvTarget::subscribe(self, reader, tag, |t| Box::pin(async move { t })).await
+        UseStateConvTarget::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
+            .await
     }
 }
 
