@@ -147,7 +147,7 @@ type NotCheckEq = bool;
 #[derive(Clone, Debug)]
 pub struct Source<S> {
     value: Arc<RwLock<S>>,
-    sender: Arc<broadcast::Sender<(S, NotCheckEq)>>,
+    sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
 }
 
 impl<S> Source<S>
@@ -164,38 +164,72 @@ where
         (*self.value.read().await).clone()
     }
 
+    async fn change_ex(
+        &self,
+        wait_to_end: bool,
+        change: Change<S>,
+    ) -> Result<(), SourceChangeError> {
+        let mut guard = self.value.write().await;
+        let (s, not_check_eq) = match change {
+            Change::Value(v) => (v, false),
+            Change::Func(func) => (func((*guard).clone()), false),
+            Change::Touch => ((*guard).clone(), true),
+        };
+        if not_check_eq || *guard != s {
+            if wait_to_end {
+                let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
+                self.sender
+                    .send((s.clone(), not_check_eq, Some(tx_w)))
+                    .map_err(|_| SourceChangeError::SendErr)?;
+                loop {
+                    select! {
+                        res = rx_w.recv()  => {
+                            if res.is_none() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                self.sender
+                    .send((s.clone(), not_check_eq, None))
+                    .map_err(|_| SourceChangeError::SendErr)?;
+            }
+            *guard = s;
+            Ok(())
+        } else {
+            Err(SourceChangeError::NotChange)
+        }
+    }
+
     pub async fn change(&self, s: S) -> Result<(), SourceChangeError> {
-        let mut guard = self.value.write().await;
-        if *guard != s {
-            self.sender
-                .send((s.clone(), false))
-                .map_err(|_| SourceChangeError::SendErr)?;
-            *guard = s;
-            Ok(())
-        } else {
-            Err(SourceChangeError::NotChange)
-        }
+        self.change_ex(false, Change::Value(s)).await
     }
 
-    pub async fn modify(&self, func: impl Fn(S) -> S) -> Result<(), SourceChangeError> {
-        let mut guard = self.value.write().await;
-        let s = func((*guard).clone());
-        if *guard != s {
-            self.sender
-                .send((s.clone(), false))
-                .map_err(|_| SourceChangeError::SendErr)?;
-            *guard = s;
-            Ok(())
-        } else {
-            Err(SourceChangeError::NotChange)
-        }
+    pub async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
+        self.change_ex(true, Change::Value(s)).await
     }
 
-    pub async fn touch(&self) -> Result<(), broadcast::error::SendError<(S, bool)>> {
-        let guard = self.value.read().await;
-        self.sender.send(((*guard).clone(), false))?;
-        Ok(())
+    pub async fn modify(&self, func: impl Fn(S) -> S + 'static) -> Result<(), SourceChangeError> {
+        self.change_ex(false, Change::Func(Box::new(func))).await
     }
+
+    pub async fn wait_modify(
+        &self,
+        func: impl Fn(S) -> S + 'static,
+    ) -> Result<(), SourceChangeError> {
+        self.change_ex(true, Change::Func(Box::new(func))).await
+    }
+
+    pub async fn touch(&self) -> Result<(), SourceChangeError> {
+        self.change_ex(false, Change::Touch).await
+    }
+}
+
+enum Change<S> {
+    Value(S),
+    Func(Box<dyn Fn(S) -> S>),
+    Touch,
 }
 
 #[derive(Debug, Error)]
@@ -208,7 +242,7 @@ pub enum SourceChangeError {
 
 #[derive(Clone, Debug)]
 pub struct Reader<S> {
-    sender: Arc<broadcast::Sender<(S, NotCheckEq)>>,
+    sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
 }
 
 #[derive(Clone, Debug)]
@@ -245,7 +279,15 @@ impl SubscribeHandle {
 }
 
 #[async_trait]
-pub trait UseStateTarget<S, T, Tag>: HasStateTarget<S, T, Tag>
+pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
+where
+    Tag: Eq + Hash,
+{
+    async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait UseStateConvTarget<S, T, Tag>: HasStateTarget<S, T, Tag>
 where
     Self: 'static,
     S: 'static + Clone + Debug + Send,
@@ -256,7 +298,12 @@ where
     /// stage [1] -- receive from source's broadcast channel
     /// stage [2] -- convert to target type and send to mpsc channel
     /// stage [3] -- receive from mpsc channel and process it
-    #[instrument(name = "AsTarget::subscribe", skip_all, fields(tag, chan_cap))]
+    /// stage [4] -- (optional) feedback when the change event has been processed
+    #[instrument(
+        name = "UseStateConvTarget::subscribe",
+        skip_all,
+        fields(tag, chan_cap)
+    )]
     async fn subscribe(
         self: Arc<Self>,
         reader: Reader<S>,
@@ -266,7 +313,7 @@ where
         let t_store: EventStore<T> = EventStore::new();
         (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
-        let (tx_t, mut rx_t) = mpsc::unbounded_channel::<T>();
+        let (tx_t, mut rx_t) = mpsc::unbounded_channel::<(T, Option<mpsc::UnboundedSender<()>>)>();
         let cancel_token = CancellationToken::new();
         let handle = SubscribeHandle(cancel_token.clone());
         tokio::spawn(async move {
@@ -278,10 +325,10 @@ where
                     }
                     res = rx_s.recv() => {
                         match res {
-                            Ok((s, not_check_eq)) => {
+                            Ok((s, not_check_eq, opt_feedback)) => {
                                 let t = convert(s).await;
                                 if t_store.store(t.clone(), not_check_eq).await {
-                                    if let Err(e) = tx_t.send(t) {
+                                    if let Err(e) = tx_t.send((t, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
                                     }
@@ -301,11 +348,14 @@ where
                     }
                     res = rx_t.recv() => {
                         match res {
-                            Some(t) => {
+                            Some((t, opt_feedback)) => {
                                 let state_machine = self.clone().state_machine().await;
                                 let _lock = state_machine.lock().await;
                                 if let Err(e) = self.clone().on_change(t, t_store.value().await).await {
                                     tracing::error!("stage [3] | change event proc error -- {}", e);
+                                }
+                                if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {
+                                    tracing::error!("stage [4] | change event feedback error -- {}", e);
                                 }
                             },
                             None => {
@@ -322,7 +372,7 @@ where
     }
 }
 
-impl<V, S, T, Tag> UseStateTarget<S, T, Tag> for V
+impl<V, S, T, Tag> UseStateConvTarget<S, T, Tag> for V
 where
     V: 'static + HasStateTarget<S, T, Tag>,
     S: 'static + Clone + Debug + Send,
@@ -332,9 +382,26 @@ where
 }
 
 #[async_trait]
-pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
+pub trait UseStateTarget<T, Tag>: UseStateConvTarget<T, T, Tag>
 where
-    Tag: Eq + Hash,
+    Self: 'static,
+    T: 'static + Clone + Debug + PartialEq + Send + Sync,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    async fn on_change(self: Arc<Self>, new_value: T, old_value: Option<T>) -> anyhow::Result<()>;
+    #[instrument(
+        name = "UseStateSameTarget::subscribe",
+        skip_all,
+        fields(tag, chan_cap)
+    )]
+    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> SubscribeHandle {
+        UseStateConvTarget::subscribe(self, reader, tag, |t| Box::pin(async move { t })).await
+    }
+}
+
+impl<V, T, Tag> UseStateTarget<T, Tag> for V
+where
+    V: 'static + UseStateConvTarget<T, T, Tag>,
+    T: 'static + Clone + Debug + PartialEq + Send + Sync,
+    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+{
 }
