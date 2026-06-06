@@ -174,6 +174,7 @@ where
                             },
                             Err(e) => match e {
                                 broadcast::error::RecvError::Closed => {
+                                    tracing::info!("state source channel closed");
                                     break;
                                 },
                                 broadcast::error::RecvError::Lagged(_) => {
@@ -193,6 +194,7 @@ where
                                 }
                             },
                             None => {
+                                tracing::info!("state target channel closed");
                                 break;
                             },
                         }
