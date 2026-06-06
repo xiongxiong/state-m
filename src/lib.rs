@@ -1,6 +1,13 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
-use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, pin::Pin, sync::Arc};
+use std::{
+    any::{Any, type_name},
+    cmp::Eq,
+    fmt::Debug,
+    hash::Hash,
+    pin::Pin,
+    sync::Arc,
+};
 use tokio::{
     select,
     sync::{Mutex, RwLock, broadcast, mpsc},
@@ -48,16 +55,60 @@ where
         self.sources.insert(tag, Box::new(source));
     }
 
+    pub async fn source<S>(&self, tag: &Tag) -> Source<S>
+    where
+        S: 'static + Clone,
+    {
+        let opt_source_box = self.sources.get(&tag);
+        assert!(
+            opt_source_box.is_some(),
+            "state source does not exist, tag -- {:?}",
+            tag
+        );
+        let source_box = opt_source_box.unwrap();
+        let opt_source = source_box.downcast_ref::<Source<S>>();
+        assert!(
+            opt_source.is_some(),
+            "state source does not exist, tag -- {:?}, type -- {}",
+            tag,
+            type_name::<S>()
+        );
+        let source = opt_source.unwrap();
+        (*source).clone()
+    }
+
     pub(crate) fn new_target<T>(&self, tag: Tag, target: EventStore<T>)
     where
         T: 'static + Send + Sync,
     {
         assert!(
-            !self.sources.contains_key(&tag),
+            !self.targets.contains_key(&tag),
             "duplicate tag for target -- {:?}",
             tag
         );
         self.targets.insert(tag, Box::new(target));
+    }
+
+    pub async fn target_value<T>(&self, tag: &Tag) -> Option<T>
+    where
+        T: 'static + Clone + PartialEq,
+    {
+        let opt_target_box = self.targets.get(&tag);
+        assert!(
+            opt_target_box.is_some(),
+            "state target does not exist, tag -- {:?}",
+            tag
+        );
+        let target_box = opt_target_box.unwrap();
+        let opt_target = target_box.downcast_ref::<EventStore<T>>();
+        assert!(
+            opt_target.is_some(),
+            "state target does not exist, tag -- {:?}, type -- {}",
+            tag,
+            type_name::<T>()
+        );
+        let target = opt_target.unwrap();
+        target.value().await
     }
 }
 
@@ -91,15 +142,22 @@ where
 
 #[derive(Clone, Debug)]
 pub struct Source<S> {
-    pub value: Arc<S>,
+    value: Arc<S>,
     sender: Arc<broadcast::Sender<S>>,
 }
 
-impl<S> Source<S> {
+impl<S> Source<S>
+where
+    S: Clone,
+{
     pub fn reader(&self) -> Reader<S> {
         Reader {
             sender: self.sender.clone(),
         }
+    }
+
+    pub fn value(&self) -> S {
+        (*self.value.as_ref()).clone()
     }
 }
 
