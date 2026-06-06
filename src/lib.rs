@@ -261,13 +261,12 @@ where
         self: Arc<Self>,
         reader: Reader<S>,
         tag: Tag,
-        chan_cap: usize,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
     ) -> SubscribeHandle {
         let t_store: EventStore<T> = EventStore::new();
         (*self.clone().state_machine().await.lock().await).new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
-        let (tx_t, mut rx_t) = mpsc::channel::<T>(chan_cap);
+        let (tx_t, mut rx_t) = mpsc::unbounded_channel::<T>();
         let cancel_token = CancellationToken::new();
         let handle = SubscribeHandle(cancel_token.clone());
         tokio::spawn(async move {
@@ -282,7 +281,7 @@ where
                             Ok((s, not_check_eq)) => {
                                 let t = convert(s).await;
                                 if t_store.store(t.clone(), not_check_eq).await {
-                                    if let Err(e) = tx_t.send(t).await {
+                                    if let Err(e) = tx_t.send(t) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
                                     }
