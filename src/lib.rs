@@ -81,7 +81,7 @@ where
         (*source).clone()
     }
 
-    pub(crate) fn new_target<T>(&self, tag: Tag, target: EventStore<T>)
+    pub(crate) fn new_target<T>(&self, tag: Tag, target: Handle<T>)
     where
         T: 'static + Send + Sync,
     {
@@ -105,7 +105,7 @@ where
             tag
         );
         let target_box = opt_target_box.unwrap();
-        let opt_target = target_box.downcast_ref::<EventStore<T>>();
+        let opt_target = target_box.downcast_ref::<Handle<T>>();
         assert!(
             opt_target.is_some(),
             "state target does not exist, tag -- {:?}, type -- {}",
@@ -195,7 +195,7 @@ where
     S: Clone + PartialEq,
 {
     pub fn new() -> Self {
-        Self::create(None, 10)
+        Self::create(None, 100)
     }
 
     pub fn create(init_value: Option<S>, capacity: usize) -> Self {
@@ -308,37 +308,38 @@ pub struct Reader<S> {
 
 /// store the latest state in target
 #[derive(Clone, Debug)]
-struct EventStore<T>(pub(crate) Arc<RwLock<Option<T>>>);
+pub struct Handle<T> {
+    cancel_token: CancellationToken,
+    value: Arc<RwLock<Option<T>>>,
+}
 
-impl<T> EventStore<T>
+impl<T> Handle<T>
 where
     T: Clone + PartialEq,
 {
     fn new() -> Self {
-        EventStore(Arc::new(RwLock::new(None)))
+        Self {
+            cancel_token: CancellationToken::new(),
+            value: Arc::new(RwLock::new(None)),
+        }
     }
 
     async fn store(&self, val: T, not_check_eq: bool) -> bool {
         let opt_t = Some(val);
-        let res = *self.0.read().await != opt_t;
+        let res = *self.value.read().await != opt_t;
         if res {
-            *self.0.write().await = opt_t;
+            *self.value.write().await = opt_t;
         }
         not_check_eq || res
     }
 
     async fn value(&self) -> Option<T> {
-        (*self.0.read().await).clone()
+        (*self.value.read().await).clone()
     }
-}
 
-/// handle of subscription, can be used to unsubscribe
-pub struct Handle(CancellationToken);
-
-impl Handle {
     /// unsubscribe
     pub fn unsubscribe(&self) {
-        self.0.cancel();
+        self.cancel_token.cancel();
     }
 }
 
@@ -380,29 +381,28 @@ where
         reader: Reader<S>,
         tag: Tag,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
-    ) -> Handle {
-        let t_store: EventStore<T> = EventStore::new();
+    ) -> Handle<T> {
+        let handle: Handle<T> = Handle::new();
         self.state_machine()
             .await
-            .new_target(tag.clone(), t_store.clone());
+            .new_target(tag.clone(), handle.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) =
             mpsc::unbounded_channel::<(T, Option<T>, Option<mpsc::UnboundedSender<()>>)>();
-        let cancel_token = CancellationToken::new();
-        let handle = Handle(cancel_token.clone());
+        let handle_c = handle.clone();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
                 select! {
-                    _ = cancel_token.cancelled() => {
+                    _ = handle_c.cancel_token.cancelled() => {
                         break;
                     }
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
                                 let t = convert(s).await;
-                                let opt_t_old = t_store.value().await;
-                                if t_store.store(t.clone(), not_check_eq).await {
+                                let opt_t_old = handle_c.value().await;
+                                if handle_c.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
@@ -463,7 +463,7 @@ where
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
-    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle {
+    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle<T> {
         UseStateConvTarget::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
             .await
     }
