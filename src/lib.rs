@@ -386,7 +386,8 @@ where
             .await
             .new_target(tag.clone(), t_store.clone());
         let mut rx_s = reader.sender.subscribe();
-        let (tx_t, mut rx_t) = mpsc::unbounded_channel::<(T, Option<mpsc::UnboundedSender<()>>)>();
+        let (tx_t, mut rx_t) =
+            mpsc::unbounded_channel::<(T, Option<T>, Option<mpsc::UnboundedSender<()>>)>();
         let cancel_token = CancellationToken::new();
         let handle = Handle(cancel_token.clone());
         tokio::spawn(async move {
@@ -400,8 +401,9 @@ where
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
                                 let t = convert(s).await;
+                                let opt_t_old = t_store.value().await;
                                 if t_store.store(t.clone(), not_check_eq).await {
-                                    if let Err(e) = tx_t.send((t, opt_feedback)) {
+                                    if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
                                     }
@@ -421,9 +423,9 @@ where
                     }
                     res = rx_t.recv() => {
                         match res {
-                            Some((t, opt_feedback)) => {
+                            Some((t, opt_t_old, opt_feedback)) => {
                                 let _lock = self.lock().await;
-                                if let Err(e) = self.clone().on_change(tag.clone(), t, t_store.value().await).await {
+                                if let Err(e) = self.clone().on_change(tag.clone(), t, opt_t_old).await {
                                     tracing::error!("stage [3] | change event proc error -- {}", e);
                                 }
                                 if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {

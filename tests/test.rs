@@ -5,7 +5,9 @@ use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum Tag {
+    Hi,
     A,
+    B,
 }
 
 #[derive(Debug, Default)]
@@ -33,6 +35,15 @@ impl HasStateTarget<String, String, Tag> for Unit {
         new_value: String,
         old_value: Option<String>,
     ) -> anyhow::Result<()> {
+        match tag {
+            Tag::A => {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+            Tag::B => {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            }
+            _ => {}
+        }
         println!(
             "tag -- {:?}, new_value -- {:?}, old_value -- {:?}",
             tag, new_value, old_value
@@ -42,12 +53,26 @@ impl HasStateTarget<String, String, Tag> for Unit {
 }
 
 #[tokio::test]
-async fn test() -> anyhow::Result<()> {
+async fn test_change() -> anyhow::Result<()> {
     let unit = Arc::new(Unit::default());
-    unit.new_source::<String>(Tag::A, Source::new()).await;
-    let source_a = unit.source(Tag::A).await;
-    let handle = unit.clone().subscribe(source_a.reader(), Tag::A).await;
-    source_a.wait_change("Hello".into()).await?;
-    handle.unsubscribe();
+    unit.new_source::<String>(Tag::Hi, Source::new()).await;
+    let source = unit.source(Tag::Hi).await;
+    let handle_a = unit
+        .clone()
+        .convert_subscribe(source.reader(), Tag::A, |t| {
+            Box::pin(async move { format!("A said: Hi {}", t) })
+        })
+        .await;
+    let handle_b = unit
+        .clone()
+        .convert_subscribe(source.reader(), Tag::B, |t| {
+            Box::pin(async move { format!("B said: Hi {}", t) })
+        })
+        .await;
+    source.change("Wang".into()).await?;
+    source.change("Li".into()).await?;
+    source.wait_change("Zhang".into()).await?;
+    handle_a.unsubscribe();
+    handle_b.unsubscribe();
     Ok(())
 }
