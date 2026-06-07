@@ -4,60 +4,60 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-enum SourceTag {
+enum TagA {
     Hi,
 }
 
 #[derive(Debug, Default)]
-struct UnitSource {
+struct UnitA {
     lock: Mutex<()>,
-    state_machine: StateMachine<SourceTag>,
+    state_machine: StateMachine<TagA>,
 }
 
 #[async_trait]
-impl HasStateMachine<SourceTag> for UnitSource {
+impl HasStateMachine<TagA> for UnitA {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
 
-    async fn state_machine(&self) -> StateMachine<SourceTag> {
+    async fn state_machine(&self) -> StateMachine<TagA> {
         self.state_machine.clone()
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-enum TargetTag {
-    A,
-    B,
+enum TagB {
+    X,
+    Y,
 }
 
 #[derive(Debug, Default)]
-struct UnitTarget {
+struct UnitB {
     lock: Mutex<()>,
-    state_machine: StateMachine<TargetTag>,
+    state_machine: StateMachine<TagB>,
 }
 
 #[async_trait]
-impl HasStateMachine<TargetTag> for UnitTarget {
+impl HasStateMachine<TagB> for UnitB {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
 
-    async fn state_machine(&self) -> StateMachine<TargetTag> {
+    async fn state_machine(&self) -> StateMachine<TagB> {
         self.state_machine.clone()
     }
 }
 
 #[async_trait]
-impl HasStateTarget<String, String, TargetTag> for UnitTarget {
+impl HasStateTarget<String, String, TagB> for UnitB {
     async fn on_change(
         self: Arc<Self>,
-        tag: TargetTag,
+        tag: TagB,
         new_value: String,
         old_value: Option<String>,
     ) -> anyhow::Result<()> {
         match tag {
-            TargetTag::B => {
+            TagB::X => {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
             _ => {}
@@ -72,28 +72,28 @@ impl HasStateTarget<String, String, TargetTag> for UnitTarget {
 
 #[tokio::test]
 async fn test_change() -> anyhow::Result<()> {
-    let unit_source = Arc::new(UnitSource::default());
+    let unit_source = Arc::new(UnitA::default());
     unit_source
-        .new_source::<String>(SourceTag::Hi, Source::new())
+        .new_source::<String>(TagA::Hi, Source::new())
         .await;
-    let source = unit_source.source(SourceTag::Hi).await;
-    let unit_target = Arc::new(UnitTarget::default());
-    let handle_a = unit_target
+    let source = unit_source.source(TagA::Hi).await;
+    let unit_target = Arc::new(UnitB::default());
+    let handle_x = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TargetTag::A, |t| {
-            Box::pin(async move { format!("A said: Hi {}", t) })
+        .convert_subscribe(source.reader(), TagB::X, |t| {
+            Box::pin(async move { format!("X said: Hi {}", t) })
         })
         .await;
-    let handle_b = unit_target
+    let handle_y = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TargetTag::B, |t| {
-            Box::pin(async move { format!("B said: Hi {}", t) })
+        .convert_subscribe(source.reader(), TagB::Y, |t| {
+            Box::pin(async move { format!("Y said: Hi {}", t) })
         })
         .await;
     source.change("Wang".into()).await?;
     source.change("Li".into()).await?;
     source.wait_change("Zhang".into()).await?;
-    handle_a.unsubscribe();
-    handle_b.unsubscribe();
+    handle_x.unsubscribe();
+    handle_y.unsubscribe();
     Ok(())
 }
