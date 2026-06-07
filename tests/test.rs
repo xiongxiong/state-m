@@ -71,7 +71,7 @@ impl HasStateTarget<String, String, TagB> for UnitB {
 }
 
 #[tokio::test]
-async fn test_change() -> anyhow::Result<()> {
+async fn test() -> anyhow::Result<()> {
     let unit_source = Arc::new(UnitA::default());
     unit_source
         .new_source::<String>(TagA::Hi, Source::new())
@@ -81,18 +81,20 @@ async fn test_change() -> anyhow::Result<()> {
     let handle_x = unit_target
         .clone()
         .convert_subscribe(source.reader(), TagB::X, |t| {
-            Box::pin(async move { format!("X said: Hi {}", t) })
+            Box::pin(async move { format!("X said: Hi, {}", t) })
         })
         .await;
     let handle_y = unit_target
         .clone()
         .convert_subscribe(source.reader(), TagB::Y, |t| {
-            Box::pin(async move { format!("Y said: Hi {}", t) })
+            Box::pin(async move { format!("Y said: Hi, {}", t) })
         })
         .await;
     source.change("Wang".into()).await?;
-    source.change("Li".into()).await?;
+    source.touch().await?;
+    source.modify(|s| format!("Dear {}", s)).await?;
     source.wait_change("Zhang".into()).await?;
+    source.wait_modify(|s| format!("Dear {}", s)).await?;
     handle_x.unsubscribe();
     handle_y.unsubscribe();
     Ok(())

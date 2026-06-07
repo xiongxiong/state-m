@@ -337,19 +337,30 @@ where
         (*self.value.read().await).clone()
     }
 
-    /// unsubscribe
+    /// unsubscribe operation, this is optional, after your state machine
+    /// is dropped, subscriptions are auto cleaned.
     pub fn unsubscribe(&self) {
         self.cancel_token.cancel();
     }
 }
 
-/// define action upon state change
+/// define action upon state change.
+/// - S - type of state in source,
+/// - T - type of state in target,
+/// - Tag - to distinguish different initiators or responders,
+/// all initiators must use different tag values, all responders,
+/// and all responders do the same, a same tag value can be used
+/// by an initiator and a responder in the same state machine.
 #[async_trait]
 pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
-    /// action upon state change
+    /// action upon state change.
+    /// - tag - the tag value
+    /// - new_value - the new value just received
+    /// - old_value - the value received last time, it should be
+    /// 'None' at the first time.
     async fn on_change(
         self: Arc<Self>,
         tag: Tag,
