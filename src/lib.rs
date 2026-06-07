@@ -59,6 +59,11 @@ where
         self.sources.insert(tag, Box::new(source));
     }
 
+    /// Delete state source from state machine.
+    pub(crate) fn del_source(&self, tag: Tag) -> bool {
+        self.sources.remove(&tag).is_some()
+    }
+
     /// Get source from state machine by tag.
     pub async fn source<S>(&self, tag: Tag) -> Source<S>
     where
@@ -258,6 +263,11 @@ where
         }
     }
 
+    /// Num of subscriptions.
+    pub async fn num_of_subs(&self) -> usize {
+        self.sender.receiver_count()
+    }
+
     /// Get current value of state source.
     pub async fn value(&self) -> Option<S> {
         (*self.value.read().await).clone()
@@ -453,7 +463,6 @@ where
             loop {
                 select! {
                     _ = handle_c.cancel_token.cancelled() => {
-                        _ = self.state_machine().await.del_handle(tag.clone());
                         break;
                     }
                     res = rx_s.recv() => {
@@ -470,6 +479,7 @@ where
                             },
                             Err(e) => match e {
                                 broadcast::error::RecvError::Closed => {
+                                    _ = self.state_machine().await.del_source(tag.clone());
                                     tracing::info!("state source channel closed");
                                     break;
                                 },
@@ -499,6 +509,7 @@ where
                     }
                 }
             }
+            _ = self.state_machine().await.del_handle(tag.clone());
             tracing::info!("Subscription end -- {:?}", tag);
         });
         handle
