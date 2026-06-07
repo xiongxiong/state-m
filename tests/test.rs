@@ -49,7 +49,7 @@ impl HasStateMachine<TagB> for UnitB {
 }
 
 #[async_trait]
-impl HasStateTarget<String, String, TagB> for UnitB {
+impl HasStateHandle<String, String, TagB> for UnitB {
     async fn on_change(
         self: Arc<Self>,
         tag: TagB,
@@ -74,7 +74,7 @@ impl HasStateTarget<String, String, TagB> for UnitB {
 async fn test() -> anyhow::Result<()> {
     let unit_source = Arc::new(UnitA::default());
     unit_source
-        .new_source::<String>(TagA::Hi, Source::new())
+        .add_source::<String>(TagA::Hi, Source::new())
         .await;
     let source = unit_source.source(TagA::Hi).await;
     let unit_target = Arc::new(UnitB::default());

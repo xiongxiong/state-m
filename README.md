@@ -46,11 +46,11 @@ impl HasStateMachine<Tag> for Unit {
 }
 ```
 
-- If your data structure is also a responder of some state change, implement 'HasStateTarget' trait for your data structure. Then subscribe state sources as needed. Unsubscription is optional, after your state machine is dropped, subscriptions are auto cleaned.
+- If your data structure is also a responder of some state change, implement 'HasStateHandle' trait for your data structure. Then subscribe state sources as needed. Unsubscription is optional, after your state machine is dropped, subscriptions are auto cleaned.
 
 ```rust
 #[async_trait]
-impl HasStateTarget<S, T, Tag> for Unit {
+impl HasStateHandle<S, T, Tag> for Unit {
     async fn on_change(
         self: Arc<Self>,
         tag: Tag,
@@ -80,7 +80,7 @@ handle_y.unsubscribe();
 
 ```rust
 // add state source to state machine
-unit.new_source::<String>(Tag::Hi, Source::new()).await;
+unit.add_source::<String>(Tag::Hi, Source::new()).await;
 // get state source by tag
 let source = unit_source.source(TagA::Hi).await;
 // change state by need
@@ -144,7 +144,7 @@ impl HasStateMachine<TagB> for UnitB {
 }
 
 #[async_trait]
-impl HasStateTarget<String, String, TagB> for UnitB {
+impl HasStateHandle<String, String, TagB> for UnitB {
     async fn on_change(
         self: Arc<Self>,
         tag: TagB,
@@ -169,7 +169,7 @@ impl HasStateTarget<String, String, TagB> for UnitB {
 async fn test_change() -> anyhow::Result<()> {
     let unit_source = Arc::new(UnitA::default());
     unit_source
-        .new_source::<String>(TagA::Hi, Source::new())
+        .add_source::<String>(TagA::Hi, Source::new())
         .await;
     let source = unit_source.source(TagA::Hi).await;
     let unit_target = Arc::new(UnitB::default());

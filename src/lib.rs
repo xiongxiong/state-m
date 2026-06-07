@@ -16,7 +16,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-/// state machine
+/// State machine data structure to store state sources and handles.
 #[derive(Clone, Debug)]
 pub struct StateMachine<Tag>
 where
@@ -46,7 +46,8 @@ where
         Default::default()
     }
 
-    pub(crate) fn new_source<S>(&self, tag: Tag, source: Source<S>)
+    /// Add state source to state machine.
+    pub(crate) fn add_source<S>(&self, tag: Tag, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
@@ -58,7 +59,7 @@ where
         self.sources.insert(tag, Box::new(source));
     }
 
-    /// get source from state machine by tag
+    /// Get source from state machine by tag.
     pub async fn source<S>(&self, tag: Tag) -> Source<S>
     where
         S: 'static + Clone,
@@ -81,60 +82,83 @@ where
         (*source).clone()
     }
 
-    pub(crate) fn new_target<T>(&self, tag: Tag, target: Handle<T>)
+    /// Add state handle to state machine.
+    pub(crate) fn add_handle<T>(&self, tag: Tag, handle: Handle<T>)
     where
         T: 'static + Send + Sync,
     {
         assert!(
             !self.handles.contains_key(&tag),
-            "duplicate tag for target -- {:?}",
+            "duplicate tag for handle -- {:?}",
             tag
         );
-        self.handles.insert(tag, Box::new(target));
+        self.handles.insert(tag, Box::new(handle));
     }
 
-    /// get current value of target from state machine
-    pub async fn target_value<T>(&self, tag: Tag) -> Option<T>
+    /// Delete state handle from state machine.
+    pub(crate) fn del_handle(&self, tag: Tag) -> bool {
+        self.handles.remove(&tag).is_some()
+    }
+
+    /// Get current value of source from state machine by tag.
+    pub async fn source_value<S>(&self, tag: Tag) -> Option<S>
     where
-        T: 'static + Clone + PartialEq,
+        S: 'static + Clone + PartialEq,
     {
-        let opt_target_box = self.handles.get(&tag);
+        self.source(tag).await.value().await
+    }
+
+    /// Get handle from state machine.
+    pub async fn handle<T>(&self, tag: Tag) -> Handle<T>
+    where
+        T: 'static + Clone,
+    {
+        let opt_handle_box = self.handles.get(&tag);
         assert!(
-            opt_target_box.is_some(),
-            "state target does not exist, tag -- {:?}",
+            opt_handle_box.is_some(),
+            "state handle does not exist, tag -- {:?}",
             tag
         );
-        let target_box = opt_target_box.unwrap();
-        let opt_target = target_box.downcast_ref::<Handle<T>>();
+        let handle_box = opt_handle_box.unwrap();
+        let opt_handle = handle_box.downcast_ref::<Handle<T>>();
         assert!(
-            opt_target.is_some(),
-            "state target does not exist, tag -- {:?}, type -- {}",
+            opt_handle.is_some(),
+            "state handle does not exist, tag -- {:?}, type -- {}",
             tag,
             type_name::<T>()
         );
-        let target = opt_target.unwrap();
-        target.value().await
+        opt_handle.unwrap().clone()
+    }
+
+    /// Get current value of handle from state machine.
+    pub async fn handle_value<T>(&self, tag: Tag) -> Option<T>
+    where
+        T: 'static + Clone + PartialEq,
+    {
+        self.handle(tag).await.value().await
     }
 }
 
-/// has state machine
+/// The trait defined basic methods to use state machine, usually you need a 'Mutex<()>' and a 'StateMachine<Tag>' in your data structure.
 #[async_trait]
 pub trait HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
+    /// The mutex lock to use when responding state change.
     async fn lock(&self) -> MutexGuard<'_, ()>;
 
+    /// The state machine data structure.
     async fn state_machine(&self) -> StateMachine<Tag>;
 }
 
-/// use state machine
+/// Some convenient methods to use state machine. The trait is auto implemented for types implemented HasStateMachine.
 #[async_trait]
 pub trait UseStateMachine<Tag>: HasStateMachine<Tag>
 where
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    /// get state source
+    /// Get state source.
     async fn source<S>(&self, tag: Tag) -> Source<S>
     where
         S: 'static + Clone,
@@ -142,12 +166,28 @@ where
         self.state_machine().await.source(tag).await
     }
 
-    /// get current value of target
-    async fn target_value<T>(&self, tag: Tag) -> Option<T>
+    /// Get current value of state source.
+    async fn source_value<S>(&self, tag: Tag) -> Option<S>
+    where
+        S: 'static + Clone + PartialEq + Send + Sync,
+    {
+        self.state_machine().await.source_value(tag).await
+    }
+
+    /// Get state handle.
+    async fn handle<T>(&self, tag: Tag) -> Handle<T>
+    where
+        T: 'static + Clone,
+    {
+        self.state_machine().await.handle(tag).await
+    }
+
+    /// Get current value of state handle.
+    async fn handle_value<T>(&self, tag: Tag) -> Option<T>
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
-        self.state_machine().await.target_value(tag).await
+        self.state_machine().await.handle_value(tag).await
     }
 }
 
@@ -159,18 +199,18 @@ where
 {
 }
 
-/// use state source
+/// Convenient method to add state source to state machine. The trait is auto implemented for types implemented HasStateMachine.
 #[async_trait]
 pub trait UseStateSource<Tag>: HasStateMachine<Tag>
 where
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    /// add state source to state machine
-    async fn new_source<S>(&self, tag: Tag, source: Source<S>)
+    /// Add state source to state machine.
+    async fn add_source<S>(&self, tag: Tag, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
-        self.state_machine().await.new_source(tag, source);
+        self.state_machine().await.add_source(tag, source);
     }
 }
 
@@ -181,9 +221,11 @@ where
 {
 }
 
+/// When initiate state change, compare with current value or not. By default,
+/// a new state is compared with current value, if they are equal, does not trigger a change event.
 type NotCheckEq = bool;
 
-/// state source
+/// State source, the initiator of state change.
 #[derive(Clone, Debug)]
 pub struct Source<S> {
     value: Arc<RwLock<Option<S>>>,
@@ -194,26 +236,29 @@ impl<S> Source<S>
 where
     S: Clone + PartialEq,
 {
+    /// Create a state source, with broadcast channel capacity of 100.
     pub fn new() -> Self {
-        Self::create(None, 100)
+        Self::create(100)
     }
 
-    pub fn create(init_value: Option<S>, capacity: usize) -> Self {
+    /// Create a state source with custom broadcast channel capacity.
+    /// - capacity: broadcast channel capacity
+    pub fn create(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         Self {
-            value: Arc::new(RwLock::new(init_value)),
+            value: Arc::new(RwLock::new(None)),
             sender: Arc::new(tx),
         }
     }
 
-    /// get reader of state source, can be used to subscribe by state target
+    /// Get reader of state source, can be subscribed by responders.
     pub fn reader(&self) -> Reader<S> {
         Reader {
             sender: self.sender.clone(),
         }
     }
 
-    /// get current value of state source
+    /// Get current value of state source.
     pub async fn value(&self) -> Option<S> {
         (*self.value.read().await).clone()
     }
@@ -258,22 +303,22 @@ where
         }
     }
 
-    /// change state of source
+    /// Change state of source.
     pub async fn change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Value(s)).await
     }
 
-    /// change state of source, and wait handles to finish actions upon the change event
+    /// Change state of source, and wait responders to finish actions upon the change event.
     pub async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(true, Change::Value(s)).await
     }
 
-    /// change state of source by modifying it with a func
+    /// Change state of source by modifying it with a func.
     pub async fn modify(&self, func: impl Fn(S) -> S + 'static) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Func(Box::new(func))).await
     }
 
-    /// change state of source by modifying it with a func, and wait handles to finish actions upon the change event
+    /// Change state of source by modifying it with a func, and wait responders to finish actions upon the change event.
     pub async fn wait_modify(
         &self,
         func: impl Fn(S) -> S + 'static,
@@ -281,7 +326,7 @@ where
         self.change_ex(true, Change::Func(Box::new(func))).await
     }
 
-    /// create a change event without changing state of source really
+    /// Create a change event without changing state of source really.
     pub async fn touch(&self) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Touch).await
     }
@@ -295,18 +340,19 @@ enum Change<S> {
 
 #[derive(Debug, Error)]
 pub enum SourceChangeError {
-    #[error("state source broadcast error")]
+    #[error("Change of state failed to broadcast")]
     SendErr,
-    #[error("state source not change, no change detected")]
+    #[error("State source not change, no change detected")]
     NotChange,
 }
 
+/// Data structure to be exposed to do subscription by state change responders.
 #[derive(Clone, Debug)]
 pub struct Reader<S> {
     sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
 }
 
-/// store the latest state in target
+/// Data structure to store the latest state in responder's state machine, can be used to do unsubscription.
 #[derive(Clone, Debug)]
 pub struct Handle<T> {
     cancel_token: CancellationToken,
@@ -337,26 +383,26 @@ where
         (*self.value.read().await).clone()
     }
 
-    /// unsubscribe operation, this is optional, after your state machine
+    /// Unsubscribe operation, this is optional, after your state machine
     /// is dropped, subscriptions are auto cleaned.
     pub fn unsubscribe(&self) {
         self.cancel_token.cancel();
     }
 }
 
-/// define action upon state change.
+/// Define action upon state change event.
 /// - S - type of state in source,
-/// - T - type of state in target,
+/// - T - type of state in handle,
 /// - Tag - to distinguish different initiators or responders,
 /// all initiators must use different tag values, all responders,
 /// and all responders do the same, a same tag value can be used
 /// by an initiator and a responder in the same state machine.
 #[async_trait]
-pub trait HasStateTarget<S, T, Tag>: HasStateMachine<Tag>
+pub trait HasStateHandle<S, T, Tag>: HasStateMachine<Tag>
 where
     Tag: Eq + Hash,
 {
-    /// action upon state change.
+    /// Action upon state change event.
     /// - tag - the tag value
     /// - new_value - the new value just received
     /// - old_value - the value received last time, it should be
@@ -369,19 +415,20 @@ where
     ) -> anyhow::Result<()>;
 }
 
+/// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateConvTarget<S, T, Tag>: HasStateTarget<S, T, Tag>
+pub trait UseStateConvTarget<S, T, Tag>: HasStateHandle<S, T, Tag>
 where
     Self: 'static,
     S: 'static + Clone + Debug + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    /// subscribe
-    /// stage [1] -- receive from source's broadcast channel
-    /// stage [2] -- convert to target type and send to mpsc channel
-    /// stage [3] -- receive from mpsc channel and process it
-    /// stage [4] -- (optional) feedback when the change event has been processed
+    /// Do subscription with a state convert function.
+    /// - stage [1] -- receive from source's broadcast channel.
+    /// - stage [2] -- convert to target type and send to mpsc channel.
+    /// - stage [3] -- receive from mpsc channel and process it.
+    /// - stage [4] -- (optional) feedback when the change event has been processed.
     #[instrument(
         name = "UseStateConvTarget::convert_subscribe",
         skip_all,
@@ -396,7 +443,7 @@ where
         let handle: Handle<T> = Handle::new();
         self.state_machine()
             .await
-            .new_target(tag.clone(), handle.clone());
+            .add_handle(tag.clone(), handle.clone());
         let mut rx_s = reader.sender.subscribe();
         let (tx_t, mut rx_t) =
             mpsc::unbounded_channel::<(T, Option<T>, Option<mpsc::UnboundedSender<()>>)>();
@@ -406,6 +453,7 @@ where
             loop {
                 select! {
                     _ = handle_c.cancel_token.cancelled() => {
+                        _ = self.state_machine().await.del_handle(tag.clone());
                         break;
                     }
                     res = rx_s.recv() => {
@@ -459,13 +507,14 @@ where
 
 impl<V, S, T, Tag> UseStateConvTarget<S, T, Tag> for V
 where
-    V: 'static + HasStateTarget<S, T, Tag>,
+    V: 'static + HasStateHandle<S, T, Tag>,
     S: 'static + Clone + Debug + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
 }
 
+/// Convenient method to do subscription. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
 pub trait UseStateTarget<T, Tag>: UseStateConvTarget<T, T, Tag>
 where
@@ -473,6 +522,7 @@ where
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
+    /// Do subscription.
     #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
     async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle<T> {
         UseStateConvTarget::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
