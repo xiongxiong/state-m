@@ -1,8 +1,6 @@
 # state-m
 ---
-<h5>
-  The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components.
-</h5>
+The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components.
 
 ```toml
 [dependencies]
