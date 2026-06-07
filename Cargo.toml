@@ -2,6 +2,8 @@
 name = "state-m"
 version = "0.1.0"
 edition = "2024"
+description = "The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components."
+repository = "https://github.com/xiongxiong/state-m"
 authors = ["WonderBear<ximengwuheng@163.com>"]
 keywords = ["state", "machine", "subscribe"]
 license = "MIT"
