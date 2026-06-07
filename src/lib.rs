@@ -23,7 +23,7 @@ where
     Tag: Eq + Hash,
 {
     sources: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
-    targets: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
+    handles: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
 }
 
 impl<Tag> Default for StateMachine<Tag>
@@ -33,7 +33,7 @@ where
     fn default() -> Self {
         Self {
             sources: Default::default(),
-            targets: Default::default(),
+            handles: Default::default(),
         }
     }
 }
@@ -86,11 +86,11 @@ where
         T: 'static + Send + Sync,
     {
         assert!(
-            !self.targets.contains_key(&tag),
+            !self.handles.contains_key(&tag),
             "duplicate tag for target -- {:?}",
             tag
         );
-        self.targets.insert(tag, Box::new(target));
+        self.handles.insert(tag, Box::new(target));
     }
 
     /// get current value of target from state machine
@@ -98,7 +98,7 @@ where
     where
         T: 'static + Clone + PartialEq,
     {
-        let opt_target_box = self.targets.get(&tag);
+        let opt_target_box = self.handles.get(&tag);
         assert!(
             opt_target_box.is_some(),
             "state target does not exist, tag -- {:?}",
@@ -263,7 +263,7 @@ where
         self.change_ex(false, Change::Value(s)).await
     }
 
-    /// change state of source, and wait targets to finish actions upon the change event
+    /// change state of source, and wait handles to finish actions upon the change event
     pub async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(true, Change::Value(s)).await
     }
@@ -273,7 +273,7 @@ where
         self.change_ex(false, Change::Func(Box::new(func))).await
     }
 
-    /// change state of source by modifying it with a func, and wait targets to finish actions upon the change event
+    /// change state of source by modifying it with a func, and wait handles to finish actions upon the change event
     pub async fn wait_modify(
         &self,
         func: impl Fn(S) -> S + 'static,
