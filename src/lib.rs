@@ -17,18 +17,19 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 /// State machine data structure to store state sources and handles.
+/// - G - to distinguish different initiators or responders.
 #[derive(Clone, Debug)]
-pub struct StateMachine<Tag>
+pub struct StateMachine<G>
 where
-    Tag: Eq + Hash,
+    G: Eq + Hash,
 {
-    sources: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
-    handles: Arc<DashMap<Tag, Box<dyn Any + Send + Sync>>>,
+    sources: Arc<DashMap<G, Box<dyn Any + Send + Sync>>>,
+    handles: Arc<DashMap<G, Box<dyn Any + Send + Sync>>>,
 }
 
-impl<Tag> Default for StateMachine<Tag>
+impl<G> Default for StateMachine<G>
 where
-    Tag: Eq + Hash,
+    G: Eq + Hash,
 {
     fn default() -> Self {
         Self {
@@ -38,16 +39,16 @@ where
     }
 }
 
-impl<Tag> StateMachine<Tag>
+impl<G> StateMachine<G>
 where
-    Tag: Clone + Debug + Eq + Hash,
+    G: Clone + Debug + Eq + Hash,
 {
     pub fn new() -> Self {
         Default::default()
     }
 
     /// Add state source to state machine.
-    pub(crate) fn add_source<S>(&self, tag: Tag, source: Source<S>)
+    pub(crate) fn add_source<S>(&self, tag: G, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
@@ -60,12 +61,12 @@ where
     }
 
     /// Delete state source from state machine.
-    pub(crate) fn del_source(&self, tag: Tag) -> bool {
+    pub(crate) fn del_source(&self, tag: G) -> bool {
         self.sources.remove(&tag).is_some()
     }
 
     /// Get source from state machine by tag.
-    pub async fn source<S>(&self, tag: Tag) -> Source<S>
+    pub async fn source<S>(&self, tag: G) -> Source<S>
     where
         S: 'static + Clone,
     {
@@ -88,7 +89,7 @@ where
     }
 
     /// Add state handle to state machine.
-    pub(crate) fn add_handle<T>(&self, tag: Tag, handle: Handle<T>)
+    pub(crate) fn add_handle<T>(&self, tag: G, handle: Handle<T>)
     where
         T: 'static + Send + Sync,
     {
@@ -101,12 +102,12 @@ where
     }
 
     /// Delete state handle from state machine.
-    pub(crate) fn del_handle(&self, tag: Tag) -> bool {
+    pub(crate) fn del_handle(&self, tag: G) -> bool {
         self.handles.remove(&tag).is_some()
     }
 
     /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: Tag) -> Option<S>
+    pub async fn source_value<S>(&self, tag: G) -> Option<S>
     where
         S: 'static + Clone + PartialEq,
     {
@@ -114,7 +115,7 @@ where
     }
 
     /// Get handle from state machine.
-    pub async fn handle<T>(&self, tag: Tag) -> Handle<T>
+    pub async fn handle<T>(&self, tag: G) -> Handle<T>
     where
         T: 'static + Clone,
     {
@@ -136,7 +137,7 @@ where
     }
 
     /// Get current value of handle from state machine.
-    pub async fn handle_value<T>(&self, tag: Tag) -> Option<T>
+    pub async fn handle_value<T>(&self, tag: G) -> Option<T>
     where
         T: 'static + Clone + PartialEq,
     {
@@ -144,27 +145,27 @@ where
     }
 }
 
-/// The trait defined basic methods to use state machine, usually you need a 'Mutex<()>' and a 'StateMachine<Tag>' in your data structure.
+/// The trait defined basic methods to use state machine, usually you need a 'Mutex<()>' and a 'StateMachine<G>' in your data structure.
 #[async_trait]
-pub trait HasStateMachine<Tag>
+pub trait HasStateMachine<G>
 where
-    Tag: Clone + Debug + Eq + Hash,
+    G: Clone + Debug + Eq + Hash,
 {
     /// The mutex lock to use when responding state change.
     async fn lock(&self) -> MutexGuard<'_, ()>;
 
     /// The state machine data structure.
-    async fn state_machine(&self) -> StateMachine<Tag>;
+    async fn state_machine(&self) -> StateMachine<G>;
 }
 
 /// Some convenient methods to use state machine. The trait is auto implemented for types implemented HasStateMachine.
 #[async_trait]
-pub trait UseStateMachine<Tag>: HasStateMachine<Tag>
+pub trait UseStateMachine<G>: HasStateMachine<G>
 where
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Get state source.
-    async fn source<S>(&self, tag: Tag) -> Source<S>
+    async fn source<S>(&self, tag: G) -> Source<S>
     where
         S: 'static + Clone,
     {
@@ -172,7 +173,7 @@ where
     }
 
     /// Get current value of state source.
-    async fn source_value<S>(&self, tag: Tag) -> Option<S>
+    async fn source_value<S>(&self, tag: G) -> Option<S>
     where
         S: 'static + Clone + PartialEq + Send + Sync,
     {
@@ -180,7 +181,7 @@ where
     }
 
     /// Get state handle.
-    async fn handle<T>(&self, tag: Tag) -> Handle<T>
+    async fn handle<T>(&self, tag: G) -> Handle<T>
     where
         T: 'static + Clone,
     {
@@ -188,7 +189,7 @@ where
     }
 
     /// Get current value of state handle.
-    async fn handle_value<T>(&self, tag: Tag) -> Option<T>
+    async fn handle_value<T>(&self, tag: G) -> Option<T>
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
@@ -197,21 +198,21 @@ where
 }
 
 #[async_trait]
-impl<T, Tag> UseStateMachine<Tag> for T
+impl<T, G> UseStateMachine<G> for T
 where
-    T: HasStateMachine<Tag>,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    T: HasStateMachine<G>,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
 }
 
 /// Convenient method to add state source to state machine. The trait is auto implemented for types implemented HasStateMachine.
 #[async_trait]
-pub trait UseStateSource<Tag>: HasStateMachine<Tag>
+pub trait UseStateSource<G>: HasStateMachine<G>
 where
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Add state source to state machine.
-    async fn add_source<S>(&self, tag: Tag, source: Source<S>)
+    async fn add_source<S>(&self, tag: G, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
@@ -219,10 +220,10 @@ where
     }
 }
 
-impl<T, Tag> UseStateSource<Tag> for T
+impl<T, G> UseStateSource<G> for T
 where
-    T: HasStateMachine<Tag>,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    T: HasStateMachine<G>,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
 }
 
@@ -403,16 +404,16 @@ where
 /// Define action upon state change event.
 /// - S - type of state in source,
 /// - T - type of state in handle,
-/// - Tag - to distinguish different initiators or responders,
+/// - G - to distinguish different initiators or responders,
 /// all initiators must use different tag values, all responders,
 /// and all responders do the same, a same tag value can be used
 /// by an initiator and a responder in the same state machine.
 #[async_trait]
-pub trait HasStateHandle<S, T, Tag>: HasStateMachine<Tag>
+pub trait HasStateHandle<S, T, G>: HasStateMachine<G>
 where
     S: Clone + Debug + PartialEq,
     T: Clone + Debug + PartialEq,
-    Tag: Clone + Debug + Eq + Hash,
+    G: Clone + Debug + Eq + Hash,
 {
     /// Action upon state change event.
     /// - tag - the tag value
@@ -421,7 +422,7 @@ where
     /// 'None' at the first time.
     async fn on_change(
         self: Arc<Self>,
-        tag: Tag,
+        tag: G,
         new_value: T,
         old_value: Option<T>,
     ) -> anyhow::Result<()>;
@@ -429,12 +430,12 @@ where
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateConvHandle<S, T, Tag>: HasStateHandle<S, T, Tag>
+pub trait UseStateConvHandle<S, T, G>: HasStateHandle<S, T, G>
 where
     Self: 'static,
     S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Do subscription with a state convert function.
     /// - stage [1] -- receive from source's broadcast channel.
@@ -449,7 +450,7 @@ where
     async fn convert_subscribe(
         self: Arc<Self>,
         reader: Reader<S>,
-        tag: Tag,
+        tag: G,
         convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
     ) -> Handle<T> {
         let handle: Handle<T> = Handle::new();
@@ -518,35 +519,35 @@ where
     }
 }
 
-impl<V, S, T, Tag> UseStateConvHandle<S, T, Tag> for V
+impl<V, S, T, G> UseStateConvHandle<S, T, G> for V
 where
-    V: 'static + HasStateHandle<S, T, Tag>,
+    V: 'static + HasStateHandle<S, T, G>,
     S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
 }
 
 /// Convenient method to do subscription. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateHandle<T, Tag>: UseStateConvHandle<T, T, Tag>
+pub trait UseStateHandle<T, G>: UseStateConvHandle<T, T, G>
 where
     Self: 'static,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Do subscription.
     #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
-    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle<T> {
+    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: G) -> Handle<T> {
         UseStateConvHandle::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
             .await
     }
 }
 
-impl<V, T, Tag> UseStateHandle<T, Tag> for V
+impl<V, T, G> UseStateHandle<T, G> for V
 where
-    V: 'static + UseStateConvHandle<T, T, Tag>,
+    V: 'static + UseStateConvHandle<T, T, G>,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
+    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
 }
