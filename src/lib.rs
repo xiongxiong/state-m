@@ -404,16 +404,14 @@ where
 }
 
 /// Define action upon state change event.
-/// - S - type of state in source,
 /// - T - type of state in handle,
 /// - G - to distinguish different initiators or responders,
 /// all initiators must use different tag values, all responders,
 /// and all responders do the same, a same tag value can be used
 /// by an initiator and a responder in the same state machine.
 #[async_trait]
-pub trait HasStateHandle<S, T, G>: HasStateMachine<G>
+pub trait HasStateHandle<T, G>: HasStateMachine<G>
 where
-    S: Clone + Debug + PartialEq,
     T: Clone + Debug + PartialEq,
     G: Clone + Debug + Eq + Hash,
 {
@@ -432,11 +430,10 @@ where
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateConvHandle<S, M, T, G>: HasStateHandle<M, T, G>
+pub trait UseStateHandle<S, T, G>: HasStateHandle<T, G>
 where
     Self: 'static,
     S: 'static + Clone + Debug + PartialEq + Send,
-    M: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -445,17 +442,8 @@ where
     /// - stage [2] -- convert to target type and send to mpsc channel.
     /// - stage [3] -- receive from mpsc channel and process it.
     /// - stage [4] -- (optional) feedback when the change event has been processed.
-    #[instrument(
-        name = "UseStateConvTarget::convert_subscribe",
-        skip_all,
-        fields(tag, chan_cap)
-    )]
-    async fn convert_subscribe(
-        self: Arc<Self>,
-        reader: Reader<S, M>,
-        tag: G,
-        func: impl Fn(M) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
-    ) -> Handle<T> {
+    #[instrument(name = "UseStateHandle::subscribe", skip_all, fields(tag))]
+    async fn subscribe(self: Arc<Self>, reader: Reader<S, T>, tag: G) -> Handle<T> {
         let handle: Handle<T> = Handle::new();
         self.state_machine()
             .await
@@ -474,7 +462,7 @@ where
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
-                                let t = func(reader.func.as_ref()(s).await).await;
+                                let t = reader.func.as_ref()(s).await;
                                 let opt_t_old = handle_c.value().await;
                                 if handle_c.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
@@ -522,35 +510,10 @@ where
     }
 }
 
-impl<V, S, M, T, G> UseStateConvHandle<S, M, T, G> for V
+impl<V, S, T, G> UseStateHandle<S, T, G> for V
 where
-    V: 'static + HasStateHandle<M, T, G>,
+    V: 'static + HasStateHandle<T, G>,
     S: 'static + Clone + Debug + PartialEq + Send,
-    M: 'static + Clone + Debug + PartialEq + Send,
-    T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
-{
-}
-
-/// Convenient method to do subscription. The trait is auto implemented for types implemented HasStateHandle.
-#[async_trait]
-pub trait UseStateHandle<T, G>: UseStateConvHandle<T, T, T, G>
-where
-    Self: 'static,
-    T: 'static + Clone + Debug + PartialEq + Send + Sync,
-    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
-{
-    /// Do subscription.
-    #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
-    async fn subscribe(self: Arc<Self>, reader: Reader<T, T>, tag: G) -> Handle<T> {
-        UseStateConvHandle::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
-            .await
-    }
-}
-
-impl<V, T, G> UseStateHandle<T, G> for V
-where
-    V: 'static + UseStateConvHandle<T, T, T, G>,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {

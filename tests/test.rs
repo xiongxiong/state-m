@@ -49,7 +49,7 @@ impl HasStateMachine<TagB> for UnitB {
 }
 
 #[async_trait]
-impl HasStateHandle<String, String, TagB> for UnitB {
+impl HasStateHandle<String, TagB> for UnitB {
     async fn on_change(
         self: Arc<Self>,
         tag: TagB,
@@ -80,15 +80,11 @@ async fn test() -> anyhow::Result<()> {
     let unit_target = Arc::new(UnitB::default());
     let handle_x = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TagB::X, |t| {
-            Box::pin(async move { format!("X said: Hi, {}", t) })
-        })
+        .subscribe(source.reader(), TagB::X)
         .await;
     let handle_y = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TagB::Y, |t| {
-            Box::pin(async move { format!("Y said: Hi, {}", t) })
-        })
+        .subscribe(source.reader(), TagB::Y)
         .await;
     source.change("Wang".into()).await?;
     source.touch().await?;
