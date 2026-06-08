@@ -109,7 +109,7 @@ where
     /// Get current value of source from state machine by tag.
     pub async fn source_value<S>(&self, tag: G) -> Option<S>
     where
-        S: 'static + Clone + PartialEq,
+        S: 'static + Clone + PartialEq + Send,
     {
         self.source(tag).await.value().await
     }
@@ -235,12 +235,12 @@ type NotCheckEq = bool;
 #[derive(Clone, Debug)]
 pub struct Source<S> {
     value: Arc<RwLock<Option<S>>>,
-    sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
+    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
 
 impl<S> Source<S>
 where
-    S: Clone + PartialEq,
+    S: 'static + Clone + PartialEq + Send,
 {
     /// Create a state source, with broadcast channel capacity of 100.
     pub fn new() -> Self {
@@ -253,14 +253,15 @@ where
         let (tx, _) = broadcast::channel(capacity);
         Self {
             value: Arc::new(RwLock::new(None)),
-            sender: Arc::new(tx),
+            sender: tx,
         }
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader(&self) -> Reader<S> {
+    pub fn reader(&self) -> Reader<S, S> {
         Reader {
             sender: self.sender.clone(),
+            func: Arc::new(|s| Box::pin(async move { s })),
         }
     }
 
@@ -358,9 +359,10 @@ pub enum SourceChangeError {
 }
 
 /// Data structure to be exposed to do subscription by state change responders.
-#[derive(Clone, Debug)]
-pub struct Reader<S> {
-    sender: Arc<broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>>,
+#[derive(Clone)]
+pub struct Reader<S, T> {
+    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+    func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
 }
 
 /// Data structure to store the latest state in responder's state machine, can be used to do unsubscription.
@@ -430,10 +432,11 @@ where
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateConvHandle<S, T, G>: HasStateHandle<S, T, G>
+pub trait UseStateConvHandle<S, M, T, G>: HasStateHandle<M, T, G>
 where
     Self: 'static,
     S: 'static + Clone + Debug + PartialEq + Send,
+    M: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -449,9 +452,9 @@ where
     )]
     async fn convert_subscribe(
         self: Arc<Self>,
-        reader: Reader<S>,
+        reader: Reader<S, M>,
         tag: G,
-        convert: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + 'static,
+        func: impl Fn(M) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
     ) -> Handle<T> {
         let handle: Handle<T> = Handle::new();
         self.state_machine()
@@ -471,7 +474,7 @@ where
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
-                                let t = convert(s).await;
+                                let t = func(reader.func.as_ref()(s).await).await;
                                 let opt_t_old = handle_c.value().await;
                                 if handle_c.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
@@ -519,10 +522,11 @@ where
     }
 }
 
-impl<V, S, T, G> UseStateConvHandle<S, T, G> for V
+impl<V, S, M, T, G> UseStateConvHandle<S, M, T, G> for V
 where
-    V: 'static + HasStateHandle<S, T, G>,
+    V: 'static + HasStateHandle<M, T, G>,
     S: 'static + Clone + Debug + PartialEq + Send,
+    M: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -530,7 +534,7 @@ where
 
 /// Convenient method to do subscription. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateHandle<T, G>: UseStateConvHandle<T, T, G>
+pub trait UseStateHandle<T, G>: UseStateConvHandle<T, T, T, G>
 where
     Self: 'static,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
@@ -538,7 +542,7 @@ where
 {
     /// Do subscription.
     #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
-    async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: G) -> Handle<T> {
+    async fn subscribe(self: Arc<Self>, reader: Reader<T, T>, tag: G) -> Handle<T> {
         UseStateConvHandle::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
             .await
     }
@@ -546,7 +550,7 @@ where
 
 impl<V, T, G> UseStateHandle<T, G> for V
 where
-    V: 'static + UseStateConvHandle<T, T, G>,
+    V: 'static + UseStateConvHandle<T, T, T, G>,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
