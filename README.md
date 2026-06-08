@@ -68,9 +68,10 @@ let handle_x = unit
         .await;
 let handle_y = unit
         .clone()
-        .convert_subscribe(source.reader(), Tag::Y, |t| {
-            Box::pin(async move { format!("X said: Hi, {}", t) })
-        })
+        .subscribe(
+            source.reader_with(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            Tag::Y,
+        )
         .await;
 handle_x.unsubscribe();
 handle_y.unsubscribe();
@@ -175,15 +176,14 @@ async fn test_change() -> anyhow::Result<()> {
     let unit_target = Arc::new(UnitB::default());
     let handle_x = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TagB::X, |t| {
-            Box::pin(async move { format!("X said: Hi, {}", t) })
-        })
+        .subscribe(source.reader(), TagB::X)
         .await;
     let handle_y = unit_target
         .clone()
-        .convert_subscribe(source.reader(), TagB::Y, |t| {
-            Box::pin(async move { format!("Y said: Hi, {}", t) })
-        })
+        .subscribe(
+            source.reader_with(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            TagB::Y,
+        )
         .await;
     source.change("Wang".into()).await?;
     source.touch().await?;
