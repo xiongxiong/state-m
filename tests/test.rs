@@ -84,7 +84,10 @@ async fn test() -> anyhow::Result<()> {
         .await;
     let handle_y = unit_target
         .clone()
-        .subscribe(source.reader(), TagB::Y)
+        .subscribe(
+            source.reader_with(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            TagB::Y,
+        )
         .await;
     source.change("Wang".into()).await?;
     source.touch().await?;

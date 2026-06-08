@@ -265,6 +265,17 @@ where
         }
     }
 
+    /// Get reader of state source, can be subscribed by responders.
+    pub fn reader_with<T>(
+        &self,
+        func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
+    ) -> Reader<S, T> {
+        Reader {
+            sender: self.sender.clone(),
+            func,
+        }
+    }
+
     /// Num of subscriptions.
     pub async fn num_of_subs(&self) -> usize {
         self.sender.receiver_count()
