@@ -148,7 +148,7 @@ where
 #[async_trait]
 pub trait HasStateMachine<Tag>
 where
-    Tag: Eq + Hash,
+    Tag: Clone + Debug + Eq + Hash,
 {
     /// The mutex lock to use when responding state change.
     async fn lock(&self) -> MutexGuard<'_, ()>;
@@ -410,7 +410,9 @@ where
 #[async_trait]
 pub trait HasStateHandle<S, T, Tag>: HasStateMachine<Tag>
 where
-    Tag: Eq + Hash,
+    S: Clone + Debug + PartialEq,
+    T: Clone + Debug + PartialEq,
+    Tag: Clone + Debug + Eq + Hash,
 {
     /// Action upon state change event.
     /// - tag - the tag value
@@ -427,10 +429,10 @@ where
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateConvTarget<S, T, Tag>: HasStateHandle<S, T, Tag>
+pub trait UseStateConvHandle<S, T, Tag>: HasStateHandle<S, T, Tag>
 where
     Self: 'static,
-    S: 'static + Clone + Debug + Send,
+    S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -516,10 +518,10 @@ where
     }
 }
 
-impl<V, S, T, Tag> UseStateConvTarget<S, T, Tag> for V
+impl<V, S, T, Tag> UseStateConvHandle<S, T, Tag> for V
 where
     V: 'static + HasStateHandle<S, T, Tag>,
-    S: 'static + Clone + Debug + Send,
+    S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -527,7 +529,7 @@ where
 
 /// Convenient method to do subscription. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateTarget<T, Tag>: UseStateConvTarget<T, T, Tag>
+pub trait UseStateHandle<T, Tag>: UseStateConvHandle<T, T, Tag>
 where
     Self: 'static,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
@@ -536,14 +538,14 @@ where
     /// Do subscription.
     #[instrument(name = "UseStateTarget::subscribe", skip_all, fields(tag, chan_cap))]
     async fn subscribe(self: Arc<Self>, reader: Reader<T>, tag: Tag) -> Handle<T> {
-        UseStateConvTarget::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
+        UseStateConvHandle::convert_subscribe(self, reader, tag, |t| Box::pin(async move { t }))
             .await
     }
 }
 
-impl<V, T, Tag> UseStateTarget<T, Tag> for V
+impl<V, T, Tag> UseStateHandle<T, Tag> for V
 where
-    V: 'static + UseStateConvTarget<T, T, Tag>,
+    V: 'static + UseStateConvHandle<T, T, Tag>,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     Tag: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
