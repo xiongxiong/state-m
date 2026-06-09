@@ -145,15 +145,19 @@ where
     }
 }
 
-/// The trait defined basic methods to use state machine, usually you need a 'Mutex<()>' and a 'StateMachine<G>' in your data structure.
+/// The data structure is locked while responding state change.
 #[async_trait]
-pub trait HasStateMachine<G>
+pub trait HasLock {
+    /// The mutex lock to use.
+    async fn lock(&self) -> MutexGuard<'_, ()>;
+}
+
+/// At least you should provide a state machine data structure.
+#[async_trait]
+pub trait HasStateMachine<G>: HasLock
 where
     G: Clone + Debug + Eq + Hash,
 {
-    /// The mutex lock to use when responding state change.
-    async fn lock(&self) -> MutexGuard<'_, ()>;
-
     /// The state machine data structure.
     async fn state_machine(&self) -> StateMachine<G>;
 }
@@ -258,19 +262,15 @@ where
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader(&self) -> Reader<S, S> {
+    pub fn reader(&self) -> Reader<S> {
         Reader {
             sender: self.sender.clone(),
-            func: Arc::new(|s| Box::pin(async move { s })),
         }
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader_with<T>(
-        &self,
-        func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
-    ) -> Reader<S, T> {
-        Reader {
+    pub fn reader_ex<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
+        ReaderEx {
             sender: self.sender.clone(),
             func,
         }
@@ -371,9 +371,39 @@ pub enum SourceChangeError {
 
 /// Data structure to be exposed to do subscription by state change responders.
 #[derive(Clone)]
-pub struct Reader<S, T> {
+pub struct Reader<S> {
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
-    func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
+}
+
+impl<S> Into<ReaderEx<S, S>> for Reader<S>
+where
+    S: 'static + Send,
+{
+    fn into(self) -> ReaderEx<S, S> {
+        ReaderEx {
+            sender: self.sender,
+            func: Arc::new(|s| Box::pin(async move { s })),
+        }
+    }
+}
+
+impl<S> Reader<S> {
+    pub fn extend<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
+        ReaderEx {
+            sender: self.sender.clone(),
+            func,
+        }
+    }
+}
+
+pub type ConvertFunc<S, T> =
+    Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>;
+
+/// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
+#[derive(Clone)]
+pub struct ReaderEx<S, T> {
+    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+    func: ConvertFunc<S, T>,
 }
 
 /// Data structure to store the latest state in responder's state machine, can be used to do unsubscription.
@@ -441,10 +471,8 @@ where
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.
 #[async_trait]
-pub trait UseStateHandle<S, T, G>: HasStateHandle<T, G>
+pub trait UseStateHandle<T, G>: HasStateHandle<T, G> + 'static
 where
-    Self: 'static,
-    S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
@@ -454,12 +482,20 @@ where
     /// - stage [3] -- receive from mpsc channel and process it.
     /// - stage [4] -- (optional) feedback when the change event has been processed.
     #[instrument(name = "UseStateHandle::subscribe", skip_all, fields(tag))]
-    async fn subscribe(self: Arc<Self>, reader: Reader<S, T>, tag: G) -> Handle<T> {
+    async fn subscribe<S>(
+        self: Arc<Self>,
+        reader: impl Into<ReaderEx<S, T>> + Send,
+        tag: G,
+    ) -> Handle<T>
+    where
+        S: 'static + Clone + Debug + PartialEq + Send,
+    {
         let handle: Handle<T> = Handle::new();
         self.state_machine()
             .await
             .add_handle(tag.clone(), handle.clone());
-        let mut rx_s = reader.sender.subscribe();
+        let reader_ex = reader.into();
+        let mut rx_s = reader_ex.sender.subscribe();
         let (tx_t, mut rx_t) =
             mpsc::unbounded_channel::<(T, Option<T>, Option<mpsc::UnboundedSender<()>>)>();
         let handle_c = handle.clone();
@@ -473,7 +509,7 @@ where
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
-                                let t = reader.func.as_ref()(s).await;
+                                let t = reader_ex.func.as_ref()(s).await;
                                 let opt_t_old = handle_c.value().await;
                                 if handle_c.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
@@ -521,10 +557,9 @@ where
     }
 }
 
-impl<V, S, T, G> UseStateHandle<S, T, G> for V
+impl<V, T, G> UseStateHandle<T, G> for V
 where
     V: 'static + HasStateHandle<T, G>,
-    S: 'static + Clone + Debug + PartialEq + Send,
     T: 'static + Clone + Debug + PartialEq + Send + Sync,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {

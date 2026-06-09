@@ -69,7 +69,7 @@ let handle_x = unit
 let handle_y = unit
         .clone()
         .subscribe(
-            source.reader_with(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            source.reader_ex(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
             Tag::Y,
         )
         .await;
@@ -111,11 +111,14 @@ struct UnitA {
 }
 
 #[async_trait]
-impl HasStateMachine<TagA> for UnitA {
+impl HasLock for UnitA {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
+}
 
+#[async_trait]
+impl HasStateMachine<TagA> for UnitA {
     async fn state_machine(&self) -> StateMachine<TagA> {
         self.state_machine.clone()
     }
@@ -134,11 +137,14 @@ struct UnitB {
 }
 
 #[async_trait]
-impl HasStateMachine<TagB> for UnitB {
+impl HasLock for UnitB {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
+}
 
+#[async_trait]
+impl HasStateMachine<TagB> for UnitB {
     async fn state_machine(&self) -> StateMachine<TagB> {
         self.state_machine.clone()
     }
@@ -181,7 +187,7 @@ async fn test_change() -> anyhow::Result<()> {
     let handle_y = unit_target
         .clone()
         .subscribe(
-            source.reader_with(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            source.reader_ex(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
             TagB::Y,
         )
         .await;
