@@ -77,7 +77,7 @@ impl HasStateHandle<String, TagB> for UnitB {
 }
 
 #[tokio::test]
-async fn test() -> anyhow::Result<()> {
+async fn test() -> Result<(), SourceChangeError> {
     let unit_source = Arc::new(UnitA::default());
     unit_source
         .add_source::<String>(TagA::Hi, Source::new())
