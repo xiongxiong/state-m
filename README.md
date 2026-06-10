@@ -2,11 +2,6 @@
 ---
 The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components.
 
-```toml
-[dependencies]
-state-m = "0.1.0"
-```
-
 ## Features
 * **Separation of read-write**, initiators and responders of state changes hold different data structures.
 * **Duplicate filtering**, by default, duplicate states do not trigger state changes.
