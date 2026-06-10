@@ -466,7 +466,7 @@ where
         tag: G,
         new_value: T,
         old_value: Option<T>,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), impl std::error::Error>;
 }
 
 /// Convenient method to do subscription with a state convert function. The trait is auto implemented for types implemented HasStateHandle.

@@ -9,13 +9,15 @@ keywords = ["state", "machine", "subscribe"]
 license = "MIT"
 
 [dependencies]
-anyhow = "1.0.102"
 async-trait = "0.1.89"
 dashmap = "6.2.1"
 thiserror = "2.0.18"
 tokio = {version = "1.52.3", features = ["full"]}
 tokio-util = "0.7.18"
 tracing = "0.1.44"
+
+[dev-dependencies]
+anyhow = "1.0.102"
 
 [[test]]
 name = "test"
