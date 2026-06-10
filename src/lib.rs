@@ -107,9 +107,9 @@ where
     }
 
     /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: G) -> Option<S>
+    pub async fn source_value<S>(&self, tag: G) -> S
     where
-        S: 'static + Clone + PartialEq + Send,
+        S: 'static + Clone + Default + PartialEq + Send,
     {
         self.source(tag).await.value().await
     }
@@ -238,25 +238,34 @@ type NotCheckEq = bool;
 /// State source, the initiator of state change.
 #[derive(Clone, Debug)]
 pub struct Source<S> {
-    value: Arc<RwLock<Option<S>>>,
+    value: Arc<RwLock<S>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+}
+
+impl<S> Default for Source<S>
+where
+    S: 'static + Clone + Default + PartialEq + Send,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<S> Source<S>
 where
-    S: 'static + Clone + PartialEq + Send,
+    S: 'static + Clone + Default + PartialEq + Send,
 {
     /// Create a state source, with broadcast channel capacity of 100.
     pub fn new() -> Self {
-        Self::create(100)
+        Self::create(Default::default(), 100)
     }
 
     /// Create a state source with custom broadcast channel capacity.
     /// - capacity: broadcast channel capacity
-    pub fn create(capacity: usize) -> Self {
+    pub fn create(init_value: S, capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         Self {
-            value: Arc::new(RwLock::new(None)),
+            value: Arc::new(RwLock::new(init_value)),
             sender: tx,
         }
     }
@@ -264,6 +273,7 @@ where
     /// Get reader of state source, can be subscribed by responders.
     pub fn reader(&self) -> Reader<S> {
         Reader {
+            value: self.value.clone(),
             sender: self.sender.clone(),
         }
     }
@@ -271,6 +281,7 @@ where
     /// Get reader of state source, can be subscribed by responders.
     pub fn reader_ex<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
         ReaderEx {
+            value: self.value.clone(),
             sender: self.sender.clone(),
             func,
         }
@@ -282,7 +293,7 @@ where
     }
 
     /// Get current value of state source.
-    pub async fn value(&self) -> Option<S> {
+    pub async fn value(&self) -> S {
         (*self.value.read().await).clone()
     }
 
@@ -292,34 +303,32 @@ where
         change: Change<S>,
     ) -> Result<(), SourceChangeError> {
         let mut guard = self.value.write().await;
-        let (opt_s, not_check_eq) = match change {
-            Change::Value(v) => (Some(v), false),
-            Change::Func(func) => ((*guard).clone().map(|v| func(v)), false),
+        let (s, not_check_eq) = match change {
+            Change::Value(v) => (v, false),
+            Change::Func(func) => (func((*guard).clone()), false),
             Change::Touch => ((*guard).clone(), true),
         };
-        if not_check_eq || *guard != opt_s {
-            if let Some(s) = opt_s {
-                if wait_to_end {
-                    let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
-                    self.sender
-                        .send((s.clone(), not_check_eq, Some(tx_w)))
-                        .map_err(|_| SourceChangeError::SendErr)?;
-                    loop {
-                        select! {
-                            res = rx_w.recv()  => {
-                                if res.is_none() {
-                                    break;
-                                }
+        if not_check_eq || *guard != s {
+            if wait_to_end {
+                let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
+                self.sender
+                    .send((s.clone(), not_check_eq, Some(tx_w)))
+                    .map_err(|_| SourceChangeError::SendErr)?;
+                loop {
+                    select! {
+                        res = rx_w.recv()  => {
+                            if res.is_none() {
+                                break;
                             }
                         }
                     }
-                } else {
-                    self.sender
-                        .send((s.clone(), not_check_eq, None))
-                        .map_err(|_| SourceChangeError::SendErr)?;
                 }
-                *guard = Some(s);
+            } else {
+                self.sender
+                    .send((s.clone(), not_check_eq, None))
+                    .map_err(|_| SourceChangeError::SendErr)?;
             }
+            *guard = s;
             Ok(())
         } else {
             Err(SourceChangeError::NotChange)
@@ -372,6 +381,7 @@ pub enum SourceChangeError {
 /// Data structure to be exposed to do subscription by state change responders.
 #[derive(Clone)]
 pub struct Reader<S> {
+    value: Arc<RwLock<S>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
 
@@ -381,6 +391,7 @@ where
 {
     fn into(self) -> ReaderEx<S, S> {
         ReaderEx {
+            value: self.value,
             sender: self.sender,
             func: Arc::new(|s| Box::pin(async move { s })),
         }
@@ -390,6 +401,7 @@ where
 impl<S> Reader<S> {
     pub fn extend<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
         ReaderEx {
+            value: self.value.clone(),
             sender: self.sender.clone(),
             func,
         }
@@ -402,38 +414,47 @@ pub type ConvertFunc<S, T> =
 /// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
 #[derive(Clone)]
 pub struct ReaderEx<S, T> {
+    value: Arc<RwLock<S>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
     func: ConvertFunc<S, T>,
+}
+
+impl<S, T> ReaderEx<S, T>
+where
+    S: Clone,
+{
+    async fn value(&self) -> T {
+        self.func.as_ref()((*self.value.read().await).clone()).await
+    }
 }
 
 /// Data structure to store the latest state in responder's state machine, can be used to do unsubscription.
 #[derive(Clone, Debug)]
 pub struct Handle<T> {
     cancel_token: CancellationToken,
-    value: Arc<RwLock<Option<T>>>,
+    value: Arc<RwLock<T>>,
 }
 
 impl<T> Handle<T>
 where
     T: Clone + PartialEq,
 {
-    fn new() -> Self {
+    fn new(init_value: T) -> Self {
         Self {
             cancel_token: CancellationToken::new(),
-            value: Arc::new(RwLock::new(None)),
+            value: Arc::new(RwLock::new(init_value)),
         }
     }
 
-    async fn store(&self, val: T, not_check_eq: bool) -> bool {
-        let opt_t = Some(val);
-        let res = *self.value.read().await != opt_t;
-        if res {
-            *self.value.write().await = opt_t;
+    async fn store(&self, t: T, not_check_eq: bool) -> bool {
+        let changed = *self.value.read().await != t;
+        if changed {
+            *self.value.write().await = t;
         }
-        not_check_eq || res
+        not_check_eq || changed
     }
 
-    async fn value(&self) -> Option<T> {
+    async fn value(&self) -> T {
         (*self.value.read().await).clone()
     }
 
@@ -465,7 +486,7 @@ where
         self: Arc<Self>,
         tag: G,
         new_value: T,
-        old_value: Option<T>,
+        old_value: T,
     ) -> Result<(), impl std::error::Error>;
 }
 
@@ -488,16 +509,16 @@ where
         tag: G,
     ) -> Handle<T>
     where
-        S: 'static + Clone + Debug + PartialEq + Send,
+        S: 'static + Clone + Debug + PartialEq + Send + Sync,
     {
-        let handle: Handle<T> = Handle::new();
+        let reader_ex = reader.into();
+        let handle: Handle<T> = Handle::new(reader_ex.value().await);
         self.state_machine()
             .await
             .add_handle(tag.clone(), handle.clone());
-        let reader_ex = reader.into();
         let mut rx_s = reader_ex.sender.subscribe();
         let (tx_t, mut rx_t) =
-            mpsc::unbounded_channel::<(T, Option<T>, Option<mpsc::UnboundedSender<()>>)>();
+            mpsc::unbounded_channel::<(T, T, Option<mpsc::UnboundedSender<()>>)>();
         let handle_c = handle.clone();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
@@ -510,9 +531,9 @@ where
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
                                 let t = reader_ex.func.as_ref()(s).await;
-                                let opt_t_old = handle_c.value().await;
+                                let t_old = handle_c.value().await;
                                 if handle_c.store(t.clone(), not_check_eq).await {
-                                    if let Err(e) = tx_t.send((t, opt_t_old, opt_feedback)) {
+                                    if let Err(e) = tx_t.send((t, t_old, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
                                     }
@@ -533,9 +554,9 @@ where
                     }
                     res = rx_t.recv() => {
                         match res {
-                            Some((t, opt_t_old, opt_feedback)) => {
+                            Some((t, t_old, opt_feedback)) => {
                                 let _lock = self.lock().await;
-                                if let Err(e) = self.clone().on_change(tag.clone(), t, opt_t_old).await {
+                                if let Err(e) = self.clone().on_change(tag.clone(), t, t_old).await {
                                     tracing::error!("stage [3] | change event proc error -- {}", e);
                                 }
                                 if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {

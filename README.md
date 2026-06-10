@@ -55,7 +55,7 @@ impl HasStateHandle<S, T, Tag> for Unit {
         self: Arc<Self>,
         tag: Tag,
         new_value: T,
-        old_value: Option<T>,
+        old_value: T,
     ) -> Result<(), Error> {
         ...
     }

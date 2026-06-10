@@ -60,7 +60,7 @@ impl HasStateHandle<String, TagB> for UnitB {
         self: Arc<Self>,
         tag: TagB,
         new_value: String,
-        old_value: Option<String>,
+        old_value: String,
     ) -> Result<(), std::fmt::Error> {
         match tag {
             TagB::X => {
