@@ -76,7 +76,8 @@ handle_y.unsubscribe();
 
 ```rust
 // add state source to state machine
-unit.add_source::<String>(Tag::Hi, Source::new()).await;
+unit.add::<String>(Tag::Hi).await;
+unit.add_ex::<String>(Tag::Hi, Source::create("my init value", 100)).await;
 // get state source by tag
 let source = unit_source.source(TagA::Hi).await;
 // change state by need

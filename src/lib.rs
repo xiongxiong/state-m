@@ -216,11 +216,21 @@ where
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Add state source to state machine.
-    async fn add_source<S>(&self, tag: G, source: Source<S>)
+    async fn add_ex<S>(&self, tag: G, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
         self.state_machine().await.add_source(tag, source);
+    }
+
+    /// Add state source to state machine.
+    async fn add<S>(&self, tag: G)
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .add_source(tag, Source::<S>::default());
     }
 }
 
@@ -259,7 +269,12 @@ where
     pub fn new() -> Self {
         Self::create(Default::default(), 100)
     }
+}
 
+impl<S> Source<S>
+where
+    S: 'static + Clone + PartialEq + Send,
+{
     /// Create a state source with custom broadcast channel capacity.
     /// - capacity: broadcast channel capacity
     pub fn create(init_value: S, capacity: usize) -> Self {
