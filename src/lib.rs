@@ -177,9 +177,9 @@ where
     }
 
     /// Get current value of state source.
-    async fn source_value<S>(&self, tag: G) -> Option<S>
+    async fn source_value<S>(&self, tag: G) -> S
     where
-        S: 'static + Clone + PartialEq + Send + Sync,
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
         self.state_machine().await.source_value(tag).await
     }
@@ -270,12 +270,7 @@ where
     pub fn new() -> Self {
         Self::create(Default::default(), 100)
     }
-}
 
-impl<S> Source<S>
-where
-    S: 'static + Clone + PartialEq + Send,
-{
     /// Create a state source with custom broadcast channel capacity.
     /// - capacity: broadcast channel capacity
     pub fn create(init_value: S, capacity: usize) -> Self {
