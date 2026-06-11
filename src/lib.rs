@@ -216,21 +216,22 @@ where
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
     /// Add state source to state machine, the state source is created by default.
-    async fn add_source<S>(&self, tag: G)
+    async fn add_source<S>(&self, tag: G) -> Source<S>
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
-        self.state_machine()
-            .await
-            .add_source(tag, Source::<S>::default());
+        let source = Source::<S>::default();
+        self.state_machine().await.add_source(tag, source.clone());
+        source
     }
 
     /// Add state source to state machine.
-    async fn add_source_ex<S>(&self, tag: G, source: Source<S>)
+    async fn add_source_ex<S>(&self, tag: G, source: Source<S>) -> Source<S>
     where
-        S: 'static + Send + Sync,
+        S: 'static + Clone + Send + Sync,
     {
-        self.state_machine().await.add_source(tag, source);
+        self.state_machine().await.add_source(tag, source.clone());
+        source
     }
 }
 
