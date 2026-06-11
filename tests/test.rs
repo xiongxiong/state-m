@@ -61,7 +61,7 @@ impl HasStateHandle<String, TagB> for UnitB {
         tag: TagB,
         new_value: String,
         old_value: String,
-    ) -> Result<(), std::fmt::Error> {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         match tag {
             TagB::X => {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
