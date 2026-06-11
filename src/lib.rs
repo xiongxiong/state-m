@@ -279,11 +279,14 @@ where
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader_ex<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
+    pub fn reader_ex<T>(
+        &self,
+        func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
+    ) -> ReaderEx<S, T> {
         ReaderEx {
             value: self.value.clone(),
             sender: self.sender.clone(),
-            func,
+            func: Arc::new(func),
         }
     }
 
@@ -399,24 +402,24 @@ where
 }
 
 impl<S> Reader<S> {
-    pub fn extend<T>(&self, func: ConvertFunc<S, T>) -> ReaderEx<S, T> {
+    pub fn extend<T>(
+        &self,
+        func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
+    ) -> ReaderEx<S, T> {
         ReaderEx {
             value: self.value.clone(),
             sender: self.sender.clone(),
-            func,
+            func: Arc::new(func),
         }
     }
 }
-
-pub type ConvertFunc<S, T> =
-    Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>;
 
 /// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
 #[derive(Clone)]
 pub struct ReaderEx<S, T> {
     value: Arc<RwLock<S>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
-    func: ConvertFunc<S, T>,
+    func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
 }
 
 impl<S, T> ReaderEx<S, T>

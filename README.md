@@ -64,7 +64,7 @@ let handle_x = unit
 let handle_y = unit
         .clone()
         .subscribe(
-            source.reader_ex(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            source.reader_ex(|s| Box::pin(async move { format!("Hi, {}", s) })),
             Tag::Y,
         )
         .await;

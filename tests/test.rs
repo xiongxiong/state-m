@@ -91,7 +91,7 @@ async fn test() -> Result<(), SourceChangeError> {
     let handle_y = unit_target
         .clone()
         .subscribe(
-            source.reader_ex(Arc::new(|s| Box::pin(async move { format!("Hi, {}", s) }))),
+            source.reader_ex(|s| Box::pin(async move { format!("Hi, {}", s) })),
             TagB::Y,
         )
         .await;
