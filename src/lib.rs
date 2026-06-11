@@ -137,7 +137,7 @@ where
     }
 
     /// Get current value of handle from state machine.
-    pub async fn handle_value<T>(&self, tag: G) -> Option<T>
+    pub async fn handle_value<T>(&self, tag: G) -> T
     where
         T: 'static + Clone + PartialEq,
     {
@@ -193,7 +193,7 @@ where
     }
 
     /// Get current value of state handle.
-    async fn handle_value<T>(&self, tag: G) -> Option<T>
+    async fn handle_value<T>(&self, tag: G) -> T
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
