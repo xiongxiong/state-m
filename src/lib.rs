@@ -365,16 +365,19 @@ where
     }
 
     /// Change state of source by modifying it with a func.
-    pub async fn modify(&self, func: impl Fn(S) -> S + 'static) -> Result<(), SourceChangeError> {
-        self.change_ex(false, Change::Func(Box::new(func))).await
+    pub async fn modify(
+        &self,
+        func: impl Fn(S) -> S + Send + Sync + 'static,
+    ) -> Result<(), SourceChangeError> {
+        self.change_ex(false, Change::Func(Arc::new(func))).await
     }
 
     /// Change state of source by modifying it with a func, and wait responders to finish actions upon the change event.
     pub async fn wait_modify(
         &self,
-        func: impl Fn(S) -> S + 'static,
+        func: impl Fn(S) -> S + Send + Sync + 'static,
     ) -> Result<(), SourceChangeError> {
-        self.change_ex(true, Change::Func(Box::new(func))).await
+        self.change_ex(true, Change::Func(Arc::new(func))).await
     }
 
     /// Create a change event without changing state of source really.
@@ -385,7 +388,7 @@ where
 
 enum Change<S> {
     Value(S),
-    Func(Box<dyn Fn(S) -> S>),
+    Func(Arc<dyn Fn(S) -> S + Send + Sync>),
     Touch,
 }
 
