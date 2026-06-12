@@ -503,6 +503,19 @@ where
     }
 }
 
+impl<S> Reader<S> {
+    pub fn extend<T>(
+        self,
+        func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
+    ) -> ReaderEx<S, T> {
+        ReaderEx {
+            value: self.value,
+            recver: self.recver,
+            func: Arc::new(func),
+        }
+    }
+}
+
 /// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
 pub struct ReaderEx<S, T> {
     value: Arc<RwLock<S>>,
