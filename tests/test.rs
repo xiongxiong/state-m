@@ -15,14 +15,11 @@ struct UnitA {
 }
 
 #[async_trait]
-impl HasLock for UnitA {
+impl HasStateMachine<TagA> for UnitA {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
-}
 
-#[async_trait]
-impl HasStateMachine<TagA> for UnitA {
     async fn state_machine(&self) -> StateMachine<TagA> {
         self.state_machine.clone()
     }
@@ -41,14 +38,11 @@ struct UnitB {
 }
 
 #[async_trait]
-impl HasLock for UnitB {
+impl HasStateMachine<TagB> for UnitB {
     async fn lock(&self) -> MutexGuard<'_, ()> {
         self.lock.lock().await
     }
-}
 
-#[async_trait]
-impl HasStateMachine<TagB> for UnitB {
     async fn state_machine(&self) -> StateMachine<TagB> {
         self.state_machine.clone()
     }

@@ -145,19 +145,15 @@ where
     }
 }
 
-/// The data structure is locked while responding state change.
-#[async_trait]
-pub trait HasLock {
-    /// The mutex lock to use.
-    async fn lock(&self) -> MutexGuard<'_, ()>;
-}
-
 /// At least you should provide a state machine data structure.
 #[async_trait]
-pub trait HasStateMachine<G>: HasLock
+pub trait HasStateMachine<G>
 where
     G: Clone + Debug + Eq + Hash,
 {
+    /// The mutex lock to use.
+    async fn lock(&self) -> MutexGuard<'_, ()>;
+
     /// The state machine data structure.
     async fn state_machine(&self) -> StateMachine<G>;
 }
