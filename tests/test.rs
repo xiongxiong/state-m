@@ -73,28 +73,36 @@ impl HasStateHandle<String, TagB> for UnitB {
 #[tokio::test]
 async fn test() -> Result<(), SourceChangeError> {
     let unit_source = Arc::new(UnitA::default());
-    unit_source
-        .add_source_ex::<String>(TagA::Hi, Source::new())
-        .await;
-    let source = unit_source.source(TagA::Hi).await;
+    unit_source.add_source::<String>(TagA::Hi).await;
     let unit_target = Arc::new(UnitB::default());
-    let handle_x = unit_target
+    unit_target
         .clone()
-        .subscribe(source.reader(), TagB::X)
+        .subscribe(unit_source.reader(TagA::Hi).await, TagB::X)
         .await;
-    let handle_y = unit_target
+    unit_target
         .clone()
-        .subscribe(
-            source.reader_ex(|s| Box::pin(async move { format!("Hi, {}", s) })),
+        .subscribe::<String>(
+            unit_source
+                .reader_ex(TagA::Hi, |s| Box::pin(async move { format!("Hi, {}", s) }))
+                .await,
             TagB::Y,
         )
         .await;
-    source.change("Wang".into()).await?;
-    source.touch().await?;
-    source.modify(|s| format!("Dear {}", s)).await?;
-    source.wait_change("Zhang".into()).await?;
-    source.wait_modify(|s| format!("Dear {}", s)).await?;
-    handle_x.unsubscribe();
-    handle_y.unsubscribe();
+    unit_source
+        .change::<String>(TagA::Hi, "Wang".into())
+        .await?;
+    unit_source.touch::<String>(TagA::Hi).await?;
+    unit_source
+        .modify(TagA::Hi, |s| format!("Dear {}", s))
+        .await?;
+    unit_source
+        .wait_change::<String>(TagA::Hi, "Zhang".into())
+        .await?;
+    unit_source
+        .wait_modify(TagA::Hi, |s| format!("Dear {}", s))
+        .await?;
+    unit_target.unsubscribe::<String>(TagB::X).await;
+    unit_target.unsubscribe::<String>(TagB::Y).await;
+    unit_source.del_source(TagA::Hi).await;
     Ok(())
 }

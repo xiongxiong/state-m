@@ -51,39 +51,53 @@ impl HasStateHandle<S, T, Tag> for Unit {
         tag: Tag,
         new_value: T,
         old_value: T,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         ...
     }
 ```
 
 ```rust
-let handle_x = unit
-        .clone()
-        .subscribe(source.reader(), Tag::X)
-        .await;
-let handle_y = unit
-        .clone()
-        .subscribe(
-            source.reader_ex(|s| Box::pin(async move { format!("Hi, {}", s) })),
-            Tag::Y,
-        )
-        .await;
-handle_x.unsubscribe();
-handle_y.unsubscribe();
+unit_target
+    .clone()
+    .subscribe(unit_source.reader(TagA::Hi).await, TagB::X)
+    .await;
+unit_target
+    .clone()
+    .subscribe::<String>(
+        unit_source
+            .reader_ex(TagA::Hi, |s| Box::pin(async move { format!("Hi, {}", s) }))
+            .await,
+        TagB::Y,
+    )
+    .await;
 ```
 
 - Add state change initiators to your state machine, after added, you can get it from state machine by tag. Then change state as needed.
 
 ```rust
 // add state source to state machine
-unit.add_source::<String>(Tag::Hi).await;
-unit.add_source_ex(Tag::Hi, Source::create("my init value".to_owned(), 100)).await;
-// get state source by tag
-let source = unit_source.source(TagA::Hi).await;
+unit_source.add_source::<String>(TagA::Hi).await;
+unit_source.add_source_ex::<String>(TagA::Hi, 100, "Hello").await;
 // change state by need
-source.change("Wang".into()).await?;
-source.wait_change("Wang".into()).await?;
-source.modify(|s| format!("Dear {}", s)).await?;
-source.wait_modify(|s| format!("Dear {}", s)).await?;
-source.touch().await?;
+unit_source
+    .change::<String>(TagA::Hi, "Wang".into())
+    .await?;
+unit_source.touch::<String>(TagA::Hi).await?;
+unit_source
+    .modify(TagA::Hi, |s| format!("Dear {}", s))
+    .await?;
+unit_source
+    .wait_change::<String>(TagA::Hi, "Zhang".into())
+    .await?;
+unit_source
+    .wait_modify(TagA::Hi, |s| format!("Dear {}", s))
+    .await?;
+```
+
+- Do unsubscrption as needed
+
+```rust
+unit_target.unsubscribe::<String>(TagB::X).await;
+unit_target.unsubscribe::<String>(TagB::Y).await;
+unit_source.del_source(TagA::Hi).await;
 ```

@@ -48,7 +48,7 @@ where
     }
 
     /// Add state source to state machine.
-    pub(crate) fn add_source<S>(&self, tag: G, source: Source<S>)
+    fn add_source<S>(&self, tag: G, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
@@ -61,12 +61,12 @@ where
     }
 
     /// Delete state source from state machine.
-    pub(crate) fn del_source(&self, tag: G) -> bool {
+    fn del_source(&self, tag: G) -> bool {
         self.sources.remove(&tag).is_some()
     }
 
     /// Get source from state machine by tag.
-    pub async fn source<S>(&self, tag: G) -> Source<S>
+    async fn source<S>(&self, tag: G) -> Source<S>
     where
         S: 'static + Clone,
     {
@@ -89,7 +89,7 @@ where
     }
 
     /// Add state handle to state machine.
-    pub(crate) fn add_handle<T>(&self, tag: G, handle: Handle<T>)
+    fn add_handle<T>(&self, tag: G, handle: Handle<T>)
     where
         T: 'static + Send + Sync,
     {
@@ -102,7 +102,7 @@ where
     }
 
     /// Delete state handle from state machine.
-    pub(crate) fn del_handle(&self, tag: G) -> bool {
+    fn del_handle(&self, tag: G) -> bool {
         self.handles.remove(&tag).is_some()
     }
 
@@ -115,7 +115,7 @@ where
     }
 
     /// Get handle from state machine.
-    pub async fn handle<T>(&self, tag: G) -> Handle<T>
+    async fn handle<T>(&self, tag: G) -> Handle<T>
     where
         T: 'static + Clone,
     {
@@ -137,7 +137,7 @@ where
     }
 
     /// Get current value of handle from state machine.
-    pub async fn handle_value<T>(&self, tag: G) -> T
+    async fn handle_value<T>(&self, tag: G) -> T
     where
         T: 'static + Clone + PartialEq,
     {
@@ -164,12 +164,42 @@ pub trait UseStateMachine<G>: HasStateMachine<G>
 where
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    /// Get state source.
-    async fn source<S>(&self, tag: G) -> Source<S>
+    /// Add state source to state machine, the state source is created by default.
+    async fn add_source<S>(&self, tag: G)
     where
-        S: 'static + Clone,
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
-        self.state_machine().await.source(tag).await
+        self.state_machine()
+            .await
+            .add_source(tag, Source::<S>::default());
+    }
+
+    /// Add state source to state machine.
+    async fn add_source_ex<S>(&self, tag: G, chan_capacity: usize, init_value: S)
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .add_source(tag, Source::create(init_value, chan_capacity));
+    }
+
+    /// Delete state source from state machine.
+    async fn del_source(&self, tag: G) -> bool {
+        self.state_machine().await.del_source(tag)
+    }
+
+    /// Num of subscriptions.
+    async fn num_of_subscriptions<S>(&self, tag: G) -> usize
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .source::<S>(tag)
+            .await
+            .num_of_subscriptions()
+            .await
     }
 
     /// Get current value of state source.
@@ -180,12 +210,72 @@ where
         self.state_machine().await.source_value(tag).await
     }
 
-    /// Get state handle.
-    async fn handle<T>(&self, tag: G) -> Handle<T>
+    /// Change state of source.
+    async fn change<S>(&self, tag: G, s: S) -> Result<(), SourceChangeError>
     where
-        T: 'static + Clone,
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
-        self.state_machine().await.handle(tag).await
+        self.state_machine().await.source(tag).await.change(s).await
+    }
+
+    /// Change state of source, and wait responders to finish actions upon the change event.
+    async fn wait_change<S>(&self, tag: G, s: S) -> Result<(), SourceChangeError>
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .source(tag)
+            .await
+            .wait_change(s)
+            .await
+    }
+
+    /// Change state of source by modifying it with a func.
+    async fn modify<S>(
+        &self,
+        tag: G,
+        func: impl Fn(S) -> S + Send + Sync + 'static,
+    ) -> Result<(), SourceChangeError>
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .source(tag)
+            .await
+            .modify(func)
+            .await
+    }
+
+    /// Change state of source by modifying it with a func, and wait responders to finish actions upon the change event.
+    async fn wait_modify<S>(
+        &self,
+        tag: G,
+        func: impl Fn(S) -> S + Send + Sync + 'static,
+    ) -> Result<(), SourceChangeError>
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .source(tag)
+            .await
+            .wait_modify(func)
+            .await
+    }
+
+    /// Create a change event without changing state of source really.
+    async fn touch<S>(&self, tag: G) -> Result<(), SourceChangeError>
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .source::<S>(tag)
+            .await
+            .touch()
+            .await
     }
 
     /// Get current value of state handle.
@@ -195,43 +285,46 @@ where
     {
         self.state_machine().await.handle_value(tag).await
     }
+
+    /// Get reader of state source, can be subscribed by responders.
+    async fn reader<S>(&self, tag: G) -> Reader<S>
+    where
+        S: 'static + Clone + Default + PartialEq + Send,
+    {
+        self.state_machine().await.source::<S>(tag).await.reader()
+    }
+
+    /// Get reader of state source, can be subscribed by responders.
+    async fn reader_ex<S, T>(
+        &self,
+        tag: G,
+        func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
+    ) -> ReaderEx<S, T>
+    where
+        S: 'static + Clone + Default + PartialEq + Send,
+    {
+        self.state_machine()
+            .await
+            .source::<S>(tag)
+            .await
+            .reader_ex(func)
+    }
+
+    /// Unsubscription
+    async fn unsubscribe<T>(&self, tag: G)
+    where
+        T: 'static + Clone + PartialEq + Send + Sync,
+    {
+        self.state_machine()
+            .await
+            .handle::<T>(tag)
+            .await
+            .unsubscribe();
+    }
 }
 
 #[async_trait]
 impl<T, G> UseStateMachine<G> for T
-where
-    T: HasStateMachine<G>,
-    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
-{
-}
-
-/// Convenient method to add state source to state machine. The trait is auto implemented for types implemented HasStateMachine.
-#[async_trait]
-pub trait UseStateSource<G>: HasStateMachine<G>
-where
-    G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
-{
-    /// Add state source to state machine, the state source is created by default.
-    async fn add_source<S>(&self, tag: G) -> Source<S>
-    where
-        S: 'static + Clone + Default + PartialEq + Send + Sync,
-    {
-        let source = Source::<S>::default();
-        self.state_machine().await.add_source(tag, source.clone());
-        source
-    }
-
-    /// Add state source to state machine.
-    async fn add_source_ex<S>(&self, tag: G, source: Source<S>) -> Source<S>
-    where
-        S: 'static + Clone + Send + Sync,
-    {
-        self.state_machine().await.add_source(tag, source.clone());
-        source
-    }
-}
-
-impl<T, G> UseStateSource<G> for T
 where
     T: HasStateMachine<G>,
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
@@ -244,7 +337,7 @@ type NotCheckEq = bool;
 
 /// State source, the initiator of state change.
 #[derive(Clone, Debug)]
-pub struct Source<S> {
+struct Source<S> {
     value: Arc<RwLock<S>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
@@ -263,14 +356,14 @@ where
     S: 'static + Clone + Default + PartialEq + Send,
 {
     /// Create a state source, with broadcast channel capacity of 100.
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self::create(Default::default(), 100)
     }
 
     /// Create a state source with custom broadcast channel capacity.
-    /// - capacity: broadcast channel capacity
-    pub fn create(init_value: S, capacity: usize) -> Self {
-        let (tx, _) = broadcast::channel(capacity);
+    /// - chan_capacity: broadcast channel capacity
+    fn create(init_value: S, chan_capacity: usize) -> Self {
+        let (tx, _) = broadcast::channel(chan_capacity);
         Self {
             value: Arc::new(RwLock::new(init_value)),
             sender: tx,
@@ -278,32 +371,32 @@ where
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader(&self) -> Reader<S> {
+    fn reader(&self) -> Reader<S> {
         Reader {
             value: self.value.clone(),
-            sender: self.sender.clone(),
+            recver: self.sender.subscribe(),
         }
     }
 
     /// Get reader of state source, can be subscribed by responders.
-    pub fn reader_ex<T>(
+    fn reader_ex<T>(
         &self,
         func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
     ) -> ReaderEx<S, T> {
         ReaderEx {
             value: self.value.clone(),
-            sender: self.sender.clone(),
+            recver: self.sender.subscribe(),
             func: Arc::new(func),
         }
     }
 
     /// Num of subscriptions.
-    pub async fn num_of_subs(&self) -> usize {
+    async fn num_of_subscriptions(&self) -> usize {
         self.sender.receiver_count()
     }
 
     /// Get current value of state source.
-    pub async fn value(&self) -> S {
+    async fn value(&self) -> S {
         (*self.value.read().await).clone()
     }
 
@@ -346,17 +439,17 @@ where
     }
 
     /// Change state of source.
-    pub async fn change(&self, s: S) -> Result<(), SourceChangeError> {
+    async fn change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Value(s)).await
     }
 
     /// Change state of source, and wait responders to finish actions upon the change event.
-    pub async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
+    async fn wait_change(&self, s: S) -> Result<(), SourceChangeError> {
         self.change_ex(true, Change::Value(s)).await
     }
 
     /// Change state of source by modifying it with a func.
-    pub async fn modify(
+    async fn modify(
         &self,
         func: impl Fn(S) -> S + Send + Sync + 'static,
     ) -> Result<(), SourceChangeError> {
@@ -364,7 +457,7 @@ where
     }
 
     /// Change state of source by modifying it with a func, and wait responders to finish actions upon the change event.
-    pub async fn wait_modify(
+    async fn wait_modify(
         &self,
         func: impl Fn(S) -> S + Send + Sync + 'static,
     ) -> Result<(), SourceChangeError> {
@@ -372,7 +465,7 @@ where
     }
 
     /// Create a change event without changing state of source really.
-    pub async fn touch(&self) -> Result<(), SourceChangeError> {
+    async fn touch(&self) -> Result<(), SourceChangeError> {
         self.change_ex(false, Change::Touch).await
     }
 }
@@ -392,10 +485,9 @@ pub enum SourceChangeError {
 }
 
 /// Data structure to be exposed to do subscription by state change responders.
-#[derive(Clone)]
 pub struct Reader<S> {
     value: Arc<RwLock<S>>,
-    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+    recver: broadcast::Receiver<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
 
 impl<S> Into<ReaderEx<S, S>> for Reader<S>
@@ -405,30 +497,16 @@ where
     fn into(self) -> ReaderEx<S, S> {
         ReaderEx {
             value: self.value,
-            sender: self.sender,
+            recver: self.recver,
             func: Arc::new(|s| Box::pin(async move { s })),
         }
     }
 }
 
-impl<S> Reader<S> {
-    pub fn extend<T>(
-        &self,
-        func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
-    ) -> ReaderEx<S, T> {
-        ReaderEx {
-            value: self.value.clone(),
-            sender: self.sender.clone(),
-            func: Arc::new(func),
-        }
-    }
-}
-
 /// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
-#[derive(Clone)]
 pub struct ReaderEx<S, T> {
     value: Arc<RwLock<S>>,
-    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+    recver: broadcast::Receiver<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
     func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
 }
 
@@ -443,7 +521,7 @@ where
 
 /// Data structure to store the latest state in responder's state machine, can be used to do unsubscription.
 #[derive(Clone, Debug)]
-pub struct Handle<T> {
+struct Handle<T> {
     cancel_token: CancellationToken,
     value: Arc<RwLock<T>>,
 }
@@ -471,9 +549,9 @@ where
         (*self.value.read().await).clone()
     }
 
-    /// Unsubscribe operation, this is optional, after your state machine
+    /// Unsubscription, this is optional, after your state machine
     /// is dropped, subscriptions are auto cleaned.
-    pub fn unsubscribe(&self) {
+    fn unsubscribe(&self) {
         self.cancel_token.cancel();
     }
 }
@@ -516,11 +594,7 @@ where
     /// - stage [3] -- receive from mpsc channel and process it.
     /// - stage [4] -- (optional) feedback when the change event has been processed.
     #[instrument(name = "UseStateHandle::subscribe", skip_all, fields(tag))]
-    async fn subscribe<S>(
-        self: Arc<Self>,
-        reader: impl Into<ReaderEx<S, T>> + Send,
-        tag: G,
-    ) -> Handle<T>
+    async fn subscribe<S>(self: Arc<Self>, reader: impl Into<ReaderEx<S, T>> + Send, tag: G)
     where
         S: 'static + Clone + Debug + PartialEq + Send + Sync,
     {
@@ -529,23 +603,22 @@ where
         self.state_machine()
             .await
             .add_handle(tag.clone(), handle.clone());
-        let mut rx_s = reader_ex.sender.subscribe();
+        let mut rx_s = reader_ex.recver;
         let (tx_t, mut rx_t) =
             mpsc::unbounded_channel::<(T, T, Option<mpsc::UnboundedSender<()>>)>();
-        let handle_c = handle.clone();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
                 select! {
-                    _ = handle_c.cancel_token.cancelled() => {
+                    _ = handle.cancel_token.cancelled() => {
                         break;
                     }
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
                                 let t = reader_ex.func.as_ref()(s).await;
-                                let t_old = handle_c.value().await;
-                                if handle_c.store(t.clone(), not_check_eq).await {
+                                let t_old = handle.value().await;
+                                if handle.store(t.clone(), not_check_eq).await {
                                     if let Err(e) = tx_t.send((t, t_old, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
@@ -587,7 +660,6 @@ where
             _ = self.state_machine().await.del_handle(tag.clone());
             tracing::info!("Subscription end -- {:?}", tag);
         });
-        handle
     }
 }
 
