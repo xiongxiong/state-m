@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use state_m::*;
 use std::sync::Arc;
 use tokio::sync::{Mutex, MutexGuard};
@@ -54,8 +53,8 @@ impl HasStateHandle<String, TagB> for UnitB {
     async fn on_change(
         self: Arc<Self>,
         tag: TagB,
-        new_value: (String, DateTime<Utc>),
-        old_value: (String, DateTime<Utc>),
+        new_value: String,
+        old_value: String,
     ) -> Result<(), Box<dyn std::error::Error>> {
         match tag {
             TagB::X => {

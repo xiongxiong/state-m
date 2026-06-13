@@ -97,14 +97,22 @@ where
     }
 
     /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: &G) -> Value<S>
+    async fn source_value<S>(&self, tag: &G) -> S
     where
         S: 'static + Clone + Default + PartialEq + Send,
     {
         self.source(tag).await.value().await
     }
 
-    /// Add state handle to state machine.
+    /// Get current value of source with timestamp from state machine by tag.
+    async fn source_value_ex<S>(&self, tag: &G) -> Value<S>
+    where
+        S: 'static + Clone + Default + PartialEq + Send,
+    {
+        self.source(tag).await.value_ex().await
+    }
+
+    /// Add handle to state machine.
     fn add_handle<T>(&self, tag: G, handle: Handle<T>)
     where
         T: 'static + Send + Sync,
@@ -117,7 +125,7 @@ where
         self.handles.insert(tag, Box::new(handle));
     }
 
-    /// Delete state handle from state machine.
+    /// Delete handle from state machine.
     fn del_handle(&self, tag: &G) -> bool {
         self.handles.remove(tag).is_some()
     }
@@ -135,14 +143,14 @@ where
         let opt_handle_box = self.handles.get(tag);
         assert!(
             opt_handle_box.is_some(),
-            "state handle does not exist, tag -- {:?}",
+            "handle does not exist, tag -- {:?}",
             tag
         );
         let handle_box = opt_handle_box.unwrap();
         let opt_handle = handle_box.downcast_ref::<Handle<T>>();
         assert!(
             opt_handle.is_some(),
-            "state handle does not exist, tag -- {:?}, type -- {}",
+            "handle does not exist, tag -- {:?}, type -- {}",
             tag,
             type_name::<T>()
         );
@@ -150,11 +158,19 @@ where
     }
 
     /// Get current value of handle from state machine.
-    async fn handle_value<T>(&self, tag: &G) -> Value<T>
+    async fn handle_value<T>(&self, tag: &G) -> T
     where
         T: 'static + Clone + PartialEq,
     {
         self.handle(tag).await.value().await
+    }
+
+    /// Get current value of handle with timestamp from state machine.
+    async fn handle_value_ex<T>(&self, tag: &G) -> Value<T>
+    where
+        T: 'static + Clone + PartialEq,
+    {
+        self.handle(tag).await.value_ex().await
     }
 }
 
@@ -221,11 +237,19 @@ where
     }
 
     /// Get current value of source.
-    async fn source_value<S>(&self, tag: &G) -> Value<S>
+    async fn source_value<S>(&self, tag: &G) -> S
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
         self.state_machine().await.source_value(tag).await
+    }
+
+    /// Get current value of source with timestamp.
+    async fn source_value_ex<S>(&self, tag: &G) -> Value<S>
+    where
+        S: 'static + Clone + Default + PartialEq + Send + Sync,
+    {
+        self.state_machine().await.source_value_ex(tag).await
     }
 
     /// Change state of source.
@@ -301,12 +325,20 @@ where
         self.state_machine().await.has_handle(tag)
     }
 
-    /// Get current value of state handle.
-    async fn handle_value<T>(&self, tag: &G) -> Value<T>
+    /// Get current value of handle.
+    async fn handle_value<T>(&self, tag: &G) -> T
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
         self.state_machine().await.handle_value(&tag).await
+    }
+
+    /// Get current value of handle with timestamp.
+    async fn handle_value_ex<T>(&self, tag: &G) -> Value<T>
+    where
+        T: 'static + Clone + PartialEq + Send + Sync,
+    {
+        self.state_machine().await.handle_value_ex(&tag).await
     }
 
     /// Get reader of source, can be subscribed by responders.
@@ -429,7 +461,19 @@ where
     }
 
     /// Get current value of source.
-    async fn value(&self) -> Value<S> {
+    async fn value(&self) -> S {
+        #[cfg(feature = "timestamp")]
+        {
+            (*self.value.read().await).clone().0
+        }
+        #[cfg(not(feature = "timestamp"))]
+        {
+            (*self.value.read().await).clone()
+        }
+    }
+
+    /// Get current value with timestamp of source.
+    async fn value_ex(&self) -> Value<S> {
         (*self.value.read().await).clone()
     }
 
@@ -618,7 +662,18 @@ where
         not_check_eq || changed
     }
 
-    async fn value(&self) -> Value<T> {
+    async fn value(&self) -> T {
+        #[cfg(feature = "timestamp")]
+        {
+            (*self.value.read().await).clone().0
+        }
+        #[cfg(not(feature = "timestamp"))]
+        {
+            (*self.value.read().await).clone()
+        }
+    }
+
+    async fn value_ex(&self) -> Value<T> {
         (*self.value.read().await).clone()
     }
 
@@ -649,8 +704,8 @@ where
     async fn on_change(
         self: Arc<Self>,
         tag: G,
-        new_value: Value<T>,
-        old_value: Value<T>,
+        new_value: T,
+        old_value: T,
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
@@ -663,8 +718,7 @@ where
 {
     /// Do subscription with a state convert function.
     /// - stage [1] -- receive from source's broadcast channel.
-    /// - stage [2] -- convert to target type and send to mpsc channel.
-    /// - stage [3] -- receive from mpsc channel and process it.
+    /// - stage [3] -- receive from source's broadcast channel and process it.
     /// - stage [4] -- (optional) feedback when the change event has been processed.
     #[instrument(name = "UseStateHandle::subscribe", skip_all, fields(tag))]
     async fn subscribe<S>(self: Arc<Self>, reader: impl Into<ReaderEx<S, T>> + Send, tag: G)
@@ -681,8 +735,6 @@ where
             .await
             .add_handle(tag.clone(), handle.clone());
         let mut rx_s = reader_ex.recver;
-        let (tx_t, mut rx_t) =
-            mpsc::unbounded_channel::<(Value<T>, Value<T>, Option<mpsc::UnboundedSender<()>>)>();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
@@ -693,13 +745,16 @@ where
                     res = rx_s.recv() => {
                         match res {
                             Ok((s, not_check_eq, opt_feedback)) => {
-                                let t = reader_ex.func.as_ref()(s).await;
+                                let v = reader_ex.func.as_ref()(s).await;
                                 let t_old = handle.value().await;
-                                if handle.store(t.clone(), not_check_eq).await {
+                                if handle.store(v.clone(), not_check_eq).await {
+                                    let _lock = self.lock().await;
                                     let t_new = handle.value().await;
-                                    if let Err(e) = tx_t.send((t_new, t_old, opt_feedback)) {
-                                        tracing::error!("stage [2] | change event send error -- {}", e);
-                                        break;
+                                    if let Err(e) = self.clone().on_change(tag.clone(), t_new, t_old).await {
+                                        tracing::error!("stage [2] | change event proc error -- {}", e);
+                                    }
+                                    if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {
+                                        tracing::error!("stage [3] | change event feedback error -- {}", e);
                                     }
                                 }
                             },
@@ -713,23 +768,6 @@ where
                                     tracing::error!("stage [1] | change event recv lagged");
                                     break;
                                 },
-                            },
-                        }
-                    }
-                    res = rx_t.recv() => {
-                        match res {
-                            Some((t, t_old, opt_feedback)) => {
-                                let _lock = self.lock().await;
-                                if let Err(e) = self.clone().on_change(tag.clone(), t, t_old).await {
-                                    tracing::error!("stage [3] | change event proc error -- {}", e);
-                                }
-                                if let Some(feedback) = opt_feedback && let Err(e) = feedback.send(()) {
-                                    tracing::error!("stage [4] | change event feedback error -- {}", e);
-                                }
-                            },
-                            None => {
-                                tracing::info!("state target channel closed");
-                                break;
                             },
                         }
                     }
