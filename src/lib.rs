@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+#[cfg(feature = "timestamp")]
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use std::{
     any::{Any, type_name},
@@ -95,7 +97,7 @@ where
     }
 
     /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: &G) -> S
+    pub async fn source_value<S>(&self, tag: &G) -> Value<S>
     where
         S: 'static + Clone + Default + PartialEq + Send,
     {
@@ -148,7 +150,7 @@ where
     }
 
     /// Get current value of handle from state machine.
-    async fn handle_value<T>(&self, tag: &G) -> T
+    async fn handle_value<T>(&self, tag: &G) -> Value<T>
     where
         T: 'static + Clone + PartialEq,
     {
@@ -219,7 +221,7 @@ where
     }
 
     /// Get current value of source.
-    async fn source_value<S>(&self, tag: &G) -> S
+    async fn source_value<S>(&self, tag: &G) -> Value<S>
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -300,7 +302,7 @@ where
     }
 
     /// Get current value of state handle.
-    async fn handle_value<T>(&self, tag: &G) -> T
+    async fn handle_value<T>(&self, tag: &G) -> Value<T>
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
@@ -356,10 +358,16 @@ where
 /// a new state is compared with current value, if they are equal, does not trigger a change event.
 type NotCheckEq = bool;
 
+#[cfg(feature = "timestamp")]
+pub type Value<S> = (S, DateTime<Utc>);
+
+#[cfg(not(feature = "timestamp"))]
+pub type Value<S> = S;
+
 /// source, the initiator of state change.
 #[derive(Clone, Debug)]
 struct Source<S> {
-    value: Arc<RwLock<S>>,
+    value: Arc<RwLock<Value<S>>>,
     sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
 
@@ -385,8 +393,12 @@ where
     /// - chan_capacity: broadcast channel capacity
     fn create(init_value: S, chan_capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(chan_capacity);
+        #[cfg(feature = "timestamp")]
+        let v = (init_value, Utc::now());
+        #[cfg(not(feature = "timestamp"))]
+        let v = init_value;
         Self {
-            value: Arc::new(RwLock::new(init_value)),
+            value: Arc::new(RwLock::new(v)),
             sender: tx,
         }
     }
@@ -417,7 +429,7 @@ where
     }
 
     /// Get current value of source.
-    async fn value(&self) -> S {
+    async fn value(&self) -> Value<S> {
         (*self.value.read().await).clone()
     }
 
@@ -427,12 +439,16 @@ where
         change: Change<S>,
     ) -> Result<(), SourceChangeError> {
         let mut guard = self.value.write().await;
+        #[cfg(feature = "timestamp")]
+        let g = (*guard).0.clone();
+        #[cfg(not(feature = "timestamp"))]
+        let g = (*guard).clone();
         let (s, not_check_eq) = match change {
             Change::Value(v) => (v, false),
-            Change::Func(func) => (func((*guard).clone()), false),
-            Change::Touch => ((*guard).clone(), true),
+            Change::Func(func) => (func(g.clone()), false),
+            Change::Touch => (g.clone(), true),
         };
-        if not_check_eq || *guard != s {
+        if not_check_eq || g != s {
             if wait_to_end {
                 let (tx_w, mut rx_w) = mpsc::unbounded_channel::<()>();
                 self.sender
@@ -452,7 +468,14 @@ where
                     .send((s.clone(), not_check_eq, None))
                     .map_err(|_| SourceChangeError::SendErr)?;
             }
-            *guard = s;
+            #[cfg(feature = "timestamp")]
+            {
+                *guard = (s, Utc::now());
+            }
+            #[cfg(not(feature = "timestamp"))]
+            {
+                *guard = s;
+            }
             Ok(())
         } else {
             Err(SourceChangeError::NotChange)
@@ -507,7 +530,7 @@ pub enum SourceChangeError {
 
 /// Data structure to be exposed to do subscription by state change responders.
 pub struct Reader<S> {
-    value: Arc<RwLock<S>>,
+    value: Arc<RwLock<Value<S>>>,
     recver: broadcast::Receiver<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
 }
 
@@ -539,7 +562,7 @@ impl<S> Reader<S> {
 
 /// Data structure to be exposed to do subscription by state change responders, with the ability to convert the state to another type.
 pub struct ReaderEx<S, T> {
-    value: Arc<RwLock<S>>,
+    value: Arc<RwLock<Value<S>>>,
     recver: broadcast::Receiver<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
     func: Arc<dyn Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync>,
 }
@@ -548,8 +571,16 @@ impl<S, T> ReaderEx<S, T>
 where
     S: Clone,
 {
-    async fn value(&self) -> T {
-        self.func.as_ref()((*self.value.read().await).clone()).await
+    async fn value(&self) -> Value<T> {
+        #[cfg(feature = "timestamp")]
+        {
+            let (s, t) = (*self.value.read().await).clone();
+            (self.func.as_ref()(s).await, t)
+        }
+        #[cfg(not(feature = "timestamp"))]
+        {
+            self.func.as_ref()((*self.value.read().await).clone()).await
+        }
     }
 }
 
@@ -557,7 +588,7 @@ where
 #[derive(Clone, Debug)]
 struct Handle<T> {
     cancel_token: CancellationToken,
-    value: Arc<RwLock<T>>,
+    value: Arc<RwLock<Value<T>>>,
 }
 
 impl<T> Handle<T>
@@ -565,21 +596,29 @@ where
     T: Clone + PartialEq,
 {
     fn new(init_value: T) -> Self {
+        #[cfg(feature = "timestamp")]
+        let t = (init_value, Utc::now());
+        #[cfg(not(feature = "timestamp"))]
+        let t = init_value;
         Self {
             cancel_token: CancellationToken::new(),
-            value: Arc::new(RwLock::new(init_value)),
+            value: Arc::new(RwLock::new(t)),
         }
     }
 
     async fn store(&self, t: T, not_check_eq: bool) -> bool {
-        let changed = *self.value.read().await != t;
+        #[cfg(feature = "timestamp")]
+        let v = (t, Utc::now());
+        #[cfg(not(feature = "timestamp"))]
+        let v = t;
+        let changed = *self.value.read().await != v;
         if changed {
-            *self.value.write().await = t;
+            *self.value.write().await = v;
         }
         not_check_eq || changed
     }
 
-    async fn value(&self) -> T {
+    async fn value(&self) -> Value<T> {
         (*self.value.read().await).clone()
     }
 
@@ -610,8 +649,8 @@ where
     async fn on_change(
         self: Arc<Self>,
         tag: G,
-        new_value: T,
-        old_value: T,
+        new_value: Value<T>,
+        old_value: Value<T>,
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
@@ -633,13 +672,17 @@ where
         S: 'static + Clone + Debug + PartialEq + Send + Sync,
     {
         let reader_ex = reader.into();
-        let handle: Handle<T> = Handle::new(reader_ex.value().await);
+        #[cfg(feature = "timestamp")]
+        let init = reader_ex.value().await.0;
+        #[cfg(not(feature = "timestamp"))]
+        let init = reader_ex.value().await;
+        let handle: Handle<T> = Handle::new(init);
         self.state_machine()
             .await
             .add_handle(tag.clone(), handle.clone());
         let mut rx_s = reader_ex.recver;
         let (tx_t, mut rx_t) =
-            mpsc::unbounded_channel::<(T, T, Option<mpsc::UnboundedSender<()>>)>();
+            mpsc::unbounded_channel::<(Value<T>, Value<T>, Option<mpsc::UnboundedSender<()>>)>();
         tokio::spawn(async move {
             tracing::info!("Subscription start -- {:?}", tag);
             loop {
@@ -653,7 +696,8 @@ where
                                 let t = reader_ex.func.as_ref()(s).await;
                                 let t_old = handle.value().await;
                                 if handle.store(t.clone(), not_check_eq).await {
-                                    if let Err(e) = tx_t.send((t, t_old, opt_feedback)) {
+                                    let t_new = handle.value().await;
+                                    if let Err(e) = tx_t.send((t_new, t_old, opt_feedback)) {
                                         tracing::error!("stage [2] | change event send error -- {}", e);
                                         break;
                                     }

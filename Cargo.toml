@@ -12,11 +12,16 @@ license = "MIT"
 async-trait = "0.1.89"
 dashmap = "6.2.1"
 thiserror = "2.0.18"
-tokio = {version = "1.52.3", features = ["full"]}
+tokio = { version = "1.52.3", features = ["full"] }
 tokio-util = "0.7.18"
 tracing = "0.1.44"
+chrono = { version = "0.4.45", optional = true }
 
 [dev-dependencies]
+
+[features]
+default = ["timestamp"]
+timestamp = ["dep:chrono"]
 
 [[test]]
 name = "test"
