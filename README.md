@@ -59,13 +59,13 @@ impl HasStateHandle<S, T, Tag> for Unit {
 ```rust
 unit_target
     .clone()
-    .subscribe(unit_source.reader(TagA::Hi).await, TagB::X)
+    .subscribe(unit_source.reader(&TagA::Hi).await, TagB::X)
     .await;
 unit_target
     .clone()
     .subscribe::<String>(
         unit_source
-            .reader_ex(TagA::Hi, |s| Box::pin(async move { format!("Hi, {}", s) }))
+            .reader_ex(&TagA::Hi, |s| Box::pin(async move { format!("Hi, {}", s) }))
             .await,
         TagB::Y,
     )
@@ -80,24 +80,24 @@ unit_source.add_source::<String>(TagA::Hi).await;
 unit_source.add_source_ex::<String>(TagA::Hi, 100, "Hello").await;
 // change state by need
 unit_source
-    .change::<String>(TagA::Hi, "Wang".into())
+    .change::<String>(&TagA::Hi, "Wang".into())
     .await?;
-unit_source.touch::<String>(TagA::Hi).await?;
+unit_source.touch::<String>(&TagA::Hi).await?;
 unit_source
-    .modify(TagA::Hi, |s| format!("Dear {}", s))
-    .await?;
-unit_source
-    .wait_change::<String>(TagA::Hi, "Zhang".into())
+    .modify(&TagA::Hi, |s| format!("Dear {}", s))
     .await?;
 unit_source
-    .wait_modify(TagA::Hi, |s| format!("Dear {}", s))
+    .wait_change::<String>(&TagA::Hi, "Zhang".into())
+    .await?;
+unit_source
+    .wait_modify(&TagA::Hi, |s| format!("Dear {}", s))
     .await?;
 ```
 
 - Do unsubscrption as needed
 
 ```rust
-unit_target.unsubscribe::<String>(TagB::X).await;
-unit_target.unsubscribe::<String>(TagB::Y).await;
+unit_target.unsubscribe::<String>(&TagB::X).await;
+unit_target.unsubscribe::<String>(&TagB::Y).await;
 unit_source.del_source(&TagA::Hi).await;
 ```

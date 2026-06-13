@@ -72,11 +72,11 @@ where
     }
 
     /// Get source from state machine by tag, panics if source of tag doesn't exist or data type of source is wrong.
-    async fn source<S>(&self, tag: G) -> Source<S>
+    async fn source<S>(&self, tag: &G) -> Source<S>
     where
         S: 'static + Clone,
     {
-        let opt_source_box = self.sources.get(&tag);
+        let opt_source_box = self.sources.get(tag);
         assert!(
             opt_source_box.is_some(),
             "source does not exist, tag -- {:?}",
@@ -95,7 +95,7 @@ where
     }
 
     /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: G) -> S
+    pub async fn source_value<S>(&self, tag: &G) -> S
     where
         S: 'static + Clone + Default + PartialEq + Send,
     {
@@ -126,11 +126,11 @@ where
     }
 
     /// Get handle from state machine, panics if handle of tag doesn't exist or data type of handle is wrong.
-    async fn handle<T>(&self, tag: G) -> Handle<T>
+    async fn handle<T>(&self, tag: &G) -> Handle<T>
     where
         T: 'static + Clone,
     {
-        let opt_handle_box = self.handles.get(&tag);
+        let opt_handle_box = self.handles.get(tag);
         assert!(
             opt_handle_box.is_some(),
             "state handle does not exist, tag -- {:?}",
@@ -148,7 +148,7 @@ where
     }
 
     /// Get current value of handle from state machine.
-    async fn handle_value<T>(&self, tag: G) -> T
+    async fn handle_value<T>(&self, tag: &G) -> T
     where
         T: 'static + Clone + PartialEq,
     {
@@ -206,7 +206,7 @@ where
     }
 
     /// Num of subscriptions.
-    async fn num_of_subscriptions<S>(&self, tag: G) -> usize
+    async fn num_of_subscriptions<S>(&self, tag: &G) -> usize
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -219,7 +219,7 @@ where
     }
 
     /// Get current value of source.
-    async fn source_value<S>(&self, tag: G) -> S
+    async fn source_value<S>(&self, tag: &G) -> S
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -227,7 +227,7 @@ where
     }
 
     /// Change state of source.
-    async fn change<S>(&self, tag: G, s: S) -> Result<(), SourceChangeError>
+    async fn change<S>(&self, tag: &G, s: S) -> Result<(), SourceChangeError>
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -235,7 +235,7 @@ where
     }
 
     /// Change state of source, and wait responders to finish actions upon the change event.
-    async fn wait_change<S>(&self, tag: G, s: S) -> Result<(), SourceChangeError>
+    async fn wait_change<S>(&self, tag: &G, s: S) -> Result<(), SourceChangeError>
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -250,7 +250,7 @@ where
     /// Change state of source by modifying it with a func.
     async fn modify<S>(
         &self,
-        tag: G,
+        tag: &G,
         func: impl Fn(S) -> S + Send + Sync + 'static,
     ) -> Result<(), SourceChangeError>
     where
@@ -267,7 +267,7 @@ where
     /// Change state of source by modifying it with a func, and wait responders to finish actions upon the change event.
     async fn wait_modify<S>(
         &self,
-        tag: G,
+        tag: &G,
         func: impl Fn(S) -> S + Send + Sync + 'static,
     ) -> Result<(), SourceChangeError>
     where
@@ -282,7 +282,7 @@ where
     }
 
     /// Create a change event without changing state of source really.
-    async fn touch<S>(&self, tag: G) -> Result<(), SourceChangeError>
+    async fn touch<S>(&self, tag: &G) -> Result<(), SourceChangeError>
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
     {
@@ -300,15 +300,15 @@ where
     }
 
     /// Get current value of state handle.
-    async fn handle_value<T>(&self, tag: G) -> T
+    async fn handle_value<T>(&self, tag: &G) -> T
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
-        self.state_machine().await.handle_value(tag).await
+        self.state_machine().await.handle_value(&tag).await
     }
 
     /// Get reader of source, can be subscribed by responders.
-    async fn reader<S>(&self, tag: G) -> Reader<S>
+    async fn reader<S>(&self, tag: &G) -> Reader<S>
     where
         S: 'static + Clone + Default + PartialEq + Send,
     {
@@ -318,7 +318,7 @@ where
     /// Get reader of source, can be subscribed by responders.
     async fn reader_ex<S, T>(
         &self,
-        tag: G,
+        tag: &G,
         func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
     ) -> ReaderEx<S, T>
     where
@@ -332,7 +332,7 @@ where
     }
 
     /// Unsubscription
-    async fn unsubscribe<T>(&self, tag: G)
+    async fn unsubscribe<T>(&self, tag: &G)
     where
         T: 'static + Clone + PartialEq + Send + Sync,
     {
