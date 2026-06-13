@@ -613,7 +613,8 @@ pub struct ReaderEx<S, T> {
 
 impl<S, T> ReaderEx<S, T>
 where
-    S: Clone,
+    S: 'static + Clone + Send,
+    T: 'static,
 {
     async fn value(&self) -> Value<T> {
         #[cfg(feature = "timestamp")]
@@ -624,6 +625,26 @@ where
         #[cfg(not(feature = "timestamp"))]
         {
             self.func.as_ref()((*self.value.read().await).clone()).await
+        }
+    }
+
+    pub fn extend<U>(
+        self,
+        func: impl Fn(T) -> Pin<Box<dyn Future<Output = U> + Send>> + Send + Sync + 'static,
+    ) -> ReaderEx<S, U> {
+        let func_o = self.func.clone();
+        let func_n = Arc::new(func);
+        ReaderEx {
+            value: self.value,
+            recver: self.recver,
+            func: Arc::new(move |s| {
+                let func_a = func_o.clone();
+                let func_b = func_n.clone();
+                Box::pin(async move {
+                    let t = func_a.as_ref()(s).await;
+                    func_b.as_ref()(t).await
+                })
+            }),
         }
     }
 }
