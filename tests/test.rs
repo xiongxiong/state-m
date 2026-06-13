@@ -103,6 +103,6 @@ async fn test() -> Result<(), SourceChangeError> {
         .await?;
     unit_target.unsubscribe::<String>(TagB::X).await;
     unit_target.unsubscribe::<String>(TagB::Y).await;
-    unit_source.del_source(TagA::Hi).await;
+    unit_source.del_source(&TagA::Hi).await;
     Ok(())
 }

@@ -41,7 +41,7 @@ impl HasStateMachine<Tag> for Unit {
 }
 ```
 
-- If your data structure is also a responder of some state change, implement 'HasStateHandle' trait for your data structure. Then subscribe state sources as needed. Unsubscription is optional, after your state machine is dropped, subscriptions are auto cleaned.
+- If your data structure is also a responder of some state change, implement 'HasStateHandle' trait for your data structure. Then subscribe sources as needed. Unsubscription is optional, after your state machine is dropped, subscriptions are auto cleaned.
 
 ```rust
 #[async_trait]
@@ -75,7 +75,7 @@ unit_target
 - Add state change initiators to your state machine, after added, you can get it from state machine by tag. Then change state as needed.
 
 ```rust
-// add state source to state machine
+// add source to state machine
 unit_source.add_source::<String>(TagA::Hi).await;
 unit_source.add_source_ex::<String>(TagA::Hi, 100, "Hello").await;
 // change state by need
@@ -99,5 +99,5 @@ unit_source
 ```rust
 unit_target.unsubscribe::<String>(TagB::X).await;
 unit_target.unsubscribe::<String>(TagB::Y).await;
-unit_source.del_source(TagA::Hi).await;
+unit_source.del_source(&TagA::Hi).await;
 ```

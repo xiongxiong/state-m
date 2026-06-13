@@ -16,7 +16,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-/// State machine data structure to store state sources and handles.
+/// State machine data structure to store sources and handles.
 /// - G - to distinguish different initiators or responders.
 #[derive(Clone, Debug)]
 pub struct StateMachine<G>
@@ -47,25 +47,31 @@ where
         Default::default()
     }
 
-    /// Add state source to state machine.
+    /// Add source to state machine.
     fn add_source<S>(&self, tag: G, source: Source<S>)
     where
         S: 'static + Send + Sync,
     {
         assert!(
             !self.sources.contains_key(&tag),
-            "duplicate tag for source -- {:?}",
-            tag
+            "Source already exist, tag -- {:?}, type -- {:?}",
+            tag,
+            type_name::<S>()
         );
         self.sources.insert(tag, Box::new(source));
     }
 
-    /// Delete state source from state machine.
-    fn del_source(&self, tag: G) -> bool {
-        self.sources.remove(&tag).is_some()
+    /// Delete source from state machine.
+    fn del_source(&self, tag: &G) -> bool {
+        self.sources.remove(tag).is_some()
     }
 
-    /// Get source from state machine by tag.
+    /// If source of tag exists in state machine.
+    fn has_source(&self, tag: &G) -> bool {
+        self.sources.contains_key(tag)
+    }
+
+    /// Get source from state machine by tag, panics if source of tag doesn't exist or data type of source is wrong.
     async fn source<S>(&self, tag: G) -> Source<S>
     where
         S: 'static + Clone,
@@ -73,19 +79,27 @@ where
         let opt_source_box = self.sources.get(&tag);
         assert!(
             opt_source_box.is_some(),
-            "state source does not exist, tag -- {:?}",
+            "source does not exist, tag -- {:?}",
             tag
         );
         let source_box = opt_source_box.unwrap();
         let opt_source = source_box.downcast_ref::<Source<S>>();
         assert!(
             opt_source.is_some(),
-            "state source does not exist, tag -- {:?}, type -- {}",
+            "source does not exist, tag -- {:?}, type -- {}",
             tag,
             type_name::<S>()
         );
         let source = opt_source.unwrap();
         (*source).clone()
+    }
+
+    /// Get current value of source from state machine by tag.
+    pub async fn source_value<S>(&self, tag: G) -> S
+    where
+        S: 'static + Clone + Default + PartialEq + Send,
+    {
+        self.source(tag).await.value().await
     }
 
     /// Add state handle to state machine.
@@ -102,19 +116,16 @@ where
     }
 
     /// Delete state handle from state machine.
-    fn del_handle(&self, tag: G) -> bool {
-        self.handles.remove(&tag).is_some()
+    fn del_handle(&self, tag: &G) -> bool {
+        self.handles.remove(tag).is_some()
     }
 
-    /// Get current value of source from state machine by tag.
-    pub async fn source_value<S>(&self, tag: G) -> S
-    where
-        S: 'static + Clone + Default + PartialEq + Send,
-    {
-        self.source(tag).await.value().await
+    /// If handle of tag exists in state machine.
+    fn has_handle(&self, tag: &G) -> bool {
+        self.handles.contains_key(tag)
     }
 
-    /// Get handle from state machine.
+    /// Get handle from state machine, panics if handle of tag doesn't exist or data type of handle is wrong.
     async fn handle<T>(&self, tag: G) -> Handle<T>
     where
         T: 'static + Clone,
@@ -164,7 +175,7 @@ pub trait UseStateMachine<G>: HasStateMachine<G>
 where
     G: 'static + Clone + Debug + Eq + Hash + Send + Sync,
 {
-    /// Add state source to state machine, the state source is created by default.
+    /// Add source to state machine, the source is created by default.
     async fn add_source<S>(&self, tag: G)
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
@@ -174,7 +185,7 @@ where
             .add_source(tag, Source::<S>::default());
     }
 
-    /// Add state source to state machine.
+    /// Add source to state machine.
     async fn add_source_ex<S>(&self, tag: G, chan_capacity: usize, init_value: S)
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
@@ -184,9 +195,14 @@ where
             .add_source(tag, Source::create(init_value, chan_capacity));
     }
 
-    /// Delete state source from state machine.
-    async fn del_source(&self, tag: G) -> bool {
+    /// Delete source from state machine.
+    async fn del_source(&self, tag: &G) -> bool {
         self.state_machine().await.del_source(tag)
+    }
+
+    /// If source of tag exists in state machine.
+    async fn has_source(&self, tag: &G) -> bool {
+        self.state_machine().await.has_source(tag)
     }
 
     /// Num of subscriptions.
@@ -202,7 +218,7 @@ where
             .await
     }
 
-    /// Get current value of state source.
+    /// Get current value of source.
     async fn source_value<S>(&self, tag: G) -> S
     where
         S: 'static + Clone + Default + PartialEq + Send + Sync,
@@ -278,6 +294,11 @@ where
             .await
     }
 
+    /// If handle of tag exists in state machine.
+    async fn has_handle(&self, tag: &G) -> bool {
+        self.state_machine().await.has_handle(tag)
+    }
+
     /// Get current value of state handle.
     async fn handle_value<T>(&self, tag: G) -> T
     where
@@ -286,7 +307,7 @@ where
         self.state_machine().await.handle_value(tag).await
     }
 
-    /// Get reader of state source, can be subscribed by responders.
+    /// Get reader of source, can be subscribed by responders.
     async fn reader<S>(&self, tag: G) -> Reader<S>
     where
         S: 'static + Clone + Default + PartialEq + Send,
@@ -294,7 +315,7 @@ where
         self.state_machine().await.source::<S>(tag).await.reader()
     }
 
-    /// Get reader of state source, can be subscribed by responders.
+    /// Get reader of source, can be subscribed by responders.
     async fn reader_ex<S, T>(
         &self,
         tag: G,
@@ -335,7 +356,7 @@ where
 /// a new state is compared with current value, if they are equal, does not trigger a change event.
 type NotCheckEq = bool;
 
-/// State source, the initiator of state change.
+/// source, the initiator of state change.
 #[derive(Clone, Debug)]
 struct Source<S> {
     value: Arc<RwLock<S>>,
@@ -355,12 +376,12 @@ impl<S> Source<S>
 where
     S: 'static + Clone + Default + PartialEq + Send,
 {
-    /// Create a state source, with broadcast channel capacity of 100.
+    /// Create a source, with broadcast channel capacity of 100.
     fn new() -> Self {
         Self::create(Default::default(), 100)
     }
 
-    /// Create a state source with custom broadcast channel capacity.
+    /// Create a source with custom broadcast channel capacity.
     /// - chan_capacity: broadcast channel capacity
     fn create(init_value: S, chan_capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(chan_capacity);
@@ -370,7 +391,7 @@ where
         }
     }
 
-    /// Get reader of state source, can be subscribed by responders.
+    /// Get reader of source, can be subscribed by responders.
     fn reader(&self) -> Reader<S> {
         Reader {
             value: self.value.clone(),
@@ -378,7 +399,7 @@ where
         }
     }
 
-    /// Get reader of state source, can be subscribed by responders.
+    /// Get reader of source, can be subscribed by responders.
     fn reader_ex<T>(
         &self,
         func: impl Fn(S) -> Pin<Box<dyn Future<Output = T> + Send>> + Send + Sync + 'static,
@@ -395,7 +416,7 @@ where
         self.sender.receiver_count()
     }
 
-    /// Get current value of state source.
+    /// Get current value of source.
     async fn value(&self) -> S {
         (*self.value.read().await).clone()
     }
@@ -480,7 +501,7 @@ enum Change<S> {
 pub enum SourceChangeError {
     #[error("Change of state failed to broadcast")]
     SendErr,
-    #[error("State source not change, no change detected")]
+    #[error("source not change, no change detected")]
     NotChange,
 }
 
@@ -640,8 +661,8 @@ where
                             },
                             Err(e) => match e {
                                 broadcast::error::RecvError::Closed => {
-                                    _ = self.state_machine().await.del_source(tag.clone());
-                                    tracing::info!("state source channel closed");
+                                    _ = self.state_machine().await.del_source(&tag);
+                                    tracing::info!("source channel closed");
                                     break;
                                 },
                                 broadcast::error::RecvError::Lagged(_) => {
@@ -670,7 +691,7 @@ where
                     }
                 }
             }
-            _ = self.state_machine().await.del_handle(tag.clone());
+            _ = self.state_machine().await.del_handle(&tag);
             tracing::info!("Subscription end -- {:?}", tag);
         });
     }
