@@ -1,0 +1,18 @@
+[package]
+name = "state-m"
+version = "0.4.4"
+edition = "2024"
+description = "The library implements convenient macros for state-m crate."
+repository = "https://github.com/xiongxiong/state-m-macro"
+authors = ["WonderBear<ximengwuheng@163.com>"]
+keywords = ["state-m", "macro", "state", "machine"]
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+semver = "1.0"
+syn = "2.0"
