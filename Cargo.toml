@@ -2,5 +2,6 @@
 resolver = "3"
 
 members = [
-    "state-m"
+    "state-m",
+    "state-m-macro"
 ]

@@ -1,6 +1,6 @@
 [package]
-name = "state-m"
-version = "0.4.4"
+name = "state-m-macro"
+version = "0.1.0"
 edition = "2024"
 description = "The library implements convenient macros for state-m crate."
 repository = "https://github.com/xiongxiong/state-m-macro"
