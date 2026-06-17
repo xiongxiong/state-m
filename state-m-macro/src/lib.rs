@@ -2,10 +2,10 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse_macro_input;
 
-#[proc_macro_derive(StateTag)]
-pub fn state_tag_derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input);
-    impl_state_tag_macro(&ast)
+#[proc_macro_attribute]
+pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(item);
+    todo!()
 }
 
 fn impl_state_tag_macro(ast: &syn::DeriveInput) -> TokenStream {
