@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use state_m::*;
 use std::sync::Arc;
-use tokio::sync::{Mutex, MutexGuard};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum TagA {
@@ -10,16 +9,11 @@ enum TagA {
 
 #[derive(Debug, Default)]
 struct UnitA {
-    lock: Mutex<()>,
     state_machine: StateMachine<TagA>,
 }
 
 #[async_trait]
 impl HasStateMachine<TagA> for UnitA {
-    async fn lock(&self) -> MutexGuard<'_, ()> {
-        self.lock.lock().await
-    }
-
     async fn state_machine(&self) -> StateMachine<TagA> {
         self.state_machine.clone()
     }
@@ -33,16 +27,11 @@ enum TagB {
 
 #[derive(Debug, Default)]
 struct UnitB {
-    lock: Mutex<()>,
     state_machine: StateMachine<TagB>,
 }
 
 #[async_trait]
 impl HasStateMachine<TagB> for UnitB {
-    async fn lock(&self) -> MutexGuard<'_, ()> {
-        self.lock.lock().await
-    }
-
     async fn state_machine(&self) -> StateMachine<TagB> {
         self.state_machine.clone()
     }

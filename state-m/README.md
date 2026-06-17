@@ -25,16 +25,11 @@ enum Tag {
 #[derive(Debug, Default)]
 struct Unit {
     ...
-    lock: Mutex<()>,
     state_machine: StateMachine<Tag>,
 }
 
 #[async_trait]
 impl HasStateMachine<Tag> for Unit {
-    async fn lock(&self) -> MutexGuard<'_, ()> {
-        self.lock.lock().await
-    }
-
     async fn state_machine(&self) -> StateMachine<Tag> {
         self.state_machine.clone()
     }

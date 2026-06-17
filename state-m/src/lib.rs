@@ -13,7 +13,7 @@ use std::{
 use thiserror::Error;
 use tokio::{
     select,
-    sync::{MutexGuard, RwLock, broadcast, mpsc},
+    sync::{Mutex, MutexGuard, RwLock, broadcast, mpsc},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
@@ -25,6 +25,7 @@ pub struct StateMachine<G>
 where
     G: Eq + Hash,
 {
+    lock: Arc<Mutex<()>>,
     sources: Arc<DashMap<G, Box<dyn Any + Send + Sync>>>,
     handles: Arc<DashMap<G, Box<dyn Any + Send + Sync>>>,
 }
@@ -35,6 +36,7 @@ where
 {
     fn default() -> Self {
         Self {
+            lock: Default::default(),
             sources: Default::default(),
             handles: Default::default(),
         }
@@ -47,6 +49,10 @@ where
 {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    async fn lock(&self) -> MutexGuard<'_, ()> {
+        self.lock.lock().await
     }
 
     /// Add source to state machine.
@@ -180,9 +186,6 @@ pub trait HasStateMachine<G>
 where
     G: Clone + Debug + Eq + Hash,
 {
-    /// The mutex lock to use.
-    async fn lock(&self) -> MutexGuard<'_, ()>;
-
     /// The state machine data structure.
     async fn state_machine(&self) -> StateMachine<G>;
 }
@@ -769,7 +772,8 @@ where
                                 let v = reader_ex.func.as_ref()(s).await;
                                 let t_old = handle.value().await;
                                 if handle.store(v.clone(), not_check_eq).await {
-                                    let _lock = self.lock().await;
+                                    let state_machine = self.state_machine().await;
+                                    let _lock = state_machine.lock().await;
                                     let t_new = handle.value().await;
                                     if let Err(e) = self.clone().on_change(tag.clone(), t_new, t_old).await {
                                         tracing::error!("stage [2] | change event proc error -- {}", e);
