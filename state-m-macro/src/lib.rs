@@ -24,11 +24,10 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
             for item in data_enum.variants.iter() {
                 let attrs = &item.attrs;
                 let ident = &item.ident;
+                let fields = &item.fields;
                 let q_name = format_ident!("{}{}", name_prefix, ident);
                 let q = quote! {
-                    #tag_vis struct #q_name {
-
-                    }
+                    #tag_vis struct #q_name #fields
                 };
                 quotes.push(q);
             }
