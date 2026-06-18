@@ -1,21 +1,41 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::parse_macro_input;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::{format_ident, quote};
+use syn::{DeriveInput, parse_macro_input};
 
 #[proc_macro_attribute]
 pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(item);
-    todo!()
-}
+    let name_prefix = "St";
+    let input = parse_macro_input!(item as DeriveInput);
+    let tag_name = &input.ident;
+    let tag_vis = &input.vis;
+    let mut quotes: Vec<TokenStream2> = Vec::new();
+    match input.data {
+        syn::Data::Struct(_) | syn::Data::Union(_) => {
+            let q_name = format_ident!("{}{}", name_prefix, tag_name);
+            let q = quote! {
+                #tag_vis struct #q_name {
+                    inner: #tag_name,
+                }
+            };
+            quotes.push(q);
+        }
+        syn::Data::Enum(data_enum) => {
+            for item in data_enum.variants.iter() {
+                let attrs = &item.attrs;
+                let ident = &item.ident;
+                let q_name = format_ident!("{}{}", name_prefix, ident);
+                let q = quote! {
+                    #tag_vis struct #q_name {
 
-fn impl_state_tag_macro(ast: &syn::DeriveInput) -> TokenStream {
-    let tag_name = &ast.ident;
-    let mut quotes: Vec<TokenStream> = Vec::new();
-    match &ast.data {
-        syn::Data::Struct(data_struct) => todo!(),
-        syn::Data::Enum(data_enum) => todo!(),
-        syn::Data::Union(data_union) => todo!(),
+                    }
+                };
+                quotes.push(q);
+            }
+        }
+    };
+    quote! {
+        #(#quotes)*
     }
-    let generated = quote! {};
-    generated.into()
+    .into()
 }
