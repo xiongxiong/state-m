@@ -1,3 +1,5 @@
+mod lib_new;
+
 use async_trait::async_trait;
 #[cfg(feature = "timestamp")]
 use chrono::{DateTime, Utc};
