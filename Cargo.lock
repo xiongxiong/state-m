@@ -88,6 +88,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crossfire"
+version = "3.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df981decccf9b846c396ae513b3d2c6a1770d9593c8e47853d8fdb336c7bcb46"
+dependencies = [
+ "crossbeam-utils",
+ "embed-collections",
+ "futures-core",
+ "parking_lot",
+ "smallvec",
+]
+
+[[package]]
 name = "dashmap"
 version = "6.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,6 +113,12 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
 ]
+
+[[package]]
+name = "embed-collections"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f49c327886cdc0e7eda24cd0827f195db19a5f941425914bc6db76c79c64bc21"
 
 [[package]]
 name = "errno"
@@ -353,6 +372,7 @@ version = "0.4.4"
 dependencies = [
  "async-trait",
  "chrono",
+ "crossfire",
  "dashmap",
  "thiserror",
  "tokio",

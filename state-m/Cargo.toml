@@ -10,12 +10,13 @@ license = "MIT"
 
 [dependencies]
 async-trait = "0.1"
+chrono = { version = "0.4", optional = true }
+crossfire = "3.1"
 dashmap = "6.2"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1"
-chrono = { version = "0.4", optional = true }
 
 [dev-dependencies]
 
