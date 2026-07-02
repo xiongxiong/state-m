@@ -1,6 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use crossfire::{
+    MAsyncRx, MAsyncTx, MTx,
+    mpmc::{List, Null},
+    null::CloseHandle,
+};
 use dashmap::DashMap;
+use derivative::Derivative;
 use std::{
     any::{Any, type_name},
     cmp::Eq,
@@ -10,28 +16,77 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use tokio::{
-    select,
-    sync::{RwLock, broadcast, mpsc},
-};
-use tokio_util::sync::CancellationToken;
-use tracing::instrument;
+use tokio::{select, sync::RwLock};
 
-type NotCheckEq = bool;
-
-pub type Value<S> = (S, DateTime<Utc>);
-
-#[derive(Clone, Debug)]
-pub struct StateReader<S> {
-    value: Arc<RwLock<Value<S>>>,
-    sender: broadcast::Sender<(S, NotCheckEq, Option<mpsc::UnboundedSender<()>>)>,
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
+pub struct State<S>
+where
+    S: Default,
+{
+    value: S,
+    not_check_eq: bool,
+    #[derivative(Debug = "ignore")]
+    close_handle: Option<CloseHandle<Null>>,
+    timestamp: DateTime<Utc>,
 }
 
-pub struct StateSource<S>(StateReader<S>);
+impl<S> Default for State<S>
+where
+    S: Default,
+{
+    fn default() -> Self {
+        Self {
+            value: Default::default(),
+            not_check_eq: Default::default(),
+            close_handle: Default::default(),
+            timestamp: Utc::now(),
+        }
+    }
+}
 
-pub enum StateHandle<S> {
-    Source(StateSource<S>),
-    Reader(StateReader<S>),
+#[derive(Clone, Debug)]
+pub struct Reader<S>
+where
+    S: 'static + Clone + Debug + Default + PartialEq,
+{
+    value: Arc<RwLock<State<S>>>,
+    sender: MAsyncTx<List<State<S>>>,
+    recver: MAsyncRx<List<State<S>>>,
+}
+
+impl<S> Reader<S>
+where
+    S: 'static + Clone + Debug + Default + PartialEq,
+{
+    fn new(init_value: S) -> Self {
+        Self {
+            value: Arc::new(RwLock::new(v)),
+            sender: todo!(),
+            recver: todo!(),
+        }
+    }
+}
+
+pub struct Source<S>(Reader<S>)
+where
+    S: 'static + Clone + Debug + Default + PartialEq;
+
+impl<S> Source<S>
+where
+    S: 'static + Clone + Debug + Default + PartialEq,
+{
+    fn new(init_value: S) -> Self {
+        Self(Reader::new(init_value))
+    }
+}
+
+pub enum Handle<S>
+where
+    S: 'static + Clone + Debug + Default + PartialEq,
+{
+    Source(Source<S>),
+    Reader(Reader<S>),
 }
 
 #[derive(Clone, Debug)]
