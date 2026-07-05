@@ -14,6 +14,8 @@ chrono = { version = "0.4", optional = true }
 crossfire = "3.1"
 dashmap = "6.2"
 derivative = "2.2"
+futures = "0.3"
+futures-sink = "0.3"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["full"] }
 tokio-util = "0.7"
