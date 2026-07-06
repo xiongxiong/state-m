@@ -1,5 +1,4 @@
 use crate::{
-    core::AsyncStreamWrapper,
     reader::Reader,
     state::{State, StateEvent},
 };
@@ -19,7 +18,7 @@ pub trait AsSourceState: Clone + Debug + Default + PartialEq + Unpin {}
 
 impl<T> AsSourceState for T where T: Clone + Debug + Default + PartialEq + Unpin {}
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Source<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq,
@@ -105,7 +104,7 @@ where
 
     pub fn reader(&self) -> Reader<S> {
         Reader {
-            stream: AsyncStreamWrapper(self.recver.clone().into_stream()),
+            recver: self.recver.clone(),
         }
     }
 

@@ -1,12 +1,11 @@
-use std::fmt::Debug;
-
-use thiserror::Error;
-
 use crate::{
     reader::Reader,
     source::{Source, StateChangeError},
 };
+use std::fmt::Debug;
+use thiserror::Error;
 
+#[derive(Clone, Debug)]
 pub enum Handle<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq + Unpin,

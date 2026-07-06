@@ -1,16 +1,17 @@
-use crate::{
-    core::{AsyncSinkWrapper, AsyncStreamWrapper},
-    state::{State, StateEvent},
+use crate::state::{State, StateEvent};
+use crossfire::{
+    MAsyncRx,
+    mpmc::{self, List},
 };
-use crossfire::mpmc::{self, List};
-use futures::StreamExt;
-use std::{fmt::Debug, sync::Arc};
+use std::fmt::Debug;
+use tokio::select;
 
+#[derive(Clone, Debug)]
 pub struct Reader<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq,
 {
-    pub(crate) stream: AsyncStreamWrapper<List<StateEvent<S>>>,
+    pub(crate) recver: MAsyncRx<List<StateEvent<S>>>,
 }
 
 impl<S> Reader<S>
@@ -22,21 +23,32 @@ where
         T: 'static + Clone + Debug + Default + From<S> + PartialEq + Send,
     {
         let (tx, rx) = mpmc::unbounded_async();
-        let sink = AsyncSinkWrapper(tx.into_async().into_sink());
-        let stream = self.stream.map(|s| {
-            Ok(StateEvent {
-                state: State {
-                    value: T::from(s.state.value),
-                    timestamp: s.state.timestamp,
-                },
-                is_touch: s.is_touch,
-                close_handle: s.close_handle,
-            })
+        let rx_o = self.recver.clone();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    res = rx_o.recv() => {
+                        match res {
+                            Ok(s) => {
+                                let s_new = StateEvent {
+                                    state: State {
+                                        value: T::from(s.state.value),
+                                        timestamp: s.state.timestamp,
+                                    },
+                                    is_touch: s.is_touch,
+                                    close_handle: s.close_handle,
+                                };
+                                if tx.send(s_new).is_err() {
+                                    break;
+                                }
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
         });
-        tokio::spawn(stream.forward(sink));
-        Reader {
-            stream: AsyncStreamWrapper(rx.into_stream()),
-        }
+        Reader { recver: rx }
     }
 }
 
@@ -51,24 +63,31 @@ where
         Fut: Future<Output = T> + Send,
     {
         let (tx, rx) = mpmc::unbounded_async();
-        let sink = AsyncSinkWrapper(tx.into_async().into_sink());
-        let arc_f = Arc::new(f);
-        let stream = self.stream.then(move |s| {
-            let arc_fc = arc_f.clone();
-            async move {
-                Ok(StateEvent {
-                    state: State {
-                        value: arc_fc.as_ref()(s.state.value).await,
-                        timestamp: s.state.timestamp,
-                    },
-                    is_touch: s.is_touch,
-                    close_handle: s.close_handle,
-                })
+        let rx_o = self.recver.clone();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    res = rx_o.recv() => {
+                        match res {
+                            Ok(s) => {
+                                let s_new = StateEvent {
+                                    state: State {
+                                        value: f(s.state.value).await,
+                                        timestamp: s.state.timestamp,
+                                    },
+                                    is_touch: s.is_touch,
+                                    close_handle: s.close_handle,
+                                };
+                                if tx.send(s_new).is_err() {
+                                    break;
+                                }
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                }
             }
         });
-        tokio::spawn(stream.forward(sink));
-        Reader {
-            stream: AsyncStreamWrapper(rx.into_stream()),
-        }
+        Reader { recver: rx }
     }
 }

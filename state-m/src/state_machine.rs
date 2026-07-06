@@ -1,18 +1,14 @@
 use crate::{
-    core::KVAssoc,
     handle::Handle,
     source::{AsSourceState, Source},
 };
 use dashmap::DashMap;
-use std::{
-    any::{Any, type_name},
-    cmp::Eq,
-    fmt::Debug,
-    hash::Hash,
-    ops::Deref,
-    sync::Arc,
-};
+use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, sync::Arc};
 use thiserror::Error;
+
+pub trait KVAssoc {
+    type Value;
+}
 
 pub trait AsTag: Clone + Debug + Eq + Hash {}
 
@@ -38,49 +34,55 @@ impl<K> StateMachine<K>
 where
     K: AsTag,
 {
-    fn handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, StateMachineError<T>>
+    fn handle<T>(&self, tag: T) -> Result<Handle<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: AsSourceState,
     {
         let k = tag.clone().into();
         match self.get(&k) {
-            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+            Some(v) => match v.downcast_ref::<Handle<T::Value>>() {
                 Some(h) => Ok(h.clone()),
-                None => Err(StateMachineError::TypeNotMatch),
+                None => Err(GetHandleError::TypeNotMatch),
             },
-            None => Err(StateMachineError::HandleNotExist(tag)),
+            None => Err(GetHandleError::HandleNotExist(tag)),
         }
     }
 
     /// Add state source into state machine.
-    fn add_source<S>(&self, tag: K)
+    fn add_source<S, T>(&self, tag: T) -> Result<(), AddSourceError<T>>
     where
         S: 'static + AsSourceState,
+        T: Clone + Debug + Into<K> + KVAssoc,
+        T::Value: 'static + AsSourceState + Send + Sync,
     {
-        assert!(
-            !self.contains_key(&tag),
-            "State source for tag [{:?} | {:?}] already exist, please use a different tag.",
-            tag,
-            type_name::<S>()
-        );
-        todo!()
-        // self.insert(tag, Box::new(""));
+        let k = tag.clone().into();
+        if self.contains_key(&k) {
+            return Err(AddSourceError::AlreadyExist(tag));
+        }
+        self.insert(k, Arc::new(Handle::Source(Source::<T::Value>::new())));
+        Ok(())
     }
 
     /// Remove state source from state machine.
-    fn del_source(&self, tag: &K) -> bool {
-        self.remove(tag).is_some()
+    fn del_source<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>,
+    {
+        self.remove(&tag.clone().into()).is_some()
     }
 
     /// If state source of tag exists in state machine.
-    fn has_source(&self, tag: &K) -> bool {
-        self.contains_key(tag)
+    fn has_source<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>,
+    {
+        self.contains_key(&tag.clone().into())
     }
 }
 
 #[derive(Debug, Error)]
-pub enum StateMachineError<T>
+pub enum GetHandleError<T>
 where
     T: Debug,
 {
@@ -88,4 +90,13 @@ where
     HandleNotExist(T),
     #[error("Type of state value does not match.")]
     TypeNotMatch,
+}
+
+#[derive(Debug, Error)]
+pub enum AddSourceError<T>
+where
+    T: Debug,
+{
+    #[error("State handle for tag [{0:?}] already exist.")]
+    AlreadyExist(T),
 }

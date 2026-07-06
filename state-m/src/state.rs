@@ -1,5 +1,3 @@
-use std::pin::Pin;
-
 use chrono::{DateTime, Utc};
 use crossfire::{mpmc::Null, null::CloseHandle};
 use derivative::Derivative;
