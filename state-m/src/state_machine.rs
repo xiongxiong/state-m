@@ -124,7 +124,7 @@ where
         reader: Reader<T::Value>,
     ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T, K>,
+        Self: UseState<T>,
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
@@ -135,7 +135,7 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T, K>,
+        Self: UseState<T>,
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
@@ -244,11 +244,10 @@ where
     }
 }
 
-pub trait UseState<T, K>
+pub trait UseState<T>
 where
-    T: Clone + Debug + Into<K> + KVAssoc,
+    T: Clone + Debug + KVAssoc,
     T::Value: 'static + AsSourceState + Send + Sync,
-    K: AsTag,
 {
     fn on_change(&self, new: T::Value, old: T::Value);
 }
