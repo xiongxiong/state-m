@@ -5,6 +5,10 @@ use std::{
     task::Poll,
 };
 
+pub trait KVAssoc {
+    type Value;
+}
+
 pub(crate) struct AsyncStreamWrapper<F: Flavor>(pub AsyncStream<F>);
 
 impl<F> Deref for AsyncStreamWrapper<F>

@@ -15,6 +15,10 @@ use std::{
 };
 use thiserror::Error;
 
+pub trait AsSourceState: Clone + Debug + Default + PartialEq + Unpin {}
+
+impl<T> AsSourceState for T where T: Clone + Debug + Default + PartialEq + Unpin {}
+
 #[derive(Clone)]
 pub(crate) struct Source<S>
 where
@@ -27,7 +31,7 @@ where
 
 impl<S> Default for Source<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     fn default() -> Self {
         Self::new()
@@ -36,7 +40,7 @@ where
 
 impl<S> Source<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     async fn inner_change(
         &self,
@@ -88,7 +92,7 @@ where
 
 impl<S> Source<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     pub fn new() -> Self {
         let (tx, rx) = mpmc::unbounded_async();
