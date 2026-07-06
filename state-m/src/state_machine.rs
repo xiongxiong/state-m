@@ -65,7 +65,13 @@ where
         if self.contains_key(&k) {
             return Err(AddSourceError::AlreadyExist(tag));
         }
-        self.insert(k, Arc::new(Handle::Source(Source::<T::Value>::new())));
+        self.insert(
+            k,
+            Arc::new(Handle::Source(
+                Source::<T::Value>::new(),
+                Default::default(),
+            )),
+        );
         Ok(())
     }
 
