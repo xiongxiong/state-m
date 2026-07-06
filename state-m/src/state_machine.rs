@@ -44,25 +44,13 @@ where
         T::Value: AsSourceState,
     {
         let k = tag.clone().into();
-        match self
-            .get(&k)
-            .map(|b| b.clone().downcast::<Arc<Handle<T::Value>>>())
-        {
-            Some(v) => match v {
+        match self.get(&k) {
+            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(StateMachineError::TypeNotMatch),
             },
             None => Err(StateMachineError::HandleNotExist(tag)),
         }
-        // let box_handle = self.get(&k);
-        // if box_handle.is_none() {
-        //     return Err(StateMachineError::HandleNotExist(tag));
-        // }
-        // let opt_handle = box_handle.unwrap().downcast_ref::<Handle<T::Value>>();
-        // if opt_handle.is_none() {
-        //     return Err(StateMachineError::TypeNotMatch);
-        // }
-        // Ok(opt_handle.unwrap())
     }
 
     /// Add state source into state machine.
@@ -76,7 +64,8 @@ where
             tag,
             type_name::<S>()
         );
-        self.insert(tag, Box::new(""));
+        todo!()
+        // self.insert(tag, Box::new(""));
     }
 
     /// Remove state source from state machine.
