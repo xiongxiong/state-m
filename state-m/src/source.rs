@@ -5,7 +5,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use crossfire::{
-    MAsyncRx, MAsyncTx,
+    MAsyncRx, MAsyncTx, RecvError, SendError,
     mpmc::{self, List},
     null::CloseHandle,
 };
@@ -13,6 +13,7 @@ use std::{
     fmt::Debug,
     sync::{Arc, RwLock},
 };
+use thiserror::Error;
 
 #[derive(Clone)]
 pub struct Source<S>
@@ -30,6 +31,58 @@ where
 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<S> Source<S>
+where
+    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+{
+    async fn inner_change(
+        &self,
+        f: impl FnOnce(&S) -> S,
+        is_touch: bool,
+        wait_arrival: bool,
+    ) -> Result<(), StateChangeError<S>> {
+        let mut guard = self.cache.write().unwrap();
+        let s_old = (*guard).value.clone();
+        let s = f(&s_old);
+        if is_touch || s_old != s {
+            let (event, wait_rx) = if wait_arrival {
+                let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
+                    mpmc::Null::new().new_async();
+                let event = StateEvent {
+                    state: State {
+                        value: s,
+                        timestamp: Utc::now(),
+                    },
+                    is_touch,
+                    close_handle: Some(tx),
+                };
+                (event, Some(rx))
+            } else {
+                (
+                    StateEvent {
+                        state: State {
+                            value: s,
+                            timestamp: Utc::now(),
+                        },
+                        is_touch,
+                        close_handle: None,
+                    },
+                    None,
+                )
+            };
+            let state = event.state.clone();
+            self.sender.send(event).await?;
+            *guard = state;
+            if let Some(rx) = wait_rx {
+                rx.recv().await?;
+            }
+            Ok(())
+        } else {
+            Err(StateChangeError::NotChange)
+        }
     }
 }
 
@@ -63,49 +116,40 @@ where
         )
     }
 
-    async fn inner_change<F>(&self, change: Change<S>, wait_arrival: bool) {
-        let mut guard = self.cache.write().unwrap();
-        let s_old = (*guard).value.clone();
-        let (s, is_touch) = match change {
-            Change::Value(v) => (v, false),
-            Change::Touch => (s_old.clone(), true),
-        };
-        if is_touch || s_old != s {
-            let (event, wait_rx) = if wait_arrival {
-                let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
-                    mpmc::Null::new().new_async();
-                let event = StateEvent {
-                    state: State {
-                        value: s,
-                        timestamp: Utc::now(),
-                    },
-                    is_touch,
-                    close_handle: Some(tx),
-                };
-                (event, Some(rx))
-            } else {
-                (
-                    StateEvent {
-                        state: State {
-                            value: s,
-                            timestamp: Utc::now(),
-                        },
-                        is_touch,
-                        close_handle: None,
-                    },
-                    None,
-                )
-            };
-            *guard = event.state.clone();
-            self.sender.send(event).await;
-            if let Some(rx) = wait_rx {
-                rx.recv().await;
-            }
-        }
+    pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
+        self.inner_change(|s| s.clone(), false, false).await
+    }
+
+    pub async fn wait_touch(&self) -> Result<(), StateChangeError<S>> {
+        self.inner_change(|s| s.clone(), false, true).await
+    }
+
+    pub async fn alter(&self, s: S) -> Result<(), StateChangeError<S>> {
+        self.inner_change(|_| s, true, false).await
+    }
+
+    pub async fn wait_alter(&self, s: S) -> Result<(), StateChangeError<S>> {
+        self.inner_change(|_| s, true, true).await
+    }
+
+    pub async fn amend(&self, f: impl FnOnce(&S) -> S) -> Result<(), StateChangeError<S>> {
+        self.inner_change(f, true, false).await
+    }
+
+    pub async fn wait_amend(&self, f: impl FnOnce(&S) -> S) -> Result<(), StateChangeError<S>> {
+        self.inner_change(f, true, false).await
     }
 }
 
-enum Change<S> {
-    Touch,
-    Value(S),
+#[derive(Debug, Error)]
+pub enum StateChangeError<S>
+where
+    S: Default,
+{
+    #[error("state not change")]
+    NotChange,
+    #[error(transparent)]
+    SendError(#[from] SendError<StateEvent<S>>),
+    #[error(transparent)]
+    RecvError(#[from] RecvError),
 }

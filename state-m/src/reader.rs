@@ -4,7 +4,7 @@ use crate::{
 };
 use crossfire::mpmc::{self, List};
 use futures::StreamExt;
-use std::{fmt::Debug, pin::Pin, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 pub struct Reader<S>
 where
