@@ -3,7 +3,7 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use crossfire::{
     MAsyncRx, MAsyncTx, RecvError, SendError,
     mpmc::{self, List},
@@ -16,7 +16,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Clone, Debug)]
-pub enum Handle<S>
+pub(crate) enum Handle<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq + Unpin,
 {
@@ -28,21 +28,21 @@ impl<S> Handle<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq + Unpin,
 {
-    fn cache(&self) -> Arc<RwLock<State<S>>> {
+    pub(crate) fn cache(&self) -> Arc<RwLock<State<S>>> {
         match self {
             Handle::Source(_, c) => c.clone(),
             Handle::Reader(_, c) => c.clone(),
         }
     }
 
-    fn sender(&self) -> Result<MAsyncTx<List<StateEvent<S>>>, StateChangeError<S>> {
+    pub(crate) fn sender(&self) -> Result<MAsyncTx<List<StateEvent<S>>>, StateChangeError<S>> {
         match self {
             Handle::Source(source, _) => Ok(source.sender.clone()),
             Handle::Reader(_, _) => Err(StateChangeError::StateReadOnly),
         }
     }
 
-    fn recver(&self) -> MAsyncRx<List<StateEvent<S>>> {
+    pub(crate) fn recver(&self) -> MAsyncRx<List<StateEvent<S>>> {
         match self {
             Handle::Source(source, _) => source.recver.clone(),
             Handle::Reader(reader, _) => reader.recver.clone(),
@@ -85,11 +85,12 @@ where
                     None,
                 )
             };
-            let state = event.state.clone();
-            self.sender()?.send(event).await?;
-            *guard = state;
+            self.sender()?.send(event.clone()).await?;
+            *guard = event.state.clone();
+            tracing::trace!("Handle | send -- {:?}", event);
             if let Some(rx) = wait_rx {
                 rx.recv().await?;
+                tracing::trace!("Handle | done -- {:?}", event);
             }
         }
         Ok(())
@@ -100,6 +101,16 @@ impl<S> Handle<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq + Unpin,
 {
+    pub fn value(&self) -> S {
+        self.cache().read().unwrap().value.clone()
+    }
+
+    pub fn value_ex(&self) -> (S, DateTime<Utc>) {
+        let cache = self.cache();
+        let guard = cache.read().unwrap();
+        ((*guard).value.clone(), (*guard).timestamp.clone())
+    }
+
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
         self.inner_change(|s| s.clone(), false, false).await
     }

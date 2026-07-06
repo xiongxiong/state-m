@@ -5,14 +5,15 @@ use crate::{
 use dashmap::DashMap;
 use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, sync::Arc};
 use thiserror::Error;
+use tokio::select;
 
 pub trait KVAssoc {
     type Value;
 }
 
-pub trait AsTag: Clone + Debug + Eq + Hash {}
+pub trait AsTag: Clone + Debug + Eq + Hash + Send + Sync {}
 
-impl<T> AsTag for T where T: Clone + Debug + Eq + Hash {}
+impl<T> AsTag for T where T: Clone + Debug + Eq + Hash + Send + Sync {}
 
 #[derive(Clone, Debug)]
 pub struct StateMachine<K>(Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>)
@@ -90,14 +91,61 @@ where
     {
         self.contains_key(&tag.clone().into())
     }
+}
 
-    pub async fn subscribe<T>(&self, tag: &T)
+impl<K> StateMachine<K>
+where
+    K: 'static + AsTag,
+{
+    pub async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
     where
+        Self: UseState<T, K>,
         T: Clone + Debug + Into<K> + KVAssoc,
-        T::Value: 'static + AsSourceState,
+        T::Value: 'static + AsSourceState + Send + Sync,
     {
-        let handler = self.handle(tag);
+        let handle = self.handle(tag)?;
+        let cache = handle.cache();
+        let recver = handle.recver();
+        let this = self.clone();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    res = recver.recv() => {
+                        match res {
+                            Ok(s) => {
+                                let s_old = { cache.read().unwrap().clone() };
+                                if s.is_touch || s.state.value != s_old.value {
+                                    tracing::trace!("StateM | recv -- {:?}", s);
+                                    { *cache.write().unwrap() = s.state.clone(); }
+                                    this.on_change(s.state.value, s_old.value);
+                                }
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
     }
+}
+
+pub trait UseState<T, K>
+where
+    T: Clone + Debug + Into<K> + KVAssoc,
+    T::Value: 'static + AsSourceState + Send + Sync,
+    K: AsTag,
+{
+    fn on_change(&self, new: T::Value, old: T::Value);
+}
+
+#[derive(Debug, Error)]
+pub enum SubscribeError<T>
+where
+    T: Debug,
+{
+    #[error(transparent)]
+    GetHandleError(#[from] GetHandleError<T>),
 }
 
 #[derive(Debug, Error)]
