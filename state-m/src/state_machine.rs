@@ -19,7 +19,7 @@ pub trait AsTag: Clone + Debug + Eq + Hash {}
 impl<T> AsTag for T where T: Clone + Debug + Eq + Hash {}
 
 #[derive(Clone, Debug)]
-pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn Any + Send + Sync>>>)
+pub struct StateMachine<K>(Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>)
 where
     K: AsTag;
 
@@ -27,7 +27,7 @@ impl<K> Deref for StateMachine<K>
 where
     K: AsTag,
 {
-    type Target = Arc<DashMap<K, Box<dyn Any + Send + Sync>>>;
+    type Target = Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -38,21 +38,31 @@ impl<K> StateMachine<K>
 where
     K: AsTag,
 {
-    fn handle<T>(&self, tag: T) -> Result<&Handle<T::Value>, StateMachineError<T>>
+    fn handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, StateMachineError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: AsSourceState,
     {
         let k = tag.clone().into();
-        let box_handle = self.get(&k);
-        if box_handle.is_none() {
-            return Err(StateMachineError::HandleNotExist(tag));
+        match self
+            .get(&k)
+            .map(|b| b.clone().downcast::<Arc<Handle<T::Value>>>())
+        {
+            Some(v) => match v {
+                Some(h) => Ok(h.clone()),
+                None => Err(StateMachineError::TypeNotMatch),
+            },
+            None => Err(StateMachineError::HandleNotExist(tag)),
         }
-        let opt_handle = box_handle.unwrap().downcast_ref::<Handle<T::Value>>();
-        if opt_handle.is_none() {
-            return Err(StateMachineError::TypeNotMatch);
-        }
-        Ok(opt_handle.unwrap())
+        // let box_handle = self.get(&k);
+        // if box_handle.is_none() {
+        //     return Err(StateMachineError::HandleNotExist(tag));
+        // }
+        // let opt_handle = box_handle.unwrap().downcast_ref::<Handle<T::Value>>();
+        // if opt_handle.is_none() {
+        //     return Err(StateMachineError::TypeNotMatch);
+        // }
+        // Ok(opt_handle.unwrap())
     }
 
     /// Add state source into state machine.
