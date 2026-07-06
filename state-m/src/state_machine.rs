@@ -10,35 +10,50 @@ use std::{
 };
 
 #[derive(Clone, Debug)]
-pub struct StateMachine<G>(Arc<DashMap<G, Box<dyn Any + Send + Sync>>>)
+pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn Any + Send + Sync>>>)
 where
-    G: Clone + Debug + Eq + Hash;
+    K: Clone + Debug + Eq + Hash;
 
-impl<G> Deref for StateMachine<G>
+impl<K> Deref for StateMachine<K>
 where
-    G: Clone + Debug + Eq + Hash,
+    K: Clone + Debug + Eq + Hash,
 {
-    type Target = Arc<DashMap<G, Box<dyn Any + Send + Sync>>>;
+    type Target = Arc<DashMap<K, Box<dyn Any + Send + Sync>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<G> StateMachine<G>
+impl<K> StateMachine<K>
 where
-    G: Clone + Debug + Eq + Hash,
+    K: Clone + Debug + Eq + Hash,
 {
-    fn add_source<S>(&self, tag: G)
+    // fn handle(&self) -> Handle<S> {
+    //     //
+    // }
+
+    /// Add state source into state machine.
+    fn add_source<S>(&self, tag: K)
     where
         S: 'static + Clone + Debug + Default + PartialEq,
     {
         assert!(
             !self.contains_key(&tag),
-            "Source already exist, tag -- {:?}, type -- {:?}",
+            "State source for tag [{:?} | {:?}] already exist, please use a different tag.",
             tag,
             type_name::<S>()
         );
         self.insert(tag, Box::new(""));
+    }
+
+    /// Remove state source from state machine.
+    fn del_source(&self, tag: &K) -> bool {
+        self.remove(tag).is_some()
+    }
+
+    /// If state source of tag exists in state machine.
+    fn has_source(&self, tag: &K) -> bool {
+        self.contains_key(tag)
     }
 }

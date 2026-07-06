@@ -16,7 +16,7 @@ use std::{
 use thiserror::Error;
 
 #[derive(Clone)]
-pub struct Source<S>
+pub(crate) struct Source<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq,
 {
