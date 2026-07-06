@@ -23,9 +23,9 @@ pub(crate) struct Source<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq,
 {
-    cache: Arc<RwLock<State<S>>>,
-    sender: MAsyncTx<List<StateEvent<S>>>,
-    recver: MAsyncRx<List<StateEvent<S>>>,
+    pub(crate) cache: Arc<RwLock<State<S>>>,
+    pub(crate) sender: MAsyncTx<List<StateEvent<S>>>,
+    pub(crate) recver: MAsyncRx<List<StateEvent<S>>>,
 }
 
 impl<S> Default for Source<S>
@@ -96,7 +96,7 @@ where
     pub fn new() -> Self {
         let (tx, rx) = mpmc::unbounded_async();
         Self {
-            cache: Arc::new(RwLock::new(State::default())),
+            cache: Default::default(),
             sender: tx.into_async(),
             recver: rx,
         }
