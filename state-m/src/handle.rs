@@ -1,6 +1,6 @@
 use crate::{
     reader::Reader,
-    source::Source,
+    source::{AsSourceState, Source},
     state::{State, StateEvent},
 };
 use chrono::{DateTime, Utc};
@@ -14,11 +14,12 @@ use std::{
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
+use tracing::instrument;
 
 #[derive(Clone, Debug)]
 pub(crate) enum Handle<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     Source(Source<S>, Arc<RwLock<State<S>>>),
     Reader(Reader<S>, Arc<RwLock<State<S>>>),
@@ -26,7 +27,7 @@ where
 
 impl<S> Handle<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     pub(crate) fn cache(&self) -> Arc<RwLock<State<S>>> {
         match self {
@@ -49,6 +50,7 @@ where
         }
     }
 
+    #[instrument(level = "trace", skip(self, f))]
     async fn inner_change(
         &self,
         f: impl FnOnce(&S) -> S,
@@ -87,10 +89,10 @@ where
             };
             self.sender()?.send(event.clone()).await?;
             *guard = event.state.clone();
-            tracing::trace!("Handle | send -- {:?}", event);
+            tracing::debug!("Handle | send -- {:?}", event);
             if let Some(rx) = wait_rx {
                 rx.recv().await?;
-                tracing::trace!("Handle | done -- {:?}", event);
+                tracing::debug!("Handle | done -- {:?}", event);
             }
         }
         Ok(())
@@ -99,7 +101,7 @@ where
 
 impl<S> Handle<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Unpin,
+    S: 'static + AsSourceState,
 {
     pub fn reader(&self) -> Reader<S> {
         match self {

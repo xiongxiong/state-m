@@ -8,6 +8,7 @@ use dashmap::DashMap;
 use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, sync::Arc};
 use thiserror::Error;
 use tokio::select;
+use tracing::instrument;
 
 pub trait KVAssoc {
     type Value;
@@ -131,6 +132,7 @@ where
         self.subscribe(tag).await
     }
 
+    #[instrument(level = "trace", skip(self))]
     async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
     where
         Self: UseState<T, K>,
@@ -149,7 +151,7 @@ where
                             Ok(s) => {
                                 let s_old = { cache.read().unwrap().clone() };
                                 if s.is_touch || s.state.value != s_old.value {
-                                    tracing::trace!("StateM | recv -- {:?}", s);
+                                    tracing::debug!("StateM | recv -- {:?}", s);
                                     { *cache.write().unwrap() = s.state.clone(); }
                                     this.on_change(s.state.value, s_old.value);
                                 }
@@ -179,6 +181,7 @@ where
         Ok(self.handle(tag)?.value_ex())
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub async fn touch<T>(&self, tag: &T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -187,6 +190,7 @@ where
         Ok(self.handle(tag)?.touch().await?)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub async fn wait_touch<T>(&self, tag: &T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -195,6 +199,7 @@ where
         Ok(self.handle(tag)?.wait_touch().await?)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub async fn alter<T>(&self, tag: &T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -203,6 +208,7 @@ where
         Ok(self.handle(tag)?.alter(s).await?)
     }
 
+    #[instrument(level = "trace", skip(self))]
     pub async fn wait_alter<T>(&self, tag: &T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -211,6 +217,7 @@ where
         Ok(self.handle(tag)?.wait_alter(s).await?)
     }
 
+    #[instrument(level = "trace", skip(self, f))]
     pub async fn amend<T>(
         &self,
         tag: &T,
@@ -223,6 +230,7 @@ where
         Ok(self.handle(tag)?.amend(f).await?)
     }
 
+    #[instrument(level = "trace", skip(self, f))]
     pub async fn wait_amend<T>(
         &self,
         tag: &T,
