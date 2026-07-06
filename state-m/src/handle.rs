@@ -101,6 +101,13 @@ impl<S> Handle<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq + Unpin,
 {
+    pub fn reader(&self) -> Reader<S> {
+        match self {
+            Handle::Source(source, _) => source.reader(),
+            Handle::Reader(reader, _) => reader.clone(),
+        }
+    }
+
     pub fn value(&self) -> S {
         self.cache().read().unwrap().value.clone()
     }

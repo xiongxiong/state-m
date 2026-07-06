@@ -10,22 +10,18 @@ license = "MIT"
 
 [dependencies]
 async-trait = "0.1"
-chrono = { version = "0.4", optional = true }
+chrono = { version = "0.4" }
 crossfire = "3.1"
 dashmap = "6.2"
 derivative = "2.2"
-futures = "0.3"
-futures-sink = "0.3"
 thiserror = "2.0"
-tokio = { version = "1.52", features = ["full"] }
-tokio-util = "0.7"
+tokio = { version = "1.52", features = ["macros", "rt"] }
 tracing = "0.1"
 
 [dev-dependencies]
 
 [features]
-default = ["timestamp"]
-timestamp = ["dep:chrono"]
+default = []
 
 [[test]]
 name = "test"

@@ -25,7 +25,7 @@ where
 
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
-pub(crate) struct StateEvent<S>
+pub struct StateEvent<S>
 where
     S: Default,
 {

@@ -17,7 +17,9 @@ pub trait AsTag: Clone + Debug + Eq + Hash + Send + Sync {}
 
 impl<T> AsTag for T where T: Clone + Debug + Eq + Hash + Send + Sync {}
 
-#[derive(Clone, Debug)]
+/// StateMachine: data structure to store handles.
+/// - K - to distinguish different handles.
+#[derive(Clone, Debug, Default)]
 pub struct StateMachine<K>(Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>)
 where
     K: AsTag;
@@ -105,6 +107,14 @@ where
         T: Clone + Into<K>,
     {
         self.contains_key(&tag.clone().into())
+    }
+
+    pub fn reader<T>(&self, tag: &T) -> Result<Reader<T::Value>, GetHandleError<T>>
+    where
+        T: Clone + Debug + Into<K> + KVAssoc,
+        T::Value: AsSourceState,
+    {
+        Ok(self.handle(tag)?.reader())
     }
 
     pub async fn subscribe_reader<T>(
