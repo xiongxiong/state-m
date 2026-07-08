@@ -9,7 +9,8 @@ keywords = ["state", "machine", "subscribe"]
 license = "MIT"
 
 [dependencies]
-chrono = { version = "0.4" }
+async-trait = "0.1"
+chrono = "0.4"
 crossfire = "3.1"
 dashmap = "6.2"
 derivative = "2.2"

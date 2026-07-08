@@ -3,6 +3,7 @@ use crate::{
     reader::Reader,
     source::{AsSourceState, Source},
 };
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, sync::Arc};
@@ -68,6 +69,55 @@ where
         self.insert(k, Arc::new(Handle::Reader(reader, Default::default())));
         Ok(())
     }
+
+    #[instrument(level = "trace", skip(self, state_user))]
+    async fn subscribe<T>(
+        &self,
+        tag: &T,
+        state_user: Arc<dyn UseState<T> + Send + Sync>,
+    ) -> Result<(), SubscribeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        let handle = self.handle(tag)?;
+        let cache = handle.cache();
+        let recver = handle.recver();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    res = recver.recv() => {
+                        match res {
+                            Ok(s) => {
+                                let s_old = { cache.read().unwrap().clone() };
+                                if s.is_touch || s.state.value != s_old.value {
+                                    tracing::debug!("StateM | recv -- {:?}", s);
+                                    { *cache.write().unwrap() = s.state.clone(); }
+                                    state_user.on_change(s.state.value, s_old.value);
+                                }
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
+    }
+
+    async fn subscribe_reader<T>(
+        &self,
+        tag: &T,
+        reader: Reader<T::Value>,
+        state_user: Arc<dyn UseState<T> + Send + Sync>,
+    ) -> Result<(), SubscribeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.add_reader(tag.clone(), reader)?;
+        self.subscribe(tag, state_user).await
+    }
 }
 
 impl<K> StateMachine<K>
@@ -116,53 +166,6 @@ where
         T::Value: AsSourceState,
     {
         Ok(self.handle(tag)?.reader())
-    }
-
-    pub async fn subscribe_reader<T>(
-        self: Arc<Self>,
-        tag: &T,
-        reader: Reader<T::Value>,
-    ) -> Result<(), SubscribeError<T>>
-    where
-        Self: UseState<T>,
-        T: Clone + Debug + Into<K> + KVAssoc,
-        T::Value: 'static + AsSourceState + Send + Sync,
-    {
-        self.add_reader(tag.clone(), reader)?;
-        self.subscribe(tag).await
-    }
-
-    #[instrument(level = "trace", skip(self))]
-    async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
-    where
-        Self: UseState<T>,
-        T: Clone + Debug + Into<K> + KVAssoc,
-        T::Value: 'static + AsSourceState + Send + Sync,
-    {
-        let handle = self.handle(tag)?;
-        let cache = handle.cache();
-        let recver = handle.recver();
-        let this = self.clone();
-        tokio::spawn(async move {
-            loop {
-                select! {
-                    res = recver.recv() => {
-                        match res {
-                            Ok(s) => {
-                                let s_old = { cache.read().unwrap().clone() };
-                                if s.is_touch || s.state.value != s_old.value {
-                                    tracing::debug!("StateM | recv -- {:?}", s);
-                                    { *cache.write().unwrap() = s.state.clone(); }
-                                    this.on_change(s.state.value, s_old.value);
-                                }
-                            },
-                            Err(_) => break,
-                        }
-                    }
-                }
-            }
-        });
-        Ok(())
     }
 
     pub fn value<T>(&self, tag: &T) -> Result<T::Value, GetHandleError<T>>
@@ -241,6 +244,66 @@ where
         T::Value: 'static + AsSourceState,
     {
         Ok(self.handle(tag)?.wait_amend(f).await?)
+    }
+}
+
+pub trait HasStateMachine<K>
+where
+    K: AsTag,
+{
+    fn state_machine(&self) -> StateMachine<K>;
+}
+
+#[async_trait]
+pub trait UseStateMachine<K>: HasStateMachine<K>
+where
+    K: AsTag,
+{
+    async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn subscribe_reader<T>(
+        self: Arc<Self>,
+        tag: &T,
+        reader: Reader<T::Value>,
+    ) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+}
+
+#[async_trait]
+impl<K, M> UseStateMachine<K> for M
+where
+    M: 'static + HasStateMachine<K> + Send + Sync,
+    K: AsTag,
+{
+    async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().subscribe(tag, self.clone()).await
+    }
+
+    async fn subscribe_reader<T>(
+        self: Arc<Self>,
+        tag: &T,
+        reader: Reader<T::Value>,
+    ) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine()
+            .subscribe_reader(tag, reader, self.clone())
+            .await
     }
 }
 
