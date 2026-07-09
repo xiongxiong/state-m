@@ -219,7 +219,7 @@ where
     async fn amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -231,7 +231,7 @@ where
     pub async fn wait_amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
@@ -322,7 +322,7 @@ where
     async fn amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
@@ -331,7 +331,7 @@ where
     async fn wait_amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
@@ -457,7 +457,7 @@ where
     async fn amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
@@ -470,7 +470,7 @@ where
     async fn wait_amend<T>(
         &self,
         tag: T,
-        f: impl FnOnce(&T::Value) -> T::Value,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,

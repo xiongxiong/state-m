@@ -51,14 +51,14 @@ where
     #[instrument(level = "trace", skip(self, f))]
     async fn inner_change(
         &self,
-        f: impl FnOnce(&S) -> S,
+        f: impl FnOnce(S) -> S,
         is_touch: bool,
         wait_arrival: bool,
     ) -> Result<(), StateChangeError<S>> {
         let cache = self.cache();
         let mut guard = cache.write().await;
         let s_old = (*guard).value.clone();
-        let s = f(&s_old);
+        let s = f(s_old.clone());
         if is_touch || s_old != s {
             let (event, wait_rx) = if wait_arrival {
                 let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
@@ -134,11 +134,11 @@ where
         self.inner_change(|_| s, true, true).await
     }
 
-    pub async fn amend(&self, f: impl FnOnce(&S) -> S) -> Result<(), StateChangeError<S>> {
+    pub async fn amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
         self.inner_change(f, true, false).await
     }
 
-    pub async fn wait_amend(&self, f: impl FnOnce(&S) -> S) -> Result<(), StateChangeError<S>> {
+    pub async fn wait_amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
         self.inner_change(f, true, false).await
     }
 }
