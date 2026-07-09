@@ -6,7 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, sync::Arc};
+use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
 use tokio::select;
 use tracing::instrument;
@@ -63,22 +63,21 @@ where
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         let k = tag.clone().into();
-        if self.contains_key(&k) {
+        if !self.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag));
         }
         self.insert(k, Arc::new(Handle::Reader(reader, Default::default())));
         Ok(())
     }
 
-    #[instrument(level = "trace", skip(self, state_user))]
-    async fn subscribe<T>(
-        &self,
-        tag: T,
-        state_user: Arc<dyn UseState<T> + Send + Sync>,
-    ) -> Result<(), SubscribeError<T>>
+    #[instrument(level = "trace", skip(self, on_change))]
+    async fn subscribe<T, F>(&self, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
     {
         let handle = self.handle(tag)?;
         let cache = handle.cache();
@@ -93,7 +92,9 @@ where
                                 if s.is_touch || s.state.value != s_old.value {
                                     tracing::debug!("StateM | recv -- {:?}", s);
                                     { *cache.write().await = s.state.clone(); }
-                                    state_user.on_change(s.state.value, s_old.value);
+                                    if let Err(e) = on_change(s.state.value, s_old.value).await {
+                                        tracing::error!("StateM | on_change error -- {:?}", e);
+                                    }
                                 }
                             },
                             Err(_) => break,
@@ -105,18 +106,21 @@ where
         Ok(())
     }
 
-    async fn subscribe_reader<T>(
+    async fn subscribe_reader<T, F>(
         &self,
         tag: T,
         reader: Reader<T::Value>,
-        state_user: Arc<dyn UseState<T> + Send + Sync>,
+        on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
     {
         self.add_reader(tag.clone(), reader)?;
-        self.subscribe(tag, state_user).await
+        self.subscribe(tag, on_change).await
     }
 }
 
@@ -254,11 +258,17 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    async fn add_source<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    async fn add_source<T, F>(
+        self: Arc<Self>,
+        tag: T,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
-        T::Value: 'static + AsSourceState + Send + Sync;
+        T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send;
 
     fn del_handle<T>(&self, tag: &T) -> bool
     where
@@ -273,21 +283,30 @@ where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: AsSourceState;
 
-    async fn subscribe<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    async fn subscribe<T, F>(
+        self: Arc<Self>,
+        tag: T,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
-        T::Value: 'static + AsSourceState + Send + Sync;
+        T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send;
 
-    async fn subscribe_reader<T>(
+    async fn subscribe_reader<T, F>(
         self: Arc<Self>,
         tag: T,
         reader: Reader<T::Value>,
+        on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
-        T::Value: 'static + AsSourceState + Send + Sync;
+        T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send;
 
     async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
     where
@@ -344,14 +363,20 @@ where
     M: 'static + HasStateMachine<K> + Send + Sync,
     K: 'static + AsTag,
 {
-    async fn add_source<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    async fn add_source<T, F>(
+        self: Arc<Self>,
+        tag: T,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
     {
         self.state_machine().add_source(tag.clone())?;
-        self.subscribe(tag).await?;
+        self.subscribe(tag, on_change).await?;
         Ok(())
     }
 
@@ -377,27 +402,32 @@ where
         self.state_machine().reader(tag)
     }
 
-    async fn subscribe<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    async fn subscribe<T, F>(self: Arc<Self>, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
     {
-        self.state_machine().subscribe(tag, self.clone()).await
+        self.state_machine().subscribe(tag, on_change).await
     }
 
-    async fn subscribe_reader<T>(
+    async fn subscribe_reader<T, F>(
         self: Arc<Self>,
         tag: T,
         reader: Reader<T::Value>,
+        on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
+        F: 'static
+            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
     {
         self.state_machine()
-            .subscribe_reader(tag, reader, self.clone())
+            .subscribe_reader(tag, reader, on_change)
             .await
     }
 
@@ -478,14 +508,6 @@ where
     {
         self.state_machine().wait_amend(tag, f).await
     }
-}
-
-pub trait UseState<T>
-where
-    T: Clone + Debug + KVAssoc,
-    T::Value: 'static + AsSourceState + Send + Sync,
-{
-    fn on_change(&self, _new: T::Value, _old: T::Value) {}
 }
 
 #[derive(Debug, Error)]
