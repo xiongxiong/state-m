@@ -9,11 +9,9 @@ use crossfire::{
     mpmc::{self, List},
     null::CloseHandle,
 };
-use std::{
-    fmt::Debug,
-    sync::{Arc, RwLock},
-};
+use std::{fmt::Debug, sync::Arc};
 use thiserror::Error;
+use tokio::sync::RwLock;
 use tracing::instrument;
 
 #[derive(Clone, Debug)]
@@ -58,7 +56,7 @@ where
         wait_arrival: bool,
     ) -> Result<(), StateChangeError<S>> {
         let cache = self.cache();
-        let mut guard = cache.write().unwrap();
+        let mut guard = cache.write().await;
         let s_old = (*guard).value.clone();
         let s = f(&s_old);
         if is_touch || s_old != s {
@@ -110,13 +108,13 @@ where
         }
     }
 
-    pub fn value(&self) -> S {
-        self.cache().read().unwrap().value.clone()
+    pub async fn value(&self) -> S {
+        self.cache().read().await.value.clone()
     }
 
-    pub fn value_ex(&self) -> (S, DateTime<Utc>) {
+    pub async fn value_ex(&self) -> (S, DateTime<Utc>) {
         let cache = self.cache();
-        let guard = cache.read().unwrap();
+        let guard = cache.read().await;
         ((*guard).value.clone(), (*guard).timestamp.clone())
     }
 

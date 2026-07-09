@@ -41,7 +41,7 @@ impl<K> StateMachine<K>
 where
     K: AsTag,
 {
-    fn handle<T>(&self, tag: &T) -> Result<Handle<T::Value>, GetHandleError<T>>
+    fn handle<T>(&self, tag: T) -> Result<Handle<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: AsSourceState,
@@ -52,7 +52,7 @@ where
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
             },
-            None => Err(GetHandleError::HandleNotExist(tag.clone())),
+            None => Err(GetHandleError::HandleNotExist(tag)),
         }
     }
 
@@ -73,7 +73,7 @@ where
     #[instrument(level = "trace", skip(self, state_user))]
     async fn subscribe<T>(
         &self,
-        tag: &T,
+        tag: T,
         state_user: Arc<dyn UseState<T> + Send + Sync>,
     ) -> Result<(), SubscribeError<T>>
     where
@@ -89,10 +89,10 @@ where
                     res = recver.recv() => {
                         match res {
                             Ok(s) => {
-                                let s_old = { cache.read().unwrap().clone() };
+                                let s_old = { cache.read().await.clone() };
                                 if s.is_touch || s.state.value != s_old.value {
                                     tracing::debug!("StateM | recv -- {:?}", s);
-                                    { *cache.write().unwrap() = s.state.clone(); }
+                                    { *cache.write().await = s.state.clone(); }
                                     state_user.on_change(s.state.value, s_old.value);
                                 }
                             },
@@ -107,7 +107,7 @@ where
 
     async fn subscribe_reader<T>(
         &self,
-        tag: &T,
+        tag: T,
         reader: Reader<T::Value>,
         state_user: Arc<dyn UseState<T> + Send + Sync>,
     ) -> Result<(), SubscribeError<T>>
@@ -125,7 +125,7 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    pub fn add_source<T>(&self, tag: T) -> Result<(), AddHandleError<T>>
+    fn add_source<T>(&self, tag: T) -> Result<(), AddHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -145,7 +145,7 @@ where
     }
 
     /// Remove state source from state machine.
-    pub fn del_handle<T>(&self, tag: &T) -> bool
+    fn del_handle<T>(&self, tag: &T) -> bool
     where
         T: Clone + Into<K>,
     {
@@ -153,14 +153,14 @@ where
     }
 
     /// If state source of tag exists in state machine.
-    pub fn has_handle<T>(&self, tag: &T) -> bool
+    fn has_handle<T>(&self, tag: &T) -> bool
     where
         T: Clone + Into<K>,
     {
         self.contains_key(&tag.clone().into())
     }
 
-    pub fn reader<T>(&self, tag: &T) -> Result<Reader<T::Value>, GetHandleError<T>>
+    fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: AsSourceState,
@@ -168,24 +168,23 @@ where
         Ok(self.handle(tag)?.reader())
     }
 
-    pub fn value<T>(&self, tag: &T) -> Result<T::Value, GetHandleError<T>>
+    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
     {
-        Ok(self.handle(tag)?.value())
+        Ok(self.handle(tag)?.value().await)
     }
 
-    pub fn value_ex<T>(&self, tag: &T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
     {
-        Ok(self.handle(tag)?.value_ex())
+        Ok(self.handle(tag)?.value_ex().await)
     }
 
-    #[instrument(level = "trace", skip(self))]
-    pub async fn touch<T>(&self, tag: &T) -> Result<(), StateChangeError<T>>
+    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
@@ -193,8 +192,7 @@ where
         Ok(self.handle(tag)?.touch().await?)
     }
 
-    #[instrument(level = "trace", skip(self))]
-    pub async fn wait_touch<T>(&self, tag: &T) -> Result<(), StateChangeError<T>>
+    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
@@ -202,8 +200,7 @@ where
         Ok(self.handle(tag)?.wait_touch().await?)
     }
 
-    #[instrument(level = "trace", skip(self))]
-    pub async fn alter<T>(&self, tag: &T, s: T::Value) -> Result<(), StateChangeError<T>>
+    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
@@ -211,8 +208,7 @@ where
         Ok(self.handle(tag)?.alter(s).await?)
     }
 
-    #[instrument(level = "trace", skip(self))]
-    pub async fn wait_alter<T>(&self, tag: &T, s: T::Value) -> Result<(), StateChangeError<T>>
+    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KVAssoc,
         T::Value: 'static + AsSourceState,
@@ -220,10 +216,9 @@ where
         Ok(self.handle(tag)?.wait_alter(s).await?)
     }
 
-    #[instrument(level = "trace", skip(self, f))]
-    pub async fn amend<T>(
+    async fn amend<T>(
         &self,
-        tag: &T,
+        tag: T,
         f: impl FnOnce(&T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T>>
     where
@@ -233,10 +228,9 @@ where
         Ok(self.handle(tag)?.amend(f).await?)
     }
 
-    #[instrument(level = "trace", skip(self, f))]
     pub async fn wait_amend<T>(
         &self,
-        tag: &T,
+        tag: T,
         f: impl FnOnce(&T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T>>
     where
@@ -257,9 +251,29 @@ where
 #[async_trait]
 pub trait UseStateMachine<K>: HasStateMachine<K>
 where
-    K: AsTag,
+    K: 'static + AsTag,
 {
-    async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
+    /// Add state source into state machine.
+    async fn add_source<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    fn del_handle<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>;
+
+    fn has_handle<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>;
+
+    fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
+    where
+        T: Clone + Debug + Into<K> + KVAssoc,
+        T::Value: AsSourceState;
+
+    async fn subscribe<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
     where
         Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
@@ -267,11 +281,59 @@ where
 
     async fn subscribe_reader<T>(
         self: Arc<Self>,
-        tag: &T,
+        tag: T,
         reader: Reader<T::Value>,
     ) -> Result<(), SubscribeError<T>>
     where
         Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(&T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync;
+
+    async fn wait_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(&T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T>>
+    where
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 }
@@ -280,9 +342,42 @@ where
 impl<K, M> UseStateMachine<K> for M
 where
     M: 'static + HasStateMachine<K> + Send + Sync,
-    K: AsTag,
+    K: 'static + AsTag,
 {
-    async fn subscribe<T>(self: Arc<Self>, tag: &T) -> Result<(), SubscribeError<T>>
+    async fn add_source<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
+    where
+        Self: UseState<T>,
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().add_source(tag.clone())?;
+        self.subscribe(tag).await?;
+        Ok(())
+    }
+
+    fn del_handle<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>,
+    {
+        self.state_machine().del_handle(tag)
+    }
+
+    fn has_handle<T>(&self, tag: &T) -> bool
+    where
+        T: Clone + Into<K>,
+    {
+        self.state_machine().has_handle(tag)
+    }
+
+    fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
+    where
+        T: Clone + Debug + Into<K> + KVAssoc,
+        T::Value: AsSourceState,
+    {
+        self.state_machine().reader(tag)
+    }
+
+    async fn subscribe<T>(self: Arc<Self>, tag: T) -> Result<(), SubscribeError<T>>
     where
         Self: UseState<T>,
         T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
@@ -293,7 +388,7 @@ where
 
     async fn subscribe_reader<T>(
         self: Arc<Self>,
-        tag: &T,
+        tag: T,
         reader: Reader<T::Value>,
     ) -> Result<(), SubscribeError<T>>
     where
@@ -305,6 +400,84 @@ where
             .subscribe_reader(tag, reader, self.clone())
             .await
     }
+
+    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().value(tag).await
+    }
+
+    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().value_ex(tag).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().touch(tag).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().wait_touch(tag).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().alter(tag, s).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().wait_alter(tag, s).await
+    }
+
+    #[instrument(level = "trace", skip(self, f))]
+    async fn amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(&T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().amend(tag, f).await
+    }
+
+    #[instrument(level = "trace", skip(self, f))]
+    async fn wait_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(&T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T::Value: 'static + AsSourceState + Send + Sync,
+    {
+        self.state_machine().wait_amend(tag, f).await
+    }
 }
 
 pub trait UseState<T>
@@ -312,7 +485,7 @@ where
     T: Clone + Debug + KVAssoc,
     T::Value: 'static + AsSourceState + Send + Sync,
 {
-    fn on_change(&self, new: T::Value, old: T::Value);
+    fn on_change(&self, _new: T::Value, _old: T::Value) {}
 }
 
 #[derive(Debug, Error)]
