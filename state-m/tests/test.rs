@@ -1,2 +1,6 @@
 use state_m::*;
-use std::sync::Arc;
+
+#[tokio::test]
+async fn test() -> anyhow::Result<()> {
+    on_change!((3, ""), |s| s + 1)
+}

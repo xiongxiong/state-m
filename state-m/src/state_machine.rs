@@ -510,6 +510,15 @@ where
     }
 }
 
+#[macro_export]
+macro_rules! on_change {
+    (($($t:expr), *), $c: expr) => {
+        {
+            $(let )*
+        }
+    };
+}
+
 #[derive(Debug, Error)]
 pub enum SubscribeError<T>
 where
