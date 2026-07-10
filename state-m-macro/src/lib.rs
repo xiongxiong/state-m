@@ -12,7 +12,8 @@ use syn::{
 };
 
 #[proc_macro]
-pub fn on_change(_input: TokenStream) -> TokenStream {
+pub fn on_change(item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
     todo!()
 }
 
@@ -30,7 +31,7 @@ impl AttributeComponent for KvAssocArgs {
             syn::Meta::List(ref meta_list) => syn::parse2::<KvAssocArgs>(meta_list.tokens.clone()),
             syn::Meta::NameValue(_) => return_syn_err!(
                 attr,
-                "Expects an attribute of format `#[ kv_assoc( assoc = Custom ) ) ]`. \nGot: {}",
+                "Expects an attribute of format `#[kv_assoc(assoc = Custom)]`. \nGot: {}",
                 qt! { #attr }
             ),
         }
@@ -48,7 +49,7 @@ impl Parse for KvAssocArgs {
             );
             syn_err!(
                 ident,
-                r#"Expects an attribute of format '#[ kv_assoc( assoc = Custom ) ]'
+                r#"Expects an attribute of format '#[kv_assoc(assoc = Custom)]'
                 {known}
                 But got:
                 '{}'"#,
@@ -135,9 +136,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         });
                     }
-                    None => panic!(
-                        "Expects an attribute of format `#[ kv_assoc( assoc = Custom1 ) ) ]`."
-                    ),
+                    None => panic!("Expects an attribute of format `#[kv_assoc(assoc = Custom)]`."),
                 }
             }
             let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
@@ -169,7 +168,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     });
                 }
                 None => {
-                    panic!("Expects an attribute of format `#[ kv_assoc( assoc = Custom2 ) ) ]`.")
+                    panic!("Expects an attribute of format `#[kv_assoc(assoc = Custom)]`.")
                 }
             }
         }
@@ -185,7 +184,13 @@ fn kv_assoc_args(attrs: &Vec<Attribute>) -> KvAssocArgs {
     let mut args = KvAssocArgs::default();
     for attr in attrs {
         if attr.path().is_ident(KvAssocArgs::KEYWORD) {
-            args = KvAssocArgs::from_meta(attr).unwrap_or_else(|e| panic!("{}", e));
+            args = KvAssocArgs::from_meta(attr).unwrap_or_else(|e| {
+                panic!(
+                    "Unable to parse attribute [{}] : {}",
+                    KvAssocArgs::KEYWORD,
+                    e
+                )
+            });
         }
     }
     args
