@@ -245,18 +245,14 @@ where
     }
 }
 
-pub trait HasStateMachine<K>
-where
-    K: AsTag,
-{
-    fn state_machine(&self) -> StateMachine<K>;
+pub trait HasStateMachine {
+    type K: AsTag;
+
+    fn state_machine(&self) -> StateMachine<Self::K>;
 }
 
 #[async_trait]
-pub trait UseStateMachine<K>: HasStateMachine<K>
-where
-    K: 'static + AsTag,
-{
+pub trait UseStateMachine: HasStateMachine {
     /// Add state source into state machine.
     async fn add_source<T, F>(
         self: Arc<Self>,
@@ -264,7 +260,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -272,15 +268,15 @@ where
 
     fn del_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<K>;
+        T: Clone + Into<Self::K>;
 
     fn has_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<K>;
+        T: Clone + Into<Self::K>;
 
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
     where
-        T: Clone + Debug + Into<K> + KVAssoc,
+        T: Clone + Debug + Into<Self::K> + KVAssoc,
         T::Value: AsSourceState;
 
     async fn subscribe<T, F>(
@@ -289,7 +285,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -302,7 +298,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -310,32 +306,32 @@ where
 
     async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn amend<T>(
@@ -344,7 +340,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
     async fn wait_amend<T>(
@@ -353,15 +349,14 @@ where
         f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 }
 
 #[async_trait]
-impl<K, M> UseStateMachine<K> for M
+impl<M> UseStateMachine for M
 where
-    M: 'static + HasStateMachine<K> + Send + Sync,
-    K: 'static + AsTag,
+    M: 'static + HasStateMachine + Send + Sync,
 {
     async fn add_source<T, F>(
         self: Arc<Self>,
@@ -369,7 +364,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -382,21 +377,21 @@ where
 
     fn del_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<K>,
+        T: Clone + Into<Self::K>,
     {
         self.state_machine().del_handle(tag)
     }
 
     fn has_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<K>,
+        T: Clone + Into<Self::K>,
     {
         self.state_machine().has_handle(tag)
     }
 
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
     where
-        T: Clone + Debug + Into<K> + KVAssoc,
+        T: Clone + Debug + Into<Self::K> + KVAssoc,
         T::Value: AsSourceState,
     {
         self.state_machine().reader(tag)
@@ -404,7 +399,7 @@ where
 
     async fn subscribe<T, F>(self: Arc<Self>, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -420,7 +415,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -433,7 +428,7 @@ where
 
     async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().value(tag).await
@@ -441,7 +436,7 @@ where
 
     async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().value_ex(tag).await
@@ -450,7 +445,7 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().touch(tag).await
@@ -459,7 +454,7 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().wait_touch(tag).await
@@ -468,7 +463,7 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().alter(tag, s).await
@@ -477,7 +472,7 @@ where
     #[instrument(level = "trace", skip(self))]
     async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().wait_alter(tag, s).await
@@ -490,7 +485,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().amend(tag, f).await
@@ -503,20 +498,11 @@ where
         f: impl FnOnce(T::Value) -> T::Value + Send,
     ) -> Result<(), StateChangeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KVAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KVAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         self.state_machine().wait_amend(tag, f).await
     }
-}
-
-#[macro_export]
-macro_rules! on_change {
-    (($($t:expr), *), $c: expr) => {
-        {
-            $(let )*
-        }
-    };
 }
 
 #[derive(Debug, Error)]

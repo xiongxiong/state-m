@@ -39,3 +39,8 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // .into()
     todo!()
 }
+
+#[proc_macro]
+pub fn on_change(input: TokenStream) -> TokenStream {
+    todo!()
+}
