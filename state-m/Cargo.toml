@@ -16,6 +16,7 @@ crossfire = "3.1"
 dashmap = "6.2"
 derivative = "2.2"
 inventory = "0.3"
+state-m-macro = "0.1"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["macros", "rt", "sync"] }
 tracing = "0.1"

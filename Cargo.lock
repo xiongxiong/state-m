@@ -445,6 +445,7 @@ dependencies = [
  "dashmap",
  "derivative",
  "inventory",
+ "state-m-macro",
  "thiserror",
  "tokio",
  "tracing",

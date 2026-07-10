@@ -1,4 +1,5 @@
 use crate::{
+    AsTag, KVAssoc,
     handle::{Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::{AsSourceState, Source},
@@ -6,18 +7,10 @@ use crate::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
-use std::{any::Any, cmp::Eq, fmt::Debug, hash::Hash, ops::Deref, pin::Pin, sync::Arc};
+use std::{any::Any, fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
 use tokio::select;
 use tracing::instrument;
-
-pub trait KVAssoc {
-    type Value;
-}
-
-pub trait AsTag: Clone + Debug + Eq + Hash + Send + Sync {}
-
-impl<T> AsTag for T where T: Clone + Debug + Eq + Hash + Send + Sync {}
 
 /// StateMachine: data structure to store handles.
 /// - K - to distinguish different handles.

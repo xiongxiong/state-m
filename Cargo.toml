@@ -5,3 +5,6 @@ members = [
     "state-m",
     "state-m-macro"
 ]
+
+[patch.crates-io]
+state-m-macro = { path = "state-m-macro" }
