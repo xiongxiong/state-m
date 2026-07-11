@@ -1,5 +1,5 @@
 use crate::{
-    AsTag, KvAssoc,
+    AsTag, KvAssoc, StateEvent,
     handle::{Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::{AsSourceState, Source},
@@ -63,6 +63,28 @@ where
         Ok(())
     }
 
+    async fn on_event<T, A, C, F>(
+        &self,
+        tag: T,
+        s: StateEvent<T::Value>,
+        conv_s: C,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc,
+        T::Value: 'static + AsSourceState + Send + Sync,
+        C: Fn(T::Value) -> A,
+        F: Fn(A, A, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>>>>,
+    {
+        let handle = self.handle(tag.clone())?;
+        if let Some((v_new, v_old)) = handle.on_event(s).await
+            && let Err(e) = on_change(conv_s(v_new), conv_s(v_old), tag.into()).await
+        {
+            tracing::error!("StateM | on_change error -- {:?}", e);
+        }
+        Ok(())
+    }
+
     #[instrument(level = "trace", skip(self, on_change))]
     async fn subscribe<T, F>(&self, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
     where
@@ -73,7 +95,6 @@ where
             + Send,
     {
         let handle = self.handle(tag)?;
-        let cache = handle.cache();
         let recver = handle.recver();
         tokio::spawn(async move {
             loop {
@@ -81,13 +102,8 @@ where
                     res = recver.recv() => {
                         match res {
                             Ok(s) => {
-                                let s_old = { cache.read().await.clone() };
-                                if s.is_touch || s.state.value != s_old.value {
-                                    tracing::debug!("StateM | recv -- {:?}", s);
-                                    { *cache.write().await = s.state.clone(); }
-                                    if let Err(e) = on_change(s.state.value, s_old.value).await {
-                                        tracing::error!("StateM | on_change error -- {:?}", e);
-                                    }
+                                if let Some((v_new, v_old)) = handle.on_event(s).await && let Err(e) = on_change(v_new, v_old).await {
+                                    tracing::error!("StateM | on_change error -- {:?}", e);
                                 }
                             },
                             Err(_) => break,

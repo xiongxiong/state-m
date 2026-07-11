@@ -6,15 +6,35 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Type,
+    Attribute, DeriveInput, ExprClosure, ReturnType, Token, Type, parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
+    punctuated::Punctuated,
+    token,
 };
+
+struct OnChangeInput {
+    _paren_token: token::Paren,
+    pub tag_typs: Punctuated<Type, Token![,]>,
+    pub closure: ExprClosure,
+}
+
+impl Parse for OnChangeInput {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        Ok(OnChangeInput {
+            _paren_token: parenthesized!(content in input),
+            tag_typs: content.parse_terminated(Type::parse, Token![,])?,
+            closure: input.parse()?,
+        })
+    }
+}
 
 #[proc_macro]
 pub fn on_change(item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    todo!()
+    let input = parse_macro_input!(item as OnChangeInput);
+
+    quote! {}.into()
 }
 
 #[derive(Debug, Default)]

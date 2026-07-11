@@ -27,14 +27,14 @@ impl<S> Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    pub(crate) fn cache(&self) -> Arc<RwLock<State<S>>> {
+    pub fn cache(&self) -> Arc<RwLock<State<S>>> {
         match self {
             Handle::Source(_, c) => c.clone(),
             Handle::Reader(_, c) => c.clone(),
         }
     }
 
-    pub(crate) fn sender(&self) -> Result<MAsyncTx<List<StateEvent<S>>>, StateChangeError<S>> {
+    pub fn sender(&self) -> Result<MAsyncTx<List<StateEvent<S>>>, StateChangeError<S>> {
         match self {
             Handle::Source(source, _) => Ok(source.sender.clone()),
             Handle::Reader(_, _) => Err(StateChangeError::StateReadOnly),
@@ -45,6 +45,20 @@ where
         match self {
             Handle::Source(source, _) => source.recver.clone(),
             Handle::Reader(reader, _) => reader.recver.clone(),
+        }
+    }
+
+    pub(crate) async fn on_event(&self, s: StateEvent<S>) -> Option<(S, S)> {
+        let cache = self.cache();
+        let s_old = { cache.read().await.clone() };
+        if s.is_touch || s.state.value != s_old.value {
+            tracing::debug!("StateM | recv -- {:?}", s);
+            {
+                *cache.write().await = s.state.clone();
+            }
+            Some((s.state.value, s_old.value))
+        } else {
+            None
         }
     }
 
