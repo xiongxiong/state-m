@@ -50,17 +50,15 @@ where
     }
 
     /// Add state reader into state machine.
-    fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>) -> Result<(), AddHandleError<T>>
+    fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>)
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         let k = tag.clone().into();
         if !self.contains_key(&k) {
-            return Err(AddHandleError::AlreadyExist(tag));
+            self.insert(k, Arc::new(Handle::Reader(reader, Default::default())));
         }
-        self.insert(k, Arc::new(Handle::Reader(reader, Default::default())));
-        Ok(())
     }
 
     async fn on_event<T, A, C, F>(
@@ -128,7 +126,7 @@ where
             + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        self.add_reader(tag.clone(), reader)?;
+        self.add_reader(tag.clone(), reader);
         self.subscribe(tag, on_change).await
     }
 }
