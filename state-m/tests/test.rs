@@ -28,7 +28,7 @@ mod tests {
     use anyhow::Result;
 
     #[tokio::test]
-    async fn test_add_source() -> Result<()> {
+    async fn test_normal() -> Result<()> {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .init();
@@ -42,24 +42,40 @@ mod tests {
             unit.alter(TagInner(0), format!("{i}")).await?;
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        for i in 0..10 {
+            unit.amend(TagInner(0), |v| format!("{v}_{}", i)).await?;
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+        unit.wait_touch(TagInner(0)).await?;
         Ok(())
     }
 
     #[tokio::test]
-    async fn test_wait_alter() -> Result<()> {
+    async fn test_wait() -> Result<()> {
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .init();
-        let unit = Unit::default();
-        unit.add_source(TagInner(0), |new, old| {
-            tracing::info!("new -- {}, old -- {}", new, old);
-            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-        })
-        .await?;
-        unit.alter(TagInner(0), "A".into()).await?;
-        unit.alter(TagInner(0), "B".into()).await?;
-        unit.wait_alter(TagInner(0), "C".into()).await?;
+        let unit_a = Unit::default();
+        unit_a
+            .add_source(TagInner(0), |new, old| {
+                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
+                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+            })
+            .await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
+                tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
+                Box::pin(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    Ok::<_, anyhow::Error>(())
+                })
+            })
+            .await?;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        // unit_a.alter(TagInner(0), "A".into()).await?;
+        // unit_a.alter(TagInner(0), "B".into()).await?;
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
         Ok(())
     }
 }

@@ -82,10 +82,10 @@ where
                     let state = event.state.clone();
                     source.sender.send(event).await?;
                     *guard = state.clone();
-                    tracing::debug!("{} | send -- {:?}", source.sender.get_rx_count(), state);
+                    tracing::debug!("{} | send -- {state:?}", source.sender.get_rx_count());
                     if let Some(rx) = wait_rx {
                         _ = rx.recv().await;
-                        tracing::debug!("done -- {:?}", state);
+                        tracing::debug!("done -- {state:?}");
                     }
                 }
             }
@@ -113,7 +113,7 @@ where
                 let cache = self.cache();
                 let s_old = { cache.read().await.clone() };
                 if s.is_touch || s.state.value != s_old.value {
-                    tracing::debug!("recv -- {:?}", s);
+                    tracing::debug!("recv -- {s:?}");
                     {
                         *cache.write().await = s.state.clone();
                     }

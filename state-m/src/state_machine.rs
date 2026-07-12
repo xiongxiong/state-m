@@ -58,7 +58,7 @@ where
     }
 
     /// Add state reader into state machine.
-    fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>)
+    fn new_reader<T>(&self, tag: T, reader: Reader<T::Value>)
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -86,14 +86,15 @@ where
     {
         let handle = self.handle(tag.clone())?;
         tokio::spawn(async move {
-            tracing::info!("watch [{:?}] - start", tag);
+            tracing::info!("watch [{tag:?}] - start");
             loop {
                 select! {
                     res = handle.recv() => {
+                        tracing::info!("XXXX -- {res:?}");
                         match res {
                             Ok(Some((s_new, s_old))) => {
                                 if let Err(e) = on_change(s_new, s_old).await {
-                                    tracing::error!("on_change error -- {:?}", e);
+                                    tracing::error!("on_change error -- {e:?}");
                                 }
                             },
                             Err(_) => break,
@@ -102,12 +103,12 @@ where
                     }
                 }
             }
-            tracing::info!("watch [{:?}] - end", tag);
+            tracing::info!("watch [{tag:?}] - end");
         });
         Ok(())
     }
 
-    async fn subscribe_reader<T, F>(
+    async fn add_reader<T, F>(
         &self,
         tag: T,
         reader: Reader<T::Value>,
@@ -123,7 +124,7 @@ where
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        self.add_reader(tag.clone(), reader);
+        self.new_reader(tag.clone(), reader);
         self.subscribe(tag, on_change).await
     }
 }
@@ -283,7 +284,7 @@ pub trait UseStateMachine: HasStateMachine {
         T: Clone + Debug + Into<Self::K> + KvAssoc,
         T::Value: AsSourceState;
 
-    async fn subscribe_reader<T, F>(
+    async fn add_reader<T, F>(
         &self,
         tag: T,
         reader: Reader<T::Value>,
@@ -391,7 +392,7 @@ where
         self.state_machine().reader(tag)
     }
 
-    async fn subscribe_reader<T, F>(
+    async fn add_reader<T, F>(
         &self,
         tag: T,
         reader: Reader<T::Value>,
@@ -408,7 +409,7 @@ where
             + Send,
     {
         self.state_machine()
-            .subscribe_reader(tag, reader, on_change)
+            .add_reader(tag, reader, on_change)
             .await
     }
 
