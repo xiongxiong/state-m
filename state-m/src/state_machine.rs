@@ -90,7 +90,6 @@ where
             loop {
                 select! {
                     res = handle.recv() => {
-                        tracing::info!("XXXX -- {res:?}");
                         match res {
                             Ok(Some((s_new, s_old))) => {
                                 if let Err(e) = on_change(s_new, s_old).await {
@@ -134,7 +133,7 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    fn add_source<T>(&self, tag: T) -> Result<(), AddHandleError<T>>
+    fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -146,7 +145,7 @@ where
         self.insert(
             k,
             Box::new(Arc::new(Handle::Source(
-                Source::<T::Value>::new(),
+                Source::<T::Value>::new(capacity),
                 Default::default(),
                 Default::default(),
             ))),
@@ -260,7 +259,12 @@ pub trait HasStateMachine {
 #[async_trait]
 pub trait UseStateMachine: HasStateMachine {
     /// Add state source into state machine.
-    async fn add_source<T, F>(&self, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
+    async fn add_source<T, F>(
+        &self,
+        tag: T,
+        capacity: usize,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -354,7 +358,12 @@ impl<M> UseStateMachine for M
 where
     M: 'static + HasStateMachine + Send + Sync,
 {
-    async fn add_source<T, F>(&self, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
+    async fn add_source<T, F>(
+        &self,
+        tag: T,
+        capacity: usize,
+        on_change: F,
+    ) -> Result<(), SubscribeError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -365,7 +374,7 @@ where
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        self.state_machine().add_source(tag.clone())?;
+        self.state_machine().add_source(tag.clone(), capacity)?;
         self.state_machine().subscribe(tag, on_change).await?;
         Ok(())
     }

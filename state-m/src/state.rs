@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use crossfire::{mpmc::Null, null::CloseHandle};
 use derivative::Derivative;
 use std::fmt::Display;
+use tokio::sync::mpsc;
 
 #[derive(Clone, Debug)]
 pub struct State<S>
@@ -42,7 +42,7 @@ where
     pub state: State<S>,
     pub is_touch: bool,
     #[derivative(Debug = "ignore")]
-    pub close_handle: Option<CloseHandle<Null>>,
+    pub close_handle: Option<mpsc::Sender<()>>,
 }
 
 impl<S> Default for StateEvent<S>

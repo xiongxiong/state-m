@@ -33,7 +33,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit = Unit::default();
-        unit.add_source(TagInner(0), |new, old| {
+        unit.add_source(TagInner(0), 10, |new, old| {
             tracing::info!("new -- {}, old -- {}", new, old);
             Box::pin(async move { Ok::<_, anyhow::Error>(()) })
         })
@@ -57,7 +57,7 @@ mod tests {
             .init();
         let unit_a = Unit::default();
         unit_a
-            .add_source(TagInner(0), |new, old| {
+            .add_source(TagInner(0), 10, |new, old| {
                 tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
                 Box::pin(async move { Ok::<_, anyhow::Error>(()) })
             })
@@ -72,9 +72,8 @@ mod tests {
                 })
             })
             .await?;
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        // unit_a.alter(TagInner(0), "A".into()).await?;
-        // unit_a.alter(TagInner(0), "B".into()).await?;
+        unit_a.wait_alter(TagInner(0), "A".into()).await?;
+        unit_a.wait_alter(TagInner(0), "B".into()).await?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         Ok(())
     }

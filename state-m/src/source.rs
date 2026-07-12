@@ -1,9 +1,9 @@
 use crate::{reader::Reader, state::StateEvent};
-use crossfire::{
-    MAsyncRx, MAsyncTx,
-    mpmc::{self, List},
+use std::{fmt::Debug, sync::Arc};
+use tokio::sync::{
+    Mutex,
+    broadcast::{Receiver, Sender, channel},
 };
-use std::fmt::Debug;
 
 pub trait AsSourceState: Clone + Debug + Default + PartialEq + Unpin {}
 
@@ -14,34 +14,26 @@ pub(crate) struct Source<S>
 where
     S: 'static + AsSourceState,
 {
-    pub(crate) sender: MAsyncTx<List<StateEvent<S>>>,
-    pub(crate) recver: MAsyncRx<List<StateEvent<S>>>,
-}
-
-impl<S> Default for Source<S>
-where
-    S: 'static + AsSourceState,
-{
-    fn default() -> Self {
-        Self::new()
-    }
+    pub(crate) sender: Arc<Sender<StateEvent<S>>>,
+    pub(crate) recver: Arc<Mutex<Receiver<StateEvent<S>>>>,
 }
 
 impl<S> Source<S>
 where
     S: 'static + AsSourceState,
 {
-    pub fn new() -> Self {
-        let (tx, rx) = mpmc::unbounded_async();
+    pub fn new(capacity: usize) -> Self {
+        let (tx, rx) = channel(capacity);
         Self {
-            sender: tx.into_async(),
-            recver: rx,
+            sender: Arc::new(tx),
+            recver: Arc::new(Mutex::new(rx)),
         }
     }
 
     pub fn reader(&self) -> Reader<S> {
         Reader {
-            recver: self.recver.clone(),
+            sender: self.sender.clone(),
+            recver: Arc::new(Mutex::new(self.sender.subscribe())),
         }
     }
 }

@@ -4,14 +4,16 @@ use crate::{
     state::{State, StateEvent},
 };
 use chrono::Utc;
-use crossfire::{
-    MAsyncRx, RecvError, SendError,
-    mpmc::{self, List},
-    null::CloseHandle,
-};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{
+    Mutex,
+    broadcast::{
+        Receiver as Recver,
+        error::{RecvError, SendError},
+    },
+};
+use tokio::sync::{RwLock, mpsc};
 use tracing::instrument;
 
 #[derive(Clone, Debug)]
@@ -34,10 +36,10 @@ where
         }
     }
 
-    pub fn recver(&self) -> &MAsyncRx<List<StateEvent<S>>> {
+    pub fn recver(&self) -> Arc<Mutex<Recver<StateEvent<S>>>> {
         match self {
-            Handle::Source(source, _, _) => &source.recver,
-            Handle::Reader(reader, _) => &reader.recver,
+            Handle::Source(source, _, _) => source.recver.clone(),
+            Handle::Reader(reader, _) => reader.recver.clone(),
         }
     }
 
@@ -55,8 +57,7 @@ where
                 let s = f(s_old.clone());
                 if is_touch || s_old != s {
                     let (event, wait_rx) = if wait_arrival {
-                        let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
-                            mpmc::Null::new().new_async();
+                        let (tx, rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
                         let event = StateEvent {
                             state: State {
                                 value: s,
@@ -80,10 +81,10 @@ where
                         )
                     };
                     let state = event.state.clone();
-                    source.sender.send(event).await?;
+                    let recver_count = source.sender.send(event)?;
                     *guard = state.clone();
-                    tracing::debug!("{} | send -- {state:?}", source.sender.get_rx_count());
-                    if let Some(rx) = wait_rx {
+                    tracing::debug!("{recver_count} | send -- {state:?}");
+                    if let Some(mut rx) = wait_rx {
                         _ = rx.recv().await;
                         tracing::debug!("done -- {state:?}");
                     }
@@ -107,7 +108,7 @@ where
     }
 
     pub async fn recv(&self) -> Result<Option<(State<S>, State<S>)>, RecvError> {
-        let res = self.recver().recv().await;
+        let res = { self.recver().lock().await.recv().await };
         match res {
             Ok(s) => {
                 let cache = self.cache();
