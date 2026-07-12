@@ -1,92 +1,126 @@
 # state-m
 ---
+## Summary
 The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components.
 
 ## Features
-* **Separation of read-write**, initiators and responders of state changes hold different data structures.
+* **Separation of read-write**, sources and readers of state changes hold different data structures.
 * **Duplicate filtering**, by default, duplicate states do not trigger state changes.
-* **State transition**, supports type conversion of subscription state changes.
-* **Timing control**, supports waiting for all responders to complete their responses.
+* **State transition**, supports type conversion of state.
+* **Timing control**, supports waiting for all readers to complete their work.
 
 ## Usage
-- Define 'Tag' enum to distinguish different initiators or responders, all initiators must use different tag values, all responders, and all responders do the same, a same tag value can be used by an initiator and a responder in the same state machine.
+- Define 'Tag' enum to distinguish different state handles(sources and readers), all handles must use different tag values.
+- Derive traits necessary: Clone, Debug, PartialEq, Eq, Hash.
+- Use 'state_tag' attribute macro to decorate the 'Tag' enum.
+- Add 'kv_assoc' attribute to all variants of the 'Tag' enum, use 'assoc' to associate corresponding state type.
 
 ```rust
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-enum Tag {
-    A,
-    B(usize)
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[state_tag]
+pub enum Tag {
+    #[kv_assoc(assoc = String)]
+    Inner(usize),
+    #[kv_assoc(assoc = String)]
+    Outer,
+    #[kv_assoc(assoc = MyState)]
+    OuterEx1,
+    #[kv_assoc(assoc = usize)]
+    OuterEx2,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MyState(usize);
+
+impl From<String> for MyState {
+    fn from(value: String) -> Self {
+        Self(value.len())
+    }
 }
 ```
 
-- Implement 'HasStateMachine' trait for you data structure, whether it's the initiator or responder of state change, maybe you should add some fields to your data structure.
+- Implement 'HasStateMachine' trait for you data structure.
 
 ```rust
-#[derive(Debug, Default)]
-struct Unit {
-    ...
+#[derive(Clone, Debug, Default)]
+pub struct Unit {
     state_machine: StateMachine<Tag>,
 }
 
-#[async_trait]
-impl HasStateMachine<Tag> for Unit {
-    async fn state_machine(&self) -> StateMachine<Tag> {
-        self.state_machine.clone()
+impl HasStateMachine for Unit {
+    type K = Tag;
+
+    fn state_machine(&self) -> &StateMachine<Self::K> {
+        &self.state_machine
     }
 }
 ```
 
-- If your data structure is also a responder of some state change, implement 'HasStateHandle' trait for your data structure. Then subscribe sources as needed. Unsubscription is optional, after your state machine is dropped, subscriptions are auto cleaned.
+- Add state sources to your state machine.
 
 ```rust
-#[async_trait]
-impl HasStateHandle<S, T, Tag> for Unit {
-    async fn on_change(
-        self: Arc<Self>,
-        tag: Tag,
-        new_value: T,
-        old_value: T,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        ...
-    }
+let unit = Unit::default();
+unit.add_source(TagInner(0), 10, |new, old| {
+    tracing::info!("new -- {}, old -- {}", new, old);
+    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+})
+.await?;
 ```
 
+- Add state readers to your state machine, to respond state changes from outer.
+- If the origin state type is not what you need, you can extend the reader to convert the state type as you want.
+- The state type must implements these traits: Clone, Debug, Default, PartialEq.
+
 ```rust
-unit_target
-    .clone()
-    .subscribe(unit_source.reader(&TagA::Hi).await, TagB::X)
-    .await;
-unit_target
-    .clone()
-    .subscribe::<String>(
-        unit_source
-            .reader_ex(&TagA::Hi, |s| Box::pin(async move { format!("Hi, {}", s) }))
-            .await,
-        TagB::Y,
+let unit_b = Unit::default();
+unit_b
+    .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
+        tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
+        Box::pin(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            Ok::<_, anyhow::Error>(())
+        })
+    })
+    .await?;
+unit_b
+    .add_reader(
+        TagOuterEx1,
+        unit_a.reader(TagInner(0))?.extend(10),
+        |new, old| {
+            tracing::info!("[unit_b] | new -- {:?}, old -- {:?}", new, old);
+            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+        },
     )
-    .await;
+    .await?;
+unit_b
+    .add_reader(
+        TagOuterEx2,
+        unit_a
+            .reader(TagInner(0))?
+            .extend_with(10, |s| Box::pin(async move { s.len() })),
+        |new, old| {
+            tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
+            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+        },
+    )
+    .await?;
 ```
 
-- Add state change initiators to your state machine, after added, you can get it from state machine by tag. Then change state as needed.
+- Source state changes as you want, use 'wait_' version of methods if you want to wait for all the responders to finish the work.
 
 ```rust
-// add source to state machine
-unit_source.add_source::<String>(TagA::Hi).await;
-unit_source.add_source_ex::<String>(TagA::Hi, 100, "Hello").await;
-// change state by need
-unit_source
-    .change::<String>(&TagA::Hi, "Wang".into())
-    .await?;
-unit_source.touch::<String>(&TagA::Hi).await?;
-unit_source
-    .modify(&TagA::Hi, |s| format!("Dear {}", s))
-    .await?;
-unit_source
-    .wait_change::<String>(&TagA::Hi, "Zhang".into())
-    .await?;
-unit_source
-    .wait_modify(&TagA::Hi, |s| format!("Dear {}", s))
-    .await?;
+for i in 0..10 {
+    unit.alter(TagInner(0), format!("{i}")).await?;
+    unit.wait_alter(TagInner(0), format!("[{i}]")).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+}
+for i in 0..10 {
+    unit.amend(TagInner(0), |v| format!("{v}_{}", i)).await?;
+    unit.wait_amend(TagInner(0), |v| format!("{v}_[{}]", i)).await?;
+    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+}
+unit.touch(TagInner(0)).await?;
+unit.wait_touch(TagInner(0)).await?;
 ```
 
 - Do unsubscrption as needed

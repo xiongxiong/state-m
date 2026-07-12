@@ -29,14 +29,14 @@ impl<S> Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    pub fn cache(&self) -> Arc<RwLock<State<S>>> {
+    fn cache(&self) -> Arc<RwLock<State<S>>> {
         match self {
             Handle::Source(_, _, c) => c.clone(),
             Handle::Reader(_, c) => c.clone(),
         }
     }
 
-    pub fn recver(&self) -> Arc<Mutex<Recver<StateEvent<S>>>> {
+    fn recver(&self) -> Arc<Mutex<Recver<StateEvent<S>>>> {
         match self {
             Handle::Source(source, _, _) => source.recver.clone(),
             Handle::Reader(reader, _) => reader.recver.clone(),
@@ -56,29 +56,27 @@ where
                 let s_old = (*guard).value.clone();
                 let s = f(s_old.clone());
                 if is_touch || s_old != s {
-                    let (event, wait_rx) = if wait_arrival {
-                        let (tx, rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
-                        let event = StateEvent {
-                            state: State {
-                                value: s,
-                                timestamp: Utc::now(),
-                            },
-                            is_touch,
-                            close_handle: Some(tx),
+                    let (event, wait_rx) = {
+                        let state = State {
+                            value: s,
+                            timestamp: Utc::now(),
                         };
-                        (event, Some(rx))
-                    } else {
-                        (
-                            StateEvent {
-                                state: State {
-                                    value: s,
-                                    timestamp: Utc::now(),
-                                },
+                        if wait_arrival {
+                            let (tx, rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
+                            let event = StateEvent {
+                                state,
+                                is_touch,
+                                close_handle: Some(tx),
+                            };
+                            (event, Some(rx))
+                        } else {
+                            let event = StateEvent {
+                                state,
                                 is_touch,
                                 close_handle: None,
-                            },
-                            None,
-                        )
+                            };
+                            (event, None)
+                        }
                     };
                     let state = event.state.clone();
                     let recver_count = source.sender.send(event)?;
@@ -110,15 +108,15 @@ where
     pub async fn recv(&self) -> Result<Option<(State<S>, State<S>)>, RecvError> {
         let res = { self.recver().lock().await.recv().await };
         match res {
-            Ok(s) => {
+            Ok(r) => {
                 let cache = self.cache();
                 let s_old = { cache.read().await.clone() };
-                if s.is_touch || s.state.value != s_old.value {
-                    tracing::debug!("recv -- {s:?}");
+                if r.is_touch || r.state.value != s_old.value {
+                    tracing::debug!("recv -- {:?}", r.state);
                     {
-                        *cache.write().await = s.state.clone();
+                        *cache.write().await = r.state.clone();
                     }
-                    Ok(Some((s.state, s_old)))
+                    Ok(Some((r.state, s_old)))
                 } else {
                     Ok(None)
                 }

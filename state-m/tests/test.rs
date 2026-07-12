@@ -7,8 +7,10 @@ pub enum Tag {
     Inner(usize),
     #[kv_assoc(assoc = String)]
     Outer,
+    #[kv_assoc(assoc = MyState)]
+    OuterEx1,
     #[kv_assoc(assoc = usize)]
-    OuterEx,
+    OuterEx2,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -21,6 +23,15 @@ impl HasStateMachine for Unit {
 
     fn state_machine(&self) -> &StateMachine<Self::K> {
         &self.state_machine
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MyState(usize);
+
+impl From<String> for MyState {
+    fn from(value: String) -> Self {
+        Self(value.len())
     }
 }
 
@@ -95,7 +106,17 @@ mod tests {
         let unit_b = Unit::default();
         unit_b
             .add_reader(
-                TagOuterEx,
+                TagOuterEx1,
+                unit_a.reader(TagInner(0))?.extend(10),
+                |new, old| {
+                    tracing::info!("[unit_b] | new -- {:?}, old -- {:?}", new, old);
+                    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+                },
+            )
+            .await?;
+        unit_b
+            .add_reader(
+                TagOuterEx2,
                 unit_a
                     .reader(TagInner(0))?
                     .extend_with(10, |s| Box::pin(async move { s.len() })),
@@ -108,6 +129,35 @@ mod tests {
         unit_a.alter(TagInner(0), "Hello".into()).await?;
         unit_a.alter(TagInner(0), "Workspace".into()).await?;
         unit_a.wait_alter(TagInner(0), "Love".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_delete() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .init();
+        let unit_a = Unit::default();
+        unit_a
+            .add_source(TagInner(0), 10, |new, old| {
+                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
+                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+            })
+            .await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
+                tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
+                Box::pin(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    Ok::<_, anyhow::Error>(())
+                })
+            })
+            .await?;
+        unit_a.wait_alter(TagInner(0), "A".into()).await?;
+        unit_a.wait_alter(TagInner(0), "B".into()).await?;
+        unit_b.del_handle(&TagOuter);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
         Ok(())
     }
 }

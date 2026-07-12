@@ -43,7 +43,7 @@ where
                     res = rx_o.recv() => {
                         match res {
                             Ok(s) => {
-                                tracing::trace!("recv -- {:?}", s);
+                                tracing::trace!("recv -- {:?}", s.state);
                                 let s_new = StateEvent {
                                     state: State {
                                         value: f(s.state.value).await,

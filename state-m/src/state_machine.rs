@@ -58,18 +58,20 @@ where
     }
 
     /// Add state reader into state machine.
-    fn new_reader<T>(&self, tag: T, reader: Reader<T::Value>)
+    fn new_reader<T>(&self, tag: T, reader: Reader<T::Value>) -> Result<(), AddHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
         let k = tag.clone().into();
-        if !self.contains_key(&k) {
-            self.insert(
-                k,
-                Box::new(Arc::new(Handle::Reader(reader, Default::default()))),
-            );
+        if self.contains_key(&k) {
+            return Err(AddHandleError::AlreadyExist(tag));
         }
+        self.insert(
+            k,
+            Box::new(Arc::new(Handle::Reader(reader, Default::default()))),
+        );
+        Ok(())
     }
 
     #[instrument(level = "trace", skip(self, on_change))]
@@ -123,7 +125,7 @@ where
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        self.new_reader(tag.clone(), reader);
+        self.new_reader(tag.clone(), reader)?;
         self.subscribe(tag, on_change).await
     }
 }
@@ -133,7 +135,7 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<T>>
+    fn new_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
@@ -156,9 +158,19 @@ where
     /// Remove state source from state machine.
     fn del_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<K>,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc,
+        T::Value: AsSourceState,
     {
-        self.remove(&tag.clone().into()).is_some()
+        match self.remove(&tag.clone().into()) {
+            Some((_, v)) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+                Some(h) => {
+                    // _ = h.close();
+                    true
+                }
+                None => true,
+            },
+            None => false,
+        }
     }
 
     /// If state source of tag exists in state machine.
@@ -277,7 +289,8 @@ pub trait UseStateMachine: HasStateMachine {
 
     fn del_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<Self::K>;
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
+        T::Value: AsSourceState;
 
     fn has_handle<T>(&self, tag: &T) -> bool
     where
@@ -374,14 +387,15 @@ where
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        self.state_machine().add_source(tag.clone(), capacity)?;
+        self.state_machine().new_source(tag.clone(), capacity)?;
         self.state_machine().subscribe(tag, on_change).await?;
         Ok(())
     }
 
     fn del_handle<T>(&self, tag: &T) -> bool
     where
-        T: Clone + Into<Self::K>,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
+        T::Value: AsSourceState,
     {
         self.state_machine().del_handle(tag)
     }
