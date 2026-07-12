@@ -67,10 +67,7 @@ where
         if self.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag));
         }
-        self.insert(
-            k,
-            Box::new(Arc::new(Handle::Reader(reader, Default::default()))),
-        );
+        self.insert(k, Box::new(Arc::new(Handle::from_reader(reader))));
         Ok(())
     }
 
@@ -146,11 +143,9 @@ where
         }
         self.insert(
             k,
-            Box::new(Arc::new(Handle::Source(
-                Source::<T::Value>::new(capacity),
-                Default::default(),
-                Default::default(),
-            ))),
+            Box::new(Arc::new(Handle::from_source(Source::<T::Value>::new(
+                capacity,
+            )))),
         );
         Ok(())
     }
@@ -164,7 +159,7 @@ where
         match self.remove(&tag.clone().into()) {
             Some((_, v)) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
                 Some(h) => {
-                    // _ = h.close();
+                    h.close();
                     true
                 }
                 None => true,

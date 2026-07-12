@@ -123,10 +123,8 @@ unit.touch(TagInner(0)).await?;
 unit.wait_touch(TagInner(0)).await?;
 ```
 
-- Do unsubscrption as needed
+- Remove state handle as needed
 
 ```rust
-unit_target.unsubscribe::<String>(&TagB::X).await;
-unit_target.unsubscribe::<String>(&TagB::Y).await;
-unit_source.del_source(&TagA::Hi).await;
+unit_b.del_handle(&TagOuter);
 ```

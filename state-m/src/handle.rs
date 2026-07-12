@@ -6,40 +6,47 @@ use crate::{
 use chrono::Utc;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{
-    Mutex,
-    broadcast::{
-        Receiver as Recver,
-        error::{RecvError, SendError},
+use tokio::sync::{RwLock, mpsc};
+use tokio::{
+    select,
+    sync::{
+        Mutex,
+        broadcast::{
+            Receiver as Recver,
+            error::{RecvError, SendError},
+        },
     },
 };
-use tokio::sync::{RwLock, mpsc};
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 #[derive(Clone, Debug)]
-pub(crate) enum Handle<S>
+pub(crate) struct Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    Source(Source<S>, Arc<RwLock<State<S>>>, Arc<RwLock<State<S>>>),
-    Reader(Reader<S>, Arc<RwLock<State<S>>>),
+    inner: HandleI<S>,
+    cache: Arc<RwLock<State<S>>>,
+    cancel_token: CancellationToken,
+}
+
+#[derive(Clone, Debug)]
+enum HandleI<S>
+where
+    S: 'static + AsSourceState,
+{
+    Source(Source<S>, Arc<RwLock<State<S>>>),
+    Reader(Reader<S>),
 }
 
 impl<S> Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    fn cache(&self) -> Arc<RwLock<State<S>>> {
-        match self {
-            Handle::Source(_, _, c) => c.clone(),
-            Handle::Reader(_, c) => c.clone(),
-        }
-    }
-
     fn recver(&self) -> Arc<Mutex<Recver<StateEvent<S>>>> {
-        match self {
-            Handle::Source(source, _, _) => source.recver.clone(),
-            Handle::Reader(reader, _) => reader.recver.clone(),
+        match self.inner {
+            HandleI::Source(ref source, _) => source.recver.clone(),
+            HandleI::Reader(ref reader) => reader.recver.clone(),
         }
     }
 
@@ -50,8 +57,8 @@ where
         is_touch: bool,
         wait_arrival: bool,
     ) -> Result<(), StateChangeError<S>> {
-        match self {
-            Handle::Source(source, cache, _) => {
+        match self.inner {
+            HandleI::Source(ref source, ref cache) => {
                 let mut guard = cache.write().await;
                 let s_old = (*guard).value.clone();
                 let s = f(s_old.clone());
@@ -88,7 +95,7 @@ where
                     }
                 }
             }
-            Handle::Reader(_, _) => return Err(StateChangeError::StateReadOnly),
+            HandleI::Reader(_) => return Err(StateChangeError::StateReadOnly),
         }
         Ok(())
     }
@@ -98,23 +105,45 @@ impl<S> Handle<S>
 where
     S: 'static + AsSourceState,
 {
+    pub fn from_source(source: Source<S>) -> Self {
+        Self {
+            inner: HandleI::Source(source, Default::default()),
+            cache: Default::default(),
+            cancel_token: Default::default(),
+        }
+    }
+
+    pub fn from_reader(reader: Reader<S>) -> Self {
+        Self {
+            inner: HandleI::Reader(reader),
+            cache: Default::default(),
+            cancel_token: Default::default(),
+        }
+    }
+
     pub fn reader(&self) -> Reader<S> {
-        match self {
-            Handle::Source(source, _, _) => source.reader(),
-            Handle::Reader(reader, _) => reader.clone(),
+        match self.inner {
+            HandleI::Source(ref source, _) => source.reader(),
+            HandleI::Reader(ref reader) => reader.clone(),
         }
     }
 
     pub async fn recv(&self) -> Result<Option<(State<S>, State<S>)>, RecvError> {
-        let res = { self.recver().lock().await.recv().await };
+        let res = {
+            let recver = self.recver();
+            let mut guard = recver.lock().await;
+            select! {
+                _ = self.cancel_token.cancelled() => Err(RecvError::Closed),
+                res = (*guard).recv() => res
+            }
+        };
         match res {
             Ok(r) => {
-                let cache = self.cache();
-                let s_old = { cache.read().await.clone() };
+                let s_old = { self.cache.read().await.clone() };
                 if r.is_touch || r.state.value != s_old.value {
                     tracing::debug!("recv -- {:?}", r.state);
                     {
-                        *cache.write().await = r.state.clone();
+                        *self.cache.write().await = r.state.clone();
                     }
                     Ok(Some((r.state, s_old)))
                 } else {
@@ -125,12 +154,16 @@ where
         }
     }
 
+    pub fn close(&self) {
+        self.cancel_token.cancel();
+    }
+
     pub async fn value(&self) -> S {
-        self.cache().read().await.value.clone()
+        self.cache.read().await.value.clone()
     }
 
     pub async fn state(&self) -> State<S> {
-        self.cache().read().await.clone()
+        self.cache.read().await.clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {

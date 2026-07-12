@@ -18,6 +18,7 @@ inventory = "0.3"
 state-m-macro = "0.1"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["macros", "rt", "sync"] }
+tokio-util = "0.7"
 tracing = "0.1"
 
 [dev-dependencies]
