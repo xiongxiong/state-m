@@ -3,8 +3,10 @@ resolver = "3"
 
 members = [
     "state-m",
-    "state-m-macro"
+    "state-m-macro",
+    "state-m-test"
 ]
 
 [patch.crates-io]
+state-m = { path = "state-m" }
 state-m-macro = { path = "state-m-macro" }

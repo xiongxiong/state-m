@@ -1,12 +1,12 @@
 use macro_tools::{
-    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, ct, qt,
-    return_syn_err, syn_err,
+    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn,
+    Itertools, ct, qt, return_syn_err, syn_err,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, ExprClosure, ReturnType, Token, Type, parenthesized,
+    Attribute, DeriveInput, ExprClosure, Index, ReturnType, Token, Type, parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -131,27 +131,73 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
                 let q_attrs = q_attrs_except(&item.attrs, KvAssocArgs::KEYWORD);
-                let ident = &item.ident;
-                let fields = &item.fields;
-                let q_name = format_ident!("{}{}", i_ident, ident);
-                let q = match fields {
+                let v_ident = &item.ident;
+                let v_fields = &item.fields;
+                let t_name = format_ident!("{}{}", i_ident, v_ident);
+                let q = match v_fields {
                     syn::Fields::Named(fields_named) => quote! {
-                        #q_attrs #i_vis struct #q_name #fields_named
+                        #q_attrs #i_vis struct #t_name #fields_named
                     },
                     syn::Fields::Unnamed(fields_unnamed) => quote! {
-                        #q_attrs #i_vis struct #q_name #fields_unnamed;
+                        #q_attrs #i_vis struct #t_name #fields_unnamed;
                     },
                     syn::Fields::Unit => quote! {
-                        #q_attrs #i_vis struct #q_name;
+                        #q_attrs #i_vis struct #t_name;
                     },
                 };
                 quotes.push(q);
+
+                let q_fr = match v_fields {
+                    syn::Fields::Named(fields_named) => {
+                        let mut q_params: Vec<TokenStream2> = fields_named
+                            .named
+                            .iter()
+                            .map(|field| {
+                                let ident = match field.ident {
+                                    Some(ref ident) => ident.clone(),
+                                    None => panic!("field should be named"),
+                                };
+                                vec![quote! {#ident: value.#ident}, quote! {,}]
+                            })
+                            .flatten()
+                            .collect();
+                        q_params.pop();
+                        quote! {
+                            #i_ident::#v_ident{#(#q_params)*}
+                        }
+                    }
+                    syn::Fields::Unnamed(fields_unnamed) => {
+                        let len = fields_unnamed.unnamed.len();
+                        let mut q_params: Vec<TokenStream2> = (0..len)
+                            .map(|i| {
+                                let idx = Index::from(i);
+                                vec![quote! {value.#idx}, quote! {,}]
+                            })
+                            .flatten()
+                            .collect();
+                        q_params.pop();
+                        quote! {
+                            #i_ident::#v_ident(#(#q_params)*)
+                        }
+                    }
+                    syn::Fields::Unit => quote! {
+                        #i_ident::#v_ident
+                    },
+                };
+                let q_f = quote! {
+                    impl From<#t_name> for #i_ident {
+                        fn from(value: #t_name) -> #i_ident {
+                            #q_fr
+                        }
+                    }
+                };
+                quotes.push(q_f);
 
                 let args = kv_assoc_args(&item.attrs);
                 match args.assoc.internal() {
                     Some(typ) => {
                         quotes.push(quote! {
-                            impl KvAssoc for #q_name {
+                            impl state_m::KvAssoc for #t_name {
                                 type Value = #typ;
                             }
                         });
@@ -182,7 +228,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 Some(typ) => {
                     quotes.push(quote! {
                         #q_attrs #i_vis struct #i_ident #fields #semi_colon
-                        impl KvAssoc for #i_ident {
+                        impl state_m::KvAssoc for #i_ident {
                             type Value = #typ;
                         }
                     });

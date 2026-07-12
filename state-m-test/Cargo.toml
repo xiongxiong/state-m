@@ -1,0 +1,10 @@
+[package]
+name = "state-m-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+state-m = "0.5"
+
+[features]
+default = []
