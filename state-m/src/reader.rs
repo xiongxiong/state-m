@@ -1,5 +1,5 @@
 use crate::state::{State, StateEvent};
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::OnceLock};
 use tokio::{
     select,
     sync::{
@@ -8,13 +8,14 @@ use tokio::{
     },
 };
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Reader<S>
 where
     S: 'static + Clone + Debug + Default + PartialEq,
 {
-    pub(crate) sender: Arc<Sender<StateEvent<S>>>,
-    pub(crate) recver: Arc<Mutex<Receiver<StateEvent<S>>>>,
+    pub(crate) capacity: usize,
+    pub(crate) sender: Sender<StateEvent<S>>,
+    pub(crate) recver: Mutex<OnceLock<Receiver<StateEvent<S>>>>,
 }
 
 impl<S> Reader<S>
@@ -69,9 +70,12 @@ where
                 }
             }
         });
+        let once = OnceLock::new();
+        once.set(rx).expect("should not happen");
         Reader {
-            sender: Arc::new(tx),
-            recver: Arc::new(Mutex::new(rx)),
+            capacity: self.capacity,
+            sender: tx,
+            recver: Mutex::new(once),
         }
     }
 }

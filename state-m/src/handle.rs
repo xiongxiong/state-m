@@ -4,15 +4,23 @@ use crate::{
     state::{State, StateEvent},
 };
 use chrono::Utc;
-use std::sync::Arc;
+use std::{
+    fmt::Debug,
+    pin::Pin,
+    sync::{Arc, OnceLock},
+};
 use thiserror::Error;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{
+    RwLock,
+    broadcast::{Sender, channel},
+    mpsc,
+};
 use tokio::{
     select,
     sync::{
         Mutex,
         broadcast::{
-            Receiver as Recver,
+            Receiver,
             error::{RecvError, SendError},
         },
     },
@@ -20,7 +28,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct Handle<S>
 where
     S: 'static + AsSourceState,
@@ -28,9 +36,10 @@ where
     inner: HandleI<S>,
     cache: Arc<RwLock<State<S>>>,
     cancel_token: CancellationToken,
+    fanout_tx: OnceLock<Sender<(State<S>, State<S>)>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 enum HandleI<S>
 where
     S: 'static + AsSourceState,
@@ -43,10 +52,27 @@ impl<S> Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    fn recver(&self) -> Arc<Mutex<Recver<StateEvent<S>>>> {
+    fn capacity(&self) -> usize {
         match self.inner {
-            HandleI::Source(ref source, _) => source.recver.clone(),
-            HandleI::Reader(ref reader) => reader.recver.clone(),
+            HandleI::Source(ref source, _) => source.capacity,
+            HandleI::Reader(ref reader) => reader.capacity,
+        }
+    }
+
+    async fn recver(&self) -> Receiver<StateEvent<S>> {
+        match self.inner {
+            HandleI::Source(ref source, _) => source
+                .recver
+                .lock()
+                .await
+                .take()
+                .unwrap_or(source.sender.subscribe()),
+            HandleI::Reader(ref reader) => reader
+                .recver
+                .lock()
+                .await
+                .take()
+                .unwrap_or(reader.sender.subscribe()),
         }
     }
 
@@ -110,6 +136,7 @@ where
             inner: HandleI::Source(source, Default::default()),
             cache: Default::default(),
             cancel_token: Default::default(),
+            fanout_tx: OnceLock::new(),
         }
     }
 
@@ -118,39 +145,23 @@ where
             inner: HandleI::Reader(reader),
             cache: Default::default(),
             cancel_token: Default::default(),
+            fanout_tx: OnceLock::new(),
         }
     }
 
     pub fn reader(&self) -> Reader<S> {
         match self.inner {
             HandleI::Source(ref source, _) => source.reader(),
-            HandleI::Reader(ref reader) => reader.clone(),
-        }
-    }
-
-    pub async fn recv(&self) -> Result<Option<(State<S>, State<S>)>, RecvError> {
-        let res = {
-            let recver = self.recver();
-            let mut guard = recver.lock().await;
-            select! {
-                _ = self.cancel_token.cancelled() => Err(RecvError::Closed),
-                res = (*guard).recv() => res
-            }
-        };
-        match res {
-            Ok(r) => {
-                let s_old = { self.cache.read().await.clone() };
-                if r.is_touch || r.state.value != s_old.value {
-                    tracing::debug!("recv -- {:?}", r.state);
-                    {
-                        *self.cache.write().await = r.state.clone();
-                    }
-                    Ok(Some((r.state, s_old)))
-                } else {
-                    Ok(None)
+            HandleI::Reader(ref reader) => {
+                let once = OnceLock::new();
+                once.set(reader.sender.subscribe())
+                    .expect("should not happen");
+                Reader {
+                    capacity: reader.capacity,
+                    sender: reader.sender.clone(),
+                    recver: Mutex::new(once),
                 }
             }
-            Err(e) => Err(e),
         }
     }
 
@@ -188,6 +199,79 @@ where
 
     pub async fn wait_amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
         self.inner_change(f, false, false).await
+    }
+}
+
+impl<S> Handle<S>
+where
+    S: 'static + AsSourceState + Send + Sync,
+{
+    pub async fn init<T>(&self, tag: T)
+    where
+        T: 'static + Debug + Send,
+    {
+        let cache = self.cache.clone();
+        let cancel_token = self.cancel_token.clone();
+        let mut recver = self.recver().await;
+        let (fanout_tx, mut fanout_rx) = channel(self.capacity());
+        self.fanout_tx
+            .set(fanout_tx.clone())
+            .expect("The 'init' method can only be called once.");
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    _ = cancel_token.cancelled() => break,
+                    _ = fanout_rx.recv() => {},
+                    res = recver.recv() => {
+                        match res {
+                            Ok(e) => {
+                                let s_old = { cache.read().await.clone() };
+                                let s_new = e.state.clone();
+                                if e.is_touch || s_new.value != s_old.value {
+                                    tracing::debug!("{tag:?} | recv -- {:?}", s_new);
+                                    {
+                                        *cache.write().await = s_new.clone();
+                                    }
+                                    _ = fanout_tx.send((s_new, s_old));
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    pub async fn watch<F>(&self, func: F)
+    where
+        F: 'static
+            + Fn(State<S>, State<S>) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
+    {
+        let cancel_token = self.cancel_token.clone();
+        let mut recver = self
+            .fanout_tx
+            .get()
+            .expect("The field 'fanout_tx' should have been set.")
+            .subscribe();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    _ = cancel_token.cancelled() => break,
+                    res = recver.recv() => {
+                        match res {
+                            Ok((s_new, s_old)) => {
+                                if let Err(e) = func(s_new, s_old).await {
+                                    tracing::error!("watch error -- {e:?}");
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                }
+            }
+        });
     }
 }
 

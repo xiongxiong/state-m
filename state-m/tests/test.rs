@@ -46,11 +46,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit = Unit::default();
-        unit.add_source(TagInner(0), 10, |new, old| {
-            tracing::info!("new -- {}, old -- {}", new, old);
-            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-        })
-        .await?;
+        unit.add_source(TagInner(0), 10).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
@@ -69,21 +65,10 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a
-            .add_source(TagInner(0), 10, |new, old| {
-                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
-                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-            })
-            .await?;
+        unit_a.add_source(TagInner(0), 10).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
-                tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
-                Box::pin(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    Ok::<_, anyhow::Error>(())
-                })
-            })
+            .add_reader(TagOuter, unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
@@ -97,22 +82,10 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a
-            .add_source(TagInner(0), 10, |new, old| {
-                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
-                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-            })
-            .await?;
+        unit_a.add_source(TagInner(0), 10).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(
-                TagOuterEx1,
-                unit_a.reader(TagInner(0))?.extend(10),
-                |new, old| {
-                    tracing::info!("[unit_b] | new -- {:?}, old -- {:?}", new, old);
-                    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-                },
-            )
+            .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.extend(10))
             .await?;
         unit_b
             .add_reader(
@@ -120,10 +93,6 @@ mod tests {
                 unit_a
                     .reader(TagInner(0))?
                     .extend_with(10, |s| Box::pin(async move { s.len() })),
-                |new, old| {
-                    tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
-                    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-                },
             )
             .await?;
         unit_a.alter(TagInner(0), "Hello".into()).await?;
@@ -138,21 +107,10 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a
-            .add_source(TagInner(0), 10, |new, old| {
-                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
-                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-            })
-            .await?;
+        unit_a.add_source(TagInner(0), 10).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
-                tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
-                Box::pin(async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    Ok::<_, anyhow::Error>(())
-                })
-            })
+            .add_reader(TagOuter, unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
