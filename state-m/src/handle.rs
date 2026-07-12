@@ -79,12 +79,13 @@ where
                             None,
                         )
                     };
-                    source.sender.send(event.clone()).await?;
-                    *guard = event.state.clone();
-                    tracing::debug!("send -- {:?}", event);
+                    let state = event.state.clone();
+                    source.sender.send(event).await?;
+                    *guard = state.clone();
+                    tracing::debug!("{} | send -- {:?}", source.sender.get_rx_count(), state);
                     if let Some(rx) = wait_rx {
-                        rx.recv().await?;
-                        tracing::debug!("done -- {:?}", event);
+                        _ = rx.recv().await;
+                        tracing::debug!("done -- {:?}", state);
                     }
                 }
             }

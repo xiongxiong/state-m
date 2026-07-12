@@ -14,7 +14,7 @@ use tracing::instrument;
 /// StateMachine: data structure to store handles.
 /// - K - to distinguish different handles.
 #[derive(Clone, Debug)]
-pub struct StateMachine<K>(Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>)
+pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn Any + Send + Sync>>>)
 where
     K: AsTag;
 
@@ -31,7 +31,7 @@ impl<K> Deref for StateMachine<K>
 where
     K: AsTag,
 {
-    type Target = Arc<DashMap<K, Arc<dyn Any + Send + Sync>>>;
+    type Target = Arc<DashMap<K, Box<dyn Any + Send + Sync>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -42,14 +42,14 @@ impl<K> StateMachine<K>
 where
     K: AsTag,
 {
-    fn handle<T>(&self, tag: T) -> Result<Handle<T::Value>, GetHandleError<T>>
+    fn handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: AsSourceState,
     {
         let k = tag.clone().into();
         match self.get(&k) {
-            Some(v) => match v.downcast_ref::<Handle<T::Value>>() {
+            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
             },
@@ -65,7 +65,10 @@ where
     {
         let k = tag.clone().into();
         if !self.contains_key(&k) {
-            self.insert(k, Arc::new(Handle::Reader(reader, Default::default())));
+            self.insert(
+                k,
+                Box::new(Arc::new(Handle::Reader(reader, Default::default()))),
+            );
         }
     }
 
@@ -141,11 +144,11 @@ where
         }
         self.insert(
             k,
-            Arc::new(Handle::Source(
+            Box::new(Arc::new(Handle::Source(
                 Source::<T::Value>::new(),
                 Default::default(),
                 Default::default(),
-            )),
+            ))),
         );
         Ok(())
     }
