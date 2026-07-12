@@ -5,7 +5,7 @@ use crate::{
 };
 use chrono::Utc;
 use crossfire::{
-    MAsyncRx, MAsyncTx, RecvError, SendError,
+    MAsyncRx, RecvError, SendError,
     mpmc::{self, List},
     null::CloseHandle,
 };
@@ -19,7 +19,7 @@ pub(crate) enum Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    Source(Source<S>, Arc<RwLock<State<S>>>),
+    Source(Source<S>, Arc<RwLock<State<S>>>, Arc<RwLock<State<S>>>),
     Reader(Reader<S>, Arc<RwLock<State<S>>>),
 }
 
@@ -29,21 +29,14 @@ where
 {
     pub fn cache(&self) -> Arc<RwLock<State<S>>> {
         match self {
-            Handle::Source(_, c) => c.clone(),
+            Handle::Source(_, _, c) => c.clone(),
             Handle::Reader(_, c) => c.clone(),
-        }
-    }
-
-    pub fn sender(&self) -> Result<MAsyncTx<List<StateEvent<S>>>, StateChangeError<S>> {
-        match self {
-            Handle::Source(source, _) => Ok(source.sender.clone()),
-            Handle::Reader(_, _) => Err(StateChangeError::StateReadOnly),
         }
     }
 
     pub fn recver(&self) -> &MAsyncRx<List<StateEvent<S>>> {
         match self {
-            Handle::Source(source, _) => &source.recver,
+            Handle::Source(source, _, _) => &source.recver,
             Handle::Reader(reader, _) => &reader.recver,
         }
     }
@@ -55,43 +48,47 @@ where
         is_touch: bool,
         wait_arrival: bool,
     ) -> Result<(), StateChangeError<S>> {
-        let cache = self.cache();
-        let mut guard = cache.write().await;
-        let s_old = (*guard).value.clone();
-        let s = f(s_old.clone());
-        if is_touch || s_old != s {
-            let (event, wait_rx) = if wait_arrival {
-                let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
-                    mpmc::Null::new().new_async();
-                let event = StateEvent {
-                    state: State {
-                        value: s,
-                        timestamp: Utc::now(),
-                    },
-                    is_touch,
-                    close_handle: Some(tx),
-                };
-                (event, Some(rx))
-            } else {
-                (
-                    StateEvent {
-                        state: State {
-                            value: s,
-                            timestamp: Utc::now(),
-                        },
-                        is_touch,
-                        close_handle: None,
-                    },
-                    None,
-                )
-            };
-            self.sender()?.send(event.clone()).await?;
-            *guard = event.state.clone();
-            tracing::debug!("send -- {:?}", event);
-            if let Some(rx) = wait_rx {
-                rx.recv().await?;
-                tracing::debug!("done -- {:?}", event);
+        match self {
+            Handle::Source(source, cache, _) => {
+                let mut guard = cache.write().await;
+                let s_old = (*guard).value.clone();
+                let s = f(s_old.clone());
+                if is_touch || s_old != s {
+                    let (event, wait_rx) = if wait_arrival {
+                        let (tx, rx): (CloseHandle<mpmc::Null>, MAsyncRx<mpmc::Null>) =
+                            mpmc::Null::new().new_async();
+                        let event = StateEvent {
+                            state: State {
+                                value: s,
+                                timestamp: Utc::now(),
+                            },
+                            is_touch,
+                            close_handle: Some(tx),
+                        };
+                        (event, Some(rx))
+                    } else {
+                        (
+                            StateEvent {
+                                state: State {
+                                    value: s,
+                                    timestamp: Utc::now(),
+                                },
+                                is_touch,
+                                close_handle: None,
+                            },
+                            None,
+                        )
+                    };
+                    source.sender.send(event.clone()).await?;
+                    *guard = event.state.clone();
+                    tracing::debug!("send -- {:?}", event);
+                    if let Some(rx) = wait_rx {
+                        rx.recv().await?;
+                        tracing::debug!("done -- {:?}", event);
+                    }
+                }
             }
+            Handle::Reader(_, _) => return Err(StateChangeError::StateReadOnly),
         }
         Ok(())
     }
@@ -103,7 +100,7 @@ where
 {
     pub fn reader(&self) -> Reader<S> {
         match self {
-            Handle::Source(source, _) => source.reader(),
+            Handle::Source(source, _, _) => source.reader(),
             Handle::Reader(reader, _) => reader.clone(),
         }
     }

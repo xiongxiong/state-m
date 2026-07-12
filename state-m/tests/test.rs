@@ -40,6 +40,7 @@ mod tests {
         .await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         Ok(())
