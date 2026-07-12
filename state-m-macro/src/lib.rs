@@ -29,9 +29,13 @@ impl Parse for OnChangeInput {
 }
 
 #[proc_macro]
-pub fn on_change(item: TokenStream) -> TokenStream {
+pub fn subscribe(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as OnChangeInput);
-    let q_decl: Vec<TokenStream2> = input
+    let closure = input.closure;
+    let q_tags: Vec<_> =
+        iter_tools::intersperse(input.tags.iter().map(|t| quote! {#t.clone()}), quote! {,})
+            .collect();
+    let q_decl: Vec<_> = input
         .tags
         .iter()
         .enumerate()
@@ -42,18 +46,31 @@ pub fn on_change(item: TokenStream) -> TokenStream {
             }
         })
         .collect();
-    let q_sels: Vec<TokenStream2> = input
+    let q_vals: Vec<_> = iter_tools::intersperse(
+        input.tags.iter().enumerate().map(|(i, _)| {
+            let ident_handle = format_ident!("handle{}", i);
+            quote! {
+                (#ident_handle.state(), #ident_handle.state())
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let q_sels: Vec<_> = input
         .tags
         .iter()
         .enumerate()
         .map(|(i, t)| {
             let ident_handle = format_ident!("handle{}", i);
+            let idx = Index::from(i);
             quote! {
                 res = #ident_handle.recv() => {
                     match res {
-                        Ok(Some((v_new, v_old))) => {
-                            if let Err(e) = on_change(v_new, v_old).await {
-                                tracing::error!("StateM | on_change error -- {:?}", e);
+                        Ok(Some(s)) => {
+                            let mut tuple = (#(#q_vals)*);
+                            tuple.#idx = s;
+                            if let Err(e) = on_change(tuple, #t.into()).await {
+                                tracing::error!("on_change error -- {:?}", e);
                             }
                         },
                         Err(_) => break,
@@ -65,13 +82,17 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .collect();
     quote! {
         {
+            let tags = (#(#q_tags)*);
+            let on_change = #closure;
             #(#q_decl)*
             tokio::spawn(async move {
+                tracing::info!("watch [{:?}] - start", tags);
                 loop {
                     tokio::select! {
-
+                        #(#q_sels)*
                     }
                 }
+                tracing::info!("watch [{:?}] - end", tags);
             });
         }
     }
@@ -167,7 +188,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let i_attrs = &input.attrs;
     let i_ident = &input.ident;
     let i_vis = &input.vis;
-    let mut quotes: Vec<TokenStream2> = Vec::new();
+    let mut quotes: Vec<_> = Vec::new();
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
@@ -190,33 +211,31 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 let q_fr = match v_fields {
                     syn::Fields::Named(fields_named) => {
-                        let mut q_params: Vec<TokenStream2> = fields_named
-                            .named
-                            .iter()
-                            .map(|field| {
+                        let q_params: Vec<_> = iter_tools::intersperse(
+                            fields_named.named.iter().map(|field| {
                                 let ident = match field.ident {
                                     Some(ref ident) => ident.clone(),
                                     None => panic!("field should be named"),
                                 };
-                                vec![quote! {#ident: value.#ident}, quote! {,}]
-                            })
-                            .flatten()
-                            .collect();
-                        q_params.pop();
+                                quote! {#ident: value.#ident}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
                         quote! {
                             #i_ident::#v_ident{#(#q_params)*}
                         }
                     }
                     syn::Fields::Unnamed(fields_unnamed) => {
                         let len = fields_unnamed.unnamed.len();
-                        let mut q_params: Vec<TokenStream2> = (0..len)
-                            .map(|i| {
+                        let q_params: Vec<_> = iter_tools::intersperse(
+                            (0..len).map(|i| {
                                 let idx = Index::from(i);
-                                vec![quote! {value.#idx}, quote! {,}]
-                            })
-                            .flatten()
-                            .collect();
-                        q_params.pop();
+                                quote! {value.#idx}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
                         quote! {
                             #i_ident::#v_ident(#(#q_params)*)
                         }
@@ -313,7 +332,7 @@ fn attrs_except(attrs: &Vec<Attribute>, except: &str) -> Vec<Attribute> {
 
 fn q_attrs_except(attrs: &Vec<Attribute>, except: &str) -> TokenStream2 {
     let attrs_n: Vec<_> = attrs_except(attrs, except);
-    let mut qs: Vec<TokenStream2> = Vec::new();
+    let mut qs: Vec<_> = Vec::new();
     for attr in attrs_n {
         qs.push(quote! { #attr });
     }

@@ -1,11 +1,10 @@
 use crate::{
-    AsTag, KvAssoc, State, StateEvent,
+    AsTag, KvAssoc, State,
     handle::{Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::{AsSourceState, Source},
 };
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use std::{any::Any, fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
@@ -61,26 +60,10 @@ where
         }
     }
 
-    async fn on_event<T, A, C, F>(
-        &self,
-        tag: T,
-        s: StateEvent<T::Value>,
-        conv_s: C,
-        on_change: F,
-    ) -> Result<(), SubscribeError<T>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsSourceState + Send + Sync,
-        C: Fn(T::Value) -> A,
-        F: Fn(A, A, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>>>>,
-    {
-        Ok(())
-    }
-
     #[instrument(level = "trace", skip(self, on_change))]
     async fn subscribe<T, F>(&self, tag: T, on_change: F) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(
@@ -89,14 +72,15 @@ where
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
-        let handle = self.handle(tag)?;
+        let handle = self.handle(tag.clone())?;
         tokio::spawn(async move {
+            tracing::info!("watch [{:?}] - start", tag);
             loop {
                 select! {
                     res = handle.recv() => {
                         match res {
-                            Ok(Some((v_new, v_old))) => {
-                                if let Err(e) = on_change(v_new, v_old).await {
+                            Ok(Some((s_new, s_old))) => {
+                                if let Err(e) = on_change(s_new, s_old).await {
                                     tracing::error!("on_change error -- {:?}", e);
                                 }
                             },
@@ -106,6 +90,7 @@ where
                     }
                 }
             }
+            tracing::info!("watch [{:?}] - end", tag);
         });
         Ok(())
     }
@@ -117,7 +102,7 @@ where
         on_change: F,
     ) -> Result<(), SubscribeError<T>>
     where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
             + Fn(

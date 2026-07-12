@@ -12,11 +12,12 @@ license = "MIT"
 proc-macro = true
 
 [dependencies]
+iter_tools = "0.50"
+macro_tools = "0.88"
 proc-macro2 = "1.0"
 quote = "1.0"
 semver = "1.0"
 syn = "2.0"
-macro_tools = "0.88"
 
 [[test]]
 name = "test"

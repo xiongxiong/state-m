@@ -77,6 +77,12 @@ dependencies = [
 
 [[package]]
 name = "clone_dyn_types"
+version = "0.48.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5226d8fe69efe07200ea831d71b9d8fbfb1a894945fc4a44f41df17575de099f"
+
+[[package]]
+name = "clone_dyn_types"
 version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9595f703af06d206cb036b90fe3e94ae396e711f8d362a74ed3d90b2c87ba3cf"
@@ -255,6 +261,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "iter_tools"
+version = "0.50.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32403e96b23e11832956d1e989f5f9c0f2aa43bd8324c24f586dc0c8ccb1010e"
+dependencies = [
+ "clone_dyn_types 0.48.0",
+ "itertools",
+]
+
+[[package]]
 name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -316,7 +332,7 @@ version = "0.88.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4978a178ed253b7e8018930c2067660df5cd799c61cde1e71325d5a2131ac5fc"
 dependencies = [
- "clone_dyn_types",
+ "clone_dyn_types 0.50.0",
  "component_model_types",
  "const_format",
  "convert_case",
@@ -455,6 +471,7 @@ dependencies = [
 name = "state-m-macro"
 version = "0.1.0"
 dependencies = [
+ "iter_tools",
  "macro_tools",
  "proc-macro2",
  "quote",
