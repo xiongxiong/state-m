@@ -9,7 +9,7 @@ use crossfire::{
     mpmc::{self, List},
     null::CloseHandle,
 };
-use std::{fmt::Debug, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 use tracing::instrument;
@@ -137,27 +137,27 @@ where
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
-        self.inner_change(|s| s.clone(), false, false).await
+        self.inner_change(|s| s.clone(), true, false).await
     }
 
     pub async fn wait_touch(&self) -> Result<(), StateChangeError<S>> {
-        self.inner_change(|s| s.clone(), false, true).await
+        self.inner_change(|s| s.clone(), true, true).await
     }
 
     pub async fn alter(&self, s: S) -> Result<(), StateChangeError<S>> {
-        self.inner_change(|_| s, true, false).await
+        self.inner_change(|_| s, false, false).await
     }
 
     pub async fn wait_alter(&self, s: S) -> Result<(), StateChangeError<S>> {
-        self.inner_change(|_| s, true, true).await
+        self.inner_change(|_| s, false, true).await
     }
 
     pub async fn amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
-        self.inner_change(f, true, false).await
+        self.inner_change(f, false, false).await
     }
 
     pub async fn wait_amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
-        self.inner_change(f, true, false).await
+        self.inner_change(f, false, false).await
     }
 }
 

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use crossfire::{mpmc::Null, null::CloseHandle};
 use derivative::Derivative;
+use std::fmt::Display;
 
 #[derive(Clone, Debug)]
 pub struct State<S>
@@ -20,6 +21,15 @@ where
             value: Default::default(),
             timestamp: Utc::now(),
         }
+    }
+}
+
+impl<S> Display for State<S>
+where
+    S: Display + Default,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}, {})", self.value, self.timestamp)
     }
 }
 

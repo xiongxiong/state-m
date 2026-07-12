@@ -198,12 +198,15 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
                 let q = match v_fields {
                     syn::Fields::Named(fields_named) => quote! {
+                        #[derive(Clone, Debug)]
                         #q_attrs #i_vis struct #t_name #fields_named
                     },
                     syn::Fields::Unnamed(fields_unnamed) => quote! {
+                        #[derive(Clone, Debug)]
                         #q_attrs #i_vis struct #t_name #fields_unnamed;
                     },
                     syn::Fields::Unit => quote! {
+                        #[derive(Clone, Debug)]
                         #q_attrs #i_vis struct #t_name;
                     },
                 };
