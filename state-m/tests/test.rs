@@ -7,6 +7,8 @@ pub enum Tag {
     Inner(usize),
     #[kv_assoc(assoc = String)]
     Outer,
+    #[kv_assoc(assoc = usize)]
+    OuterEx,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -75,6 +77,37 @@ mod tests {
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_extend() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .init();
+        let unit_a = Unit::default();
+        unit_a
+            .add_source(TagInner(0), 10, |new, old| {
+                tracing::info!("[unit_a] | new -- {}, old -- {}", new, old);
+                Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+            })
+            .await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(
+                TagOuterEx,
+                unit_a
+                    .reader(TagInner(0))?
+                    .extend_with(10, |s| Box::pin(async move { s.len() })),
+                |new, old| {
+                    tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
+                    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
+                },
+            )
+            .await?;
+        unit_a.alter(TagInner(0), "Hello".into()).await?;
+        unit_a.alter(TagInner(0), "Workspace".into()).await?;
+        unit_a.wait_alter(TagInner(0), "Love".into()).await?;
         Ok(())
     }
 }
