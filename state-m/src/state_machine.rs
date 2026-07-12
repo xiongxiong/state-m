@@ -1,5 +1,5 @@
 use crate::{
-    AsTag, KvAssoc, StateEvent,
+    AsTag, KvAssoc, State, StateEvent,
     handle::{Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::{AsSourceState, Source},
@@ -74,12 +74,6 @@ where
         C: Fn(T::Value) -> A,
         F: Fn(A, A, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>>>>,
     {
-        let handle = self.handle(tag.clone())?;
-        if let Some((v_new, v_old)) = handle.on_event(s).await
-            && let Err(e) = on_change(conv_s(v_new), conv_s(v_old), tag.into()).await
-        {
-            tracing::error!("StateM | on_change error -- {:?}", e);
-        }
         Ok(())
     }
 
@@ -89,22 +83,25 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         let handle = self.handle(tag)?;
-        let recver = handle.recver();
         tokio::spawn(async move {
             loop {
                 select! {
-                    res = recver.recv() => {
+                    res = handle.recv() => {
                         match res {
-                            Ok(s) => {
-                                if let Some((v_new, v_old)) = handle.on_event(s).await && let Err(e) = on_change(v_new, v_old).await {
-                                    tracing::error!("StateM | on_change error -- {:?}", e);
+                            Ok(Some((v_new, v_old))) => {
+                                if let Err(e) = on_change(v_new, v_old).await {
+                                    tracing::error!("on_change error -- {:?}", e);
                                 }
                             },
                             Err(_) => break,
+                            _ => {}
                         }
                     }
                 }
@@ -123,7 +120,10 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         self.add_reader(tag.clone(), reader);
@@ -187,12 +187,12 @@ where
         Ok(self.handle(tag)?.value().await)
     }
 
-    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsSourceState,
     {
-        Ok(self.handle(tag)?.value_ex().await)
+        Ok(self.handle(tag)?.state().await)
     }
 
     async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
@@ -270,7 +270,10 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
     fn del_handle<T>(&self, tag: &T) -> bool
@@ -295,7 +298,10 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
     async fn subscribe_reader<T, F>(
@@ -308,7 +314,10 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
     async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
@@ -316,7 +325,7 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
 
-    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync;
@@ -374,7 +383,10 @@ where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         self.state_machine().add_source(tag.clone())?;
@@ -409,7 +421,10 @@ where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         self.state_machine().subscribe(tag, on_change).await
@@ -425,7 +440,10 @@ where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
         F: 'static
-            + Fn(T::Value, T::Value) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                State<T::Value>,
+                State<T::Value>,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         self.state_machine()
@@ -441,12 +459,12 @@ where
         self.state_machine().value(tag).await
     }
 
-    async fn value_ex<T>(&self, tag: T) -> Result<(T::Value, DateTime<Utc>), GetHandleError<T>>
+    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsSourceState + Send + Sync,
     {
-        self.state_machine().value_ex(tag).await
+        self.state_machine().state(tag).await
     }
 
     #[instrument(level = "trace", skip(self))]

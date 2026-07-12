@@ -1,30 +1,28 @@
 use macro_tools::{
-    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn,
-    Itertools, ct, qt, return_syn_err, syn_err,
+    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, ct, qt,
+    return_syn_err, syn_err,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, ExprClosure, Index, ReturnType, Token, Type, parenthesized,
+    Attribute, DeriveInput, ExprClosure, Ident, Index, Token, Type, parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
-    token,
 };
 
 struct OnChangeInput {
-    _paren_token: token::Paren,
-    pub tag_typs: Punctuated<Type, Token![,]>,
+    pub tags: Punctuated<Ident, Token![,]>,
     pub closure: ExprClosure,
 }
 
 impl Parse for OnChangeInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
+        _ = parenthesized!(content in input);
         Ok(OnChangeInput {
-            _paren_token: parenthesized!(content in input),
-            tag_typs: content.parse_terminated(Type::parse, Token![,])?,
+            tags: content.parse_terminated(Ident::parse, Token![,])?,
             closure: input.parse()?,
         })
     }
@@ -33,8 +31,51 @@ impl Parse for OnChangeInput {
 #[proc_macro]
 pub fn on_change(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as OnChangeInput);
+    let q_decl: Vec<TokenStream2> = input
+        .tags
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let ident_handle = format_ident!("handle{}", i);
+            quote! {
+                let #ident_handle = self.handle(#t.clone())?;
+            }
+        })
+        .collect();
+    let q_sels: Vec<TokenStream2> = input
+        .tags
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let ident_handle = format_ident!("handle{}", i);
+            quote! {
+                res = #ident_handle.recv() => {
+                    match res {
+                        Ok(Some((v_new, v_old))) => {
+                            if let Err(e) = on_change(v_new, v_old).await {
+                                tracing::error!("StateM | on_change error -- {:?}", e);
+                            }
+                        },
+                        Err(_) => break,
+                        _ => {}
+                    }
+                }
+            }
+        })
+        .collect();
+    quote! {
+        {
+            #(#q_decl)*
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
 
-    quote! {}.into()
+                    }
+                }
+            });
+        }
+    }
+    .into()
 }
 
 #[derive(Debug, Default)]

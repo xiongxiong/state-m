@@ -3,7 +3,7 @@ use crate::{
     source::{AsSourceState, Source},
     state::{State, StateEvent},
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use crossfire::{
     MAsyncRx, MAsyncTx, RecvError, SendError,
     mpmc::{self, List},
@@ -41,24 +41,10 @@ where
         }
     }
 
-    pub(crate) fn recver(&self) -> MAsyncRx<List<StateEvent<S>>> {
+    pub fn recver(&self) -> &MAsyncRx<List<StateEvent<S>>> {
         match self {
-            Handle::Source(source, _) => source.recver.clone(),
-            Handle::Reader(reader, _) => reader.recver.clone(),
-        }
-    }
-
-    pub(crate) async fn on_event(&self, s: StateEvent<S>) -> Option<(S, S)> {
-        let cache = self.cache();
-        let s_old = { cache.read().await.clone() };
-        if s.is_touch || s.state.value != s_old.value {
-            tracing::debug!("StateM | recv -- {:?}", s);
-            {
-                *cache.write().await = s.state.clone();
-            }
-            Some((s.state.value, s_old.value))
-        } else {
-            None
+            Handle::Source(source, _) => &source.recver,
+            Handle::Reader(reader, _) => &reader.recver,
         }
     }
 
@@ -101,10 +87,10 @@ where
             };
             self.sender()?.send(event.clone()).await?;
             *guard = event.state.clone();
-            tracing::debug!("Handle | send -- {:?}", event);
+            tracing::debug!("send -- {:?}", event);
             if let Some(rx) = wait_rx {
                 rx.recv().await?;
-                tracing::debug!("Handle | done -- {:?}", event);
+                tracing::debug!("done -- {:?}", event);
             }
         }
         Ok(())
@@ -122,14 +108,32 @@ where
         }
     }
 
+    pub async fn recv(&self) -> Result<Option<(State<S>, State<S>)>, RecvError> {
+        let res = self.recver().recv().await;
+        match res {
+            Ok(s) => {
+                let cache = self.cache();
+                let s_old = { cache.read().await.clone() };
+                if s.is_touch || s.state.value != s_old.value {
+                    tracing::debug!("recv -- {:?}", s);
+                    {
+                        *cache.write().await = s.state.clone();
+                    }
+                    Ok(Some((s.state, s_old)))
+                } else {
+                    Ok(None)
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     pub async fn value(&self) -> S {
         self.cache().read().await.value.clone()
     }
 
-    pub async fn value_ex(&self) -> (S, DateTime<Utc>) {
-        let cache = self.cache();
-        let guard = cache.read().await;
-        ((*guard).value.clone(), (*guard).timestamp.clone())
+    pub async fn state(&self) -> State<S> {
+        self.cache().read().await.clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
