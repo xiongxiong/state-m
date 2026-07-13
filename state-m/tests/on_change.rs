@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use state_m::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -29,23 +31,23 @@ pub enum TagB {
 
 #[derive(Clone, Debug, Default)]
 pub struct UnitB {
-    state_machine: StateMachine<TagB>,
+    state_machine: Arc<StateMachine<TagB>>,
 }
 
 impl HasStateMachine for UnitB {
     type K = TagB;
 
-    fn state_machine(&self) -> &StateMachine<Self::K> {
-        &self.state_machine
+    fn state_machine(&self) -> Arc<StateMachine<Self::K>> {
+        self.state_machine.clone()
     }
 }
 
 impl UnitB {
     fn on_change(&self) {
-        // on_change!(TagBOuter(0), |values, tag| async move {
-        //     tracing::info!("{tag:?} | {values:?}");
-        //     Ok(())
-        // })
+        on_change!(TagBOuter(0), |values, tag: TagB| async move {
+            tracing::info!("{tag:?} | {values:?}");
+            anyhow::Ok(())
+        })
     }
 }
 

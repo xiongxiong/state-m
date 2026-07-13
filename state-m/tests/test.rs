@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use state_m::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -15,14 +17,14 @@ pub enum Tag {
 
 #[derive(Clone, Debug, Default)]
 pub struct Unit {
-    state_machine: StateMachine<Tag>,
+    state_machine: Arc<StateMachine<Tag>>,
 }
 
 impl HasStateMachine for Unit {
     type K = Tag;
 
-    fn state_machine(&self) -> &StateMachine<Self::K> {
-        &self.state_machine
+    fn state_machine(&self) -> Arc<StateMachine<Self::K>> {
+        self.state_machine.clone()
     }
 }
 

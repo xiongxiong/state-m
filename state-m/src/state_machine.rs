@@ -43,8 +43,28 @@ impl<K> StateMachine<K>
 where
     K: 'static + AsTag,
 {
+    fn get_handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, GetHandleError<T>>
+    where
+        T: Clone + Debug + Into<K> + KvAssoc,
+        T::Value: AsState,
+    {
+        let k = tag.clone().into();
+        match self.get(&k) {
+            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+                Some(h) => Ok(h.clone()),
+                None => Err(GetHandleError::TypeNotMatch),
+            },
+            None => Err(GetHandleError::HandleNotExist(tag)),
+        }
+    }
+}
+
+impl<K> StateMachine<K>
+where
+    K: 'static + AsTag,
+{
     /// Add state source into state machine.
-    async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<T>>
+    pub async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
@@ -60,7 +80,11 @@ where
     }
 
     /// Add state reader into state machine.
-    async fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>) -> Result<(), AddHandleError<T>>
+    pub async fn add_reader<T>(
+        &self,
+        tag: T,
+        reader: Reader<T::Value>,
+    ) -> Result<(), AddHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
@@ -75,23 +99,8 @@ where
         Ok(())
     }
 
-    fn get_handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, GetHandleError<T>>
-    where
-        T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: AsState,
-    {
-        let k = tag.clone().into();
-        match self.get(&k) {
-            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
-                Some(h) => Ok(h.clone()),
-                None => Err(GetHandleError::TypeNotMatch),
-            },
-            None => Err(GetHandleError::HandleNotExist(tag)),
-        }
-    }
-
     /// Remove state source from state machine.
-    fn del_handle<T>(&self, tag: &T) -> bool
+    pub fn del_handle<T>(&self, tag: &T) -> bool
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
         T::Value: AsState,
@@ -100,14 +109,14 @@ where
     }
 
     /// If state source of tag exists in state machine.
-    fn has_handle<T>(&self, tag: &T) -> bool
+    pub fn has_handle<T>(&self, tag: &T) -> bool
     where
         T: Clone + Into<K>,
     {
         self.contains_key(&tag.clone().into())
     }
 
-    fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
+    pub fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: AsState,
@@ -115,7 +124,7 @@ where
         Ok(self.get_handle(tag)?.reader())
     }
 
-    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
+    pub async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -123,7 +132,7 @@ where
         Ok(self.get_handle(tag)?.value().await)
     }
 
-    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<T>>
+    pub async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -131,7 +140,7 @@ where
         Ok(self.get_handle(tag)?.state().await)
     }
 
-    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    pub async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -139,7 +148,7 @@ where
         Ok(self.get_handle(tag)?.touch().await?)
     }
 
-    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
+    pub async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -147,7 +156,7 @@ where
         Ok(self.get_handle(tag)?.wait_touch().await?)
     }
 
-    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    pub async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -155,7 +164,7 @@ where
         Ok(self.get_handle(tag)?.alter(s).await?)
     }
 
-    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
+    pub async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState,
@@ -163,7 +172,7 @@ where
         Ok(self.get_handle(tag)?.wait_alter(s).await?)
     }
 
-    async fn amend<T>(
+    pub async fn amend<T>(
         &self,
         tag: T,
         f: impl FnOnce(T::Value) -> T::Value,
@@ -208,7 +217,7 @@ where
 pub trait HasStateMachine {
     type K: AsTag;
 
-    fn state_machine(&self) -> &StateMachine<Self::K>;
+    fn state_machine(&self) -> Arc<StateMachine<Self::K>>;
 }
 
 #[async_trait]
@@ -289,6 +298,20 @@ pub trait UseStateMachine: HasStateMachine {
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
+
+    fn fanout<T>(
+        &self,
+        tag: T,
+    ) -> Result<
+        (
+            Receiver<(State<T::Value>, State<T::Value>)>,
+            CancellationToken,
+        ),
+        GetHandleError<T>,
+    >
+    where
+        T: Clone + Debug + Into<Self::K> + KvAssoc,
+        T::Value: 'static + AsState;
 }
 
 #[async_trait]
@@ -415,6 +438,23 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().wait_amend(tag, f).await
+    }
+
+    fn fanout<T>(
+        &self,
+        tag: T,
+    ) -> Result<
+        (
+            Receiver<(State<T::Value>, State<T::Value>)>,
+            CancellationToken,
+        ),
+        GetHandleError<T>,
+    >
+    where
+        T: Clone + Debug + Into<Self::K> + KvAssoc,
+        T::Value: 'static + AsState,
+    {
+        self.state_machine().fanout(tag)
     }
 }
 

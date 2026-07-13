@@ -61,12 +61,13 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .iter()
         .enumerate()
         .map(|(i, t)| {
-            let ident_state = format_ident!("state_{}", i);
+            let ident_tag = format_ident!("tag_{}", i);
             let ident_rx = format_ident!("rx_{}", i);
             let ident_cancel = format_ident!("cancel_{}", i);
             quote! {
-                let #ident_state = self.state(#t.clone())?;
-                let (#ident_rx, #ident_cancel) = self.fanout(#t.clone())?;
+                let #ident_tag = #t.clone();
+                let (mut #ident_rx, #ident_cancel) = self.fanout(#t.clone())
+                    .expect(format!("Handle for {:?} does not exist, add it to state_machine first.", #t).as_str());
             }
         })
         .collect();
@@ -74,26 +75,59 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         tags.iter().enumerate().map(|(i, _)| {
             let ident_state = format_ident!("state_{}", i);
             quote! {
-                (#ident_state, #ident_state)
+                (#ident_state.clone(), #ident_state)
             }
         }),
         quote! {,},
     )
     .collect();
+    let q_states: Vec<_> = tags
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let ident_tag = format_ident!("tag_{}", i);
+            let ident_state = format_ident!("state_{}", i);
+            quote! {
+                let #ident_state = sm.state(#ident_tag).await
+                    .expect(format!("Handle for {:?} does not exist, add it to state_machine first.", #t).as_str());
+            }
+        })
+        .collect();
+    let q_old_states = quote! {
+        let old_states = |sm: Arc<StateMachine<_>>| async {
+            #(#q_states)*
+            (#(#q_pairs)*)
+        };
+    };
+    let ch_tuple = |i: usize| {
+        let idx = Index::from(i);
+        let ch = if tags.len() > 1 {
+            quote! {
+                tuple.#idx = s;
+            }
+        } else {
+            quote! {
+                tuple = s;
+            }
+        };
+        quote! {
+            let mut tuple = old_states(state_machine.clone()).await;
+            #ch
+        }
+    };
     let q_sels: Vec<_> = tags
         .iter()
         .enumerate()
         .map(|(i, t)| {
             let ident_rx = format_ident!("rx_{}", i);
             let ident_cancel = format_ident!("cancel_{}", i);
-            let idx = Index::from(i);
+            let q_ch_tuple = ch_tuple(i);
             quote! {
-                _ = #ident_cancel.cancelled() => break;
+                _ = #ident_cancel.cancelled() => break,
                 res = #ident_rx.recv() => {
                     match res {
-                        Ok(Some(s)) => {
-                            let mut tuple = (#(#q_pairs)*);
-                            tuple.#idx = s;
+                        Ok(s) => {
+                            #q_ch_tuple
                             if let Err(e) = func(tuple, #t.into()).await {
                                 tracing::error!("on_change error -- {:?}", e);
                             }
@@ -107,11 +141,11 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .collect();
     quote! {
         {
-            use std::collections::HashSet;
-
+            let state_machine = self.state_machine();
             let tags = (#(#q_tags)*);
             let func = #closure;
             #(#q_decls)*
+            #q_old_states
             tokio::spawn(async move {
                 tracing::info!("{tags:?} | on_change - start");
                 loop {

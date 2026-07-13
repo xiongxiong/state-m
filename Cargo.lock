@@ -484,7 +484,11 @@ dependencies = [
 name = "state-m-test"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "state-m",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
