@@ -55,16 +55,7 @@ pub struct UnitB {
 impl HasStateMachine for UnitB {
     type K = TagB;
 
-    fn state_machine(&self) -> Arc<StateMachine<Self::K>> {
-        self.state_machine.clone()
-    }
-}
-
-impl UnitB {
-    fn on_change(&self) {
-        on_change!(TagBOuter(0), |values, tag: TagB| async move {
-            tracing::info!("{tag:?} | {values:?}");
-            anyhow::Ok(())
-        })
+    fn state_machine(&self) -> &StateMachine<Self::K> {
+        &self.state_machine
     }
 }

@@ -23,8 +23,8 @@ pub struct Unit {
 impl HasStateMachine for Unit {
     type K = Tag;
 
-    fn state_machine(&self) -> Arc<StateMachine<Self::K>> {
-        self.state_machine.clone()
+    fn state_machine(&self) -> &StateMachine<Self::K> {
+        &self.state_machine
     }
 }
 
