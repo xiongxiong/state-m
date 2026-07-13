@@ -220,6 +220,7 @@ where
         tokio::spawn(async move {
             loop {
                 select! {
+                    biased;
                     _ = cancel_token.cancelled() => break,
                     _ = fanout_rx.recv() => {},
                     res = recver.recv() => {
@@ -228,7 +229,7 @@ where
                                 let s_old = { cache.read().await.clone() };
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
-                                    tracing::debug!("{tag:?} | recv -- {:?}", s_new);
+                                    tracing::debug!("{tag:?} | recv -- {s_new:?}");
                                     {
                                         *cache.write().await = s_new.clone();
                                     }
@@ -243,7 +244,7 @@ where
         });
     }
 
-    pub async fn watch<F>(&self, func: F)
+    pub async fn on_change<F>(&self, func: F)
     where
         F: 'static
             + Fn(State<S>, State<S>) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
@@ -263,7 +264,7 @@ where
                         match res {
                             Ok((s_new, s_old)) => {
                                 if let Err(e) = func(s_new, s_old).await {
-                                    tracing::error!("watch error -- {e:?}");
+                                    tracing::error!("on_change error -- {e:?}");
                                 }
                             }
                             Err(_) => break,
