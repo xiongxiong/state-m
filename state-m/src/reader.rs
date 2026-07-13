@@ -1,22 +1,32 @@
-use crate::state::{State, StateEvent};
-use std::fmt::Debug;
+use crate::{
+    source::{AsState, Inner},
+    state::{State, StateEvent},
+};
+use std::{fmt::Debug, ops::Deref};
 use tokio::{
     select,
-    sync::broadcast::{Sender, channel, error::RecvError},
+    sync::broadcast::{channel, error::RecvError},
 };
 
-#[derive(Debug)]
-pub struct Reader<S>
+#[derive(Clone, Debug)]
+pub struct Reader<S>(pub(crate) Inner<S>)
 where
-    S: 'static + Clone + Debug + Default + PartialEq,
+    S: 'static + AsState;
+
+impl<S> Deref for Reader<S>
+where
+    S: 'static + AsState,
 {
-    pub(crate) capacity: usize,
-    pub(crate) sender: Sender<StateEvent<S>>,
+    type Target = Inner<S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl<S> Reader<S>
 where
-    S: 'static + Clone + Debug + Default + PartialEq + Send,
+    S: 'static + AsState + Send,
 {
     pub fn extend<T>(&self, capacity: usize) -> Reader<T>
     where
@@ -27,7 +37,7 @@ where
 
     pub fn extend_with<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
     where
-        T: 'static + Clone + Debug + Default + PartialEq + Send,
+        T: 'static + AsState + Send,
         F: Fn(S) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = T> + Send,
     {
@@ -66,9 +76,9 @@ where
                 }
             }
         });
-        Reader {
+        Reader(Inner {
             capacity: self.capacity,
             sender: tx,
-        }
+        })
     }
 }

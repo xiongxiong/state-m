@@ -1,6 +1,6 @@
 use crate::{
     reader::Reader,
-    source::{AsSourceState, Source},
+    source::{AsState, Source},
     state::{State, StateEvent},
 };
 use chrono::Utc;
@@ -28,7 +28,7 @@ use tracing::instrument;
 #[derive(Debug)]
 enum HandleI<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     Source(Source<S>, Arc<RwLock<State<S>>>),
     Reader(Reader<S>),
@@ -37,7 +37,7 @@ where
 #[derive(Debug)]
 pub(crate) struct Handle<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     inner: HandleI<S>,
     cache: Arc<RwLock<State<S>>>,
@@ -47,7 +47,7 @@ where
 
 impl<S> Drop for Handle<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     fn drop(&mut self) {
         self.cancel_token.cancel();
@@ -56,7 +56,7 @@ where
 
 impl<S> Handle<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     fn capacity(&self) -> usize {
         match self.inner {
@@ -125,7 +125,7 @@ where
 
 impl<S> Handle<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     pub fn from_source(source: Source<S>) -> Self {
         Self {
@@ -148,10 +148,7 @@ where
     pub fn reader(&self) -> Reader<S> {
         match self.inner {
             HandleI::Source(ref source, _) => source.reader(),
-            HandleI::Reader(ref reader) => Reader {
-                capacity: reader.capacity,
-                sender: reader.sender.clone(),
-            },
+            HandleI::Reader(ref reader) => reader.clone(),
         }
     }
 
@@ -200,7 +197,7 @@ where
 
 impl<S> Handle<S>
 where
-    S: 'static + AsSourceState + Send + Sync,
+    S: 'static + AsState + Send + Sync,
 {
     pub async fn init<T>(&self, tag: T)
     where

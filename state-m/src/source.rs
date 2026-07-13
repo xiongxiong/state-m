@@ -1,23 +1,23 @@
 use crate::{reader::Reader, state::StateEvent};
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 use tokio::sync::broadcast::{Sender, channel};
 
-pub trait AsSourceState: Clone + Debug + Default + PartialEq {}
+pub trait AsState: Clone + Debug + Default + PartialEq {}
 
-impl<T> AsSourceState for T where T: Clone + Debug + Default + PartialEq {}
+impl<T> AsState for T where T: Clone + Debug + Default + PartialEq {}
 
-#[derive(Debug)]
-pub(crate) struct Source<S>
+#[derive(Clone, Debug)]
+pub struct Inner<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     pub capacity: usize,
     pub sender: Sender<StateEvent<S>>,
 }
 
-impl<S> Source<S>
+impl<S> Inner<S>
 where
-    S: 'static + AsSourceState,
+    S: 'static + AsState,
 {
     pub fn new(capacity: usize) -> Self {
         let (tx, _) = channel(capacity);
@@ -26,11 +26,33 @@ where
             sender: tx,
         }
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct Source<S>(Inner<S>)
+where
+    S: 'static + AsState;
+
+impl<S> Deref for Source<S>
+where
+    S: 'static + AsState,
+{
+    type Target = Inner<S>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S> Source<S>
+where
+    S: 'static + AsState,
+{
+    pub fn new(capacity: usize) -> Self {
+        Self(Inner::new(capacity))
+    }
 
     pub fn reader(&self) -> Reader<S> {
-        Reader {
-            capacity: self.capacity,
-            sender: self.sender.clone(),
-        }
+        Reader(self.0.clone())
     }
 }
