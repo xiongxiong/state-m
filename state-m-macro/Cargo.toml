@@ -12,7 +12,7 @@ license = "MIT"
 proc-macro = true
 
 [dependencies]
-iter_tools = "0.50"
+itertools = "0.15"
 macro_tools = "0.88"
 proc-macro2 = "1.0"
 quote = "1.0"

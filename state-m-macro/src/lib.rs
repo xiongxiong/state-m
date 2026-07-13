@@ -1,3 +1,4 @@
+use iter_tools::Itertools;
 use macro_tools::{
     Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, ct, qt,
     return_syn_err, syn_err,
@@ -6,35 +7,47 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, ExprClosure, Ident, Index, Token, Type, parenthesized,
+    Attribute, DeriveInput, ExprClosure, ExprStruct, Ident, Index, Token, Type, bracketed,
+    parenthesized,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
 };
 
 struct OnChangeInput {
-    pub tags: Punctuated<Ident, Token![,]>,
+    pub tags: Punctuated<ExprStruct, Token![,]>,
     pub closure: ExprClosure,
 }
 
 impl Parse for OnChangeInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
-        _ = parenthesized!(content in input);
-        Ok(OnChangeInput {
-            tags: content.parse_terminated(Ident::parse, Token![,])?,
-            closure: input.parse()?,
-        })
+        _ = bracketed!(content in input);
+        let tags = content.parse_terminated(ExprStruct::parse, Token![,])?;
+        _ = input.parse::<Token![,]>()?;
+        let closure = input.parse()?;
+        Ok(OnChangeInput { tags, closure })
     }
 }
 
 #[proc_macro]
-pub fn subscribe(item: TokenStream) -> TokenStream {
+pub fn on_change(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as OnChangeInput);
     let closure = input.closure;
     let q_tags: Vec<_> =
-        iter_tools::intersperse(input.tags.iter().map(|t| quote! {#t.clone()}), quote! {,})
+        itertools::intersperse(input.tags.iter().map(|t| quote! {#t.clone()}), quote! {,})
             .collect();
+    if q_tags.is_empty() {
+        panic!("should use at least one tag.")
+    }
+    if !q_tags
+        .into_iter()
+        .duplicates()
+        .collect::<Vec<_>>()
+        .is_empty()
+    {
+        panic!("should not use duplicated tags.");
+    }
     let q_decl: Vec<_> = input
         .tags
         .iter()
@@ -46,7 +59,7 @@ pub fn subscribe(item: TokenStream) -> TokenStream {
             }
         })
         .collect();
-    let q_vals: Vec<_> = iter_tools::intersperse(
+    let q_vals: Vec<_> = itertools::intersperse(
         input.tags.iter().enumerate().map(|(i, _)| {
             let ident_handle = format_ident!("handle{}", i);
             quote! {
@@ -82,17 +95,19 @@ pub fn subscribe(item: TokenStream) -> TokenStream {
         .collect();
     quote! {
         {
+            use std::collections::HashSet;
+
             let tags = (#(#q_tags)*);
             let on_change = #closure;
             #(#q_decl)*
             tokio::spawn(async move {
-                tracing::info!("watch [{:?}] - start", tags);
+                tracing::info!("{tags:?} | on_change - start");
                 loop {
                     tokio::select! {
                         #(#q_sels)*
                     }
                 }
-                tracing::info!("watch [{:?}] - end", tags);
+                tracing::info!("{tags:?} | on_change - end");
             });
         }
     }
@@ -214,7 +229,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 let q_fr = match v_fields {
                     syn::Fields::Named(fields_named) => {
-                        let q_params: Vec<_> = iter_tools::intersperse(
+                        let q_params: Vec<_> = itertools::intersperse(
                             fields_named.named.iter().map(|field| {
                                 let ident = match field.ident {
                                     Some(ref ident) => ident.clone(),
@@ -231,7 +246,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     }
                     syn::Fields::Unnamed(fields_unnamed) => {
                         let len = fields_unnamed.unnamed.len();
-                        let q_params: Vec<_> = iter_tools::intersperse(
+                        let q_params: Vec<_> = itertools::intersperse(
                             (0..len).map(|i| {
                                 let idx = Index::from(i);
                                 quote! {value.#idx}
