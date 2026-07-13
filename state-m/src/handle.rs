@@ -17,16 +17,22 @@ use tokio::sync::{
 };
 use tokio::{
     select,
-    sync::{
-        Mutex,
-        broadcast::{
-            Receiver,
-            error::{RecvError, SendError},
-        },
+    sync::broadcast::{
+        Receiver,
+        error::{RecvError, SendError},
     },
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
+
+#[derive(Debug)]
+enum HandleI<S>
+where
+    S: 'static + AsSourceState,
+{
+    Source(Source<S>, Arc<RwLock<State<S>>>),
+    Reader(Reader<S>),
+}
 
 #[derive(Debug)]
 pub(crate) struct Handle<S>
@@ -39,13 +45,13 @@ where
     fanout_tx: OnceLock<Sender<(State<S>, State<S>)>>,
 }
 
-#[derive(Debug)]
-enum HandleI<S>
+impl<S> Drop for Handle<S>
 where
     S: 'static + AsSourceState,
 {
-    Source(Source<S>, Arc<RwLock<State<S>>>),
-    Reader(Reader<S>),
+    fn drop(&mut self) {
+        self.cancel_token.cancel();
+    }
 }
 
 impl<S> Handle<S>
@@ -61,18 +67,8 @@ where
 
     async fn recver(&self) -> Receiver<StateEvent<S>> {
         match self.inner {
-            HandleI::Source(ref source, _) => source
-                .recver
-                .lock()
-                .await
-                .take()
-                .unwrap_or(source.sender.subscribe()),
-            HandleI::Reader(ref reader) => reader
-                .recver
-                .lock()
-                .await
-                .take()
-                .unwrap_or(reader.sender.subscribe()),
+            HandleI::Source(ref source, _) => source.sender.subscribe(),
+            HandleI::Reader(ref reader) => reader.sender.subscribe(),
         }
     }
 
@@ -152,21 +148,11 @@ where
     pub fn reader(&self) -> Reader<S> {
         match self.inner {
             HandleI::Source(ref source, _) => source.reader(),
-            HandleI::Reader(ref reader) => {
-                let once = OnceLock::new();
-                once.set(reader.sender.subscribe())
-                    .expect("should not happen");
-                Reader {
-                    capacity: reader.capacity,
-                    sender: reader.sender.clone(),
-                    recver: Mutex::new(once),
-                }
-            }
+            HandleI::Reader(ref reader) => Reader {
+                capacity: reader.capacity,
+                sender: reader.sender.clone(),
+            },
         }
-    }
-
-    pub fn close(&self) {
-        self.cancel_token.cancel();
     }
 
     pub async fn value(&self) -> S {

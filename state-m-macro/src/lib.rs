@@ -72,7 +72,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .collect();
     let q_pairs: Vec<_> = itertools::intersperse(
         tags.iter().enumerate().map(|(i, _)| {
-            let ident_state = format_ident!("state{}", i);
+            let ident_state = format_ident!("state_{}", i);
             quote! {
                 (#ident_state, #ident_state)
             }
@@ -85,8 +85,10 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .enumerate()
         .map(|(i, t)| {
             let ident_rx = format_ident!("rx_{}", i);
+            let ident_cancel = format_ident!("cancel_{}", i);
             let idx = Index::from(i);
             quote! {
+                _ = #ident_cancel.cancelled() => break;
                 res = #ident_rx.recv() => {
                     match res {
                         Ok(Some(s)) => {
@@ -114,6 +116,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
                 tracing::info!("{tags:?} | on_change - start");
                 loop {
                     tokio::select! {
+                        biased;
                         #(#q_sels)*
                     }
                 }

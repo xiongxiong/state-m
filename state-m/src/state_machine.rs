@@ -96,16 +96,7 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
         T::Value: AsSourceState,
     {
-        match self.remove(&tag.clone().into()) {
-            Some((_, v)) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
-                Some(h) => {
-                    h.close();
-                    true
-                }
-                None => true,
-            },
-            None => false,
-        }
+        self.remove(&tag.clone().into()).is_some()
     }
 
     /// If state source of tag exists in state machine.

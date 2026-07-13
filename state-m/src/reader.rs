@@ -1,11 +1,8 @@
 use crate::state::{State, StateEvent};
-use std::{fmt::Debug, sync::OnceLock};
+use std::fmt::Debug;
 use tokio::{
     select,
-    sync::{
-        Mutex,
-        broadcast::{Receiver, Sender, channel, error::RecvError},
-    },
+    sync::broadcast::{Sender, channel, error::RecvError},
 };
 
 #[derive(Debug)]
@@ -15,7 +12,6 @@ where
 {
     pub(crate) capacity: usize,
     pub(crate) sender: Sender<StateEvent<S>>,
-    pub(crate) recver: Mutex<OnceLock<Receiver<StateEvent<S>>>>,
 }
 
 impl<S> Reader<S>
@@ -35,7 +31,7 @@ where
         F: Fn(S) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = T> + Send,
     {
-        let (tx, rx) = channel(capacity);
+        let (tx, _) = channel(capacity);
         let tx_c = tx.clone();
         let mut rx_o = self.sender.subscribe();
         tokio::spawn(async move {
@@ -70,12 +66,9 @@ where
                 }
             }
         });
-        let once = OnceLock::new();
-        once.set(rx).expect("should not happen");
         Reader {
             capacity: self.capacity,
             sender: tx,
-            recver: Mutex::new(once),
         }
     }
 }
