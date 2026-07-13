@@ -8,6 +8,8 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use std::{any::Any, fmt::Debug, ops::Deref, sync::Arc};
 use thiserror::Error;
+use tokio::sync::broadcast::Receiver;
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
@@ -192,6 +194,23 @@ where
         T::Value: 'static + AsSourceState,
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
+    }
+
+    pub fn fanout<T>(
+        &self,
+        tag: T,
+    ) -> Result<
+        (
+            Receiver<(State<T::Value>, State<T::Value>)>,
+            CancellationToken,
+        ),
+        GetHandleError<T>,
+    >
+    where
+        T: Clone + Debug + Into<K> + KvAssoc,
+        T::Value: 'static + AsSourceState,
+    {
+        Ok(self.get_handle(tag)?.fanout())
     }
 }
 

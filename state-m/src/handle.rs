@@ -200,6 +200,16 @@ where
     pub async fn wait_amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
         self.inner_change(f, false, false).await
     }
+
+    pub fn fanout(&self) -> (Receiver<(State<S>, State<S>)>, CancellationToken) {
+        let rx = self
+            .fanout_tx
+            .get()
+            .expect("The field 'fanout_tx' should have been set.")
+            .subscribe();
+        let token = self.cancel_token.child_token();
+        (rx, token)
+    }
 }
 
 impl<S> Handle<S>

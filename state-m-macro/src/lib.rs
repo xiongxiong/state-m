@@ -57,21 +57,24 @@ pub fn on_change(item: TokenStream) -> TokenStream {
     }
     let q_tags: Vec<_> =
         itertools::intersperse(tags.iter().map(|t| quote! {#t.clone()}), quote! {,}).collect();
-    let q_decl: Vec<_> = tags
+    let q_decls: Vec<_> = tags
         .iter()
         .enumerate()
         .map(|(i, t)| {
-            let ident_handle = format_ident!("handle{}", i);
+            let ident_state = format_ident!("state_{}", i);
+            let ident_rx = format_ident!("rx_{}", i);
+            let ident_cancel = format_ident!("cancel_{}", i);
             quote! {
-                let #ident_handle = self.handle(#t.clone())?;
+                let #ident_state = self.state(#t.clone())?;
+                let (#ident_rx, #ident_cancel) = self.fanout(#t.clone())?;
             }
         })
         .collect();
-    let q_vals: Vec<_> = itertools::intersperse(
+    let q_pairs: Vec<_> = itertools::intersperse(
         tags.iter().enumerate().map(|(i, _)| {
-            let ident_handle = format_ident!("handle{}", i);
+            let ident_state = format_ident!("state{}", i);
             quote! {
-                (#ident_handle.state(), #ident_handle.state())
+                (#ident_state, #ident_state)
             }
         }),
         quote! {,},
@@ -81,13 +84,13 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         .iter()
         .enumerate()
         .map(|(i, t)| {
-            let ident_handle = format_ident!("handle{}", i);
+            let ident_rx = format_ident!("rx_{}", i);
             let idx = Index::from(i);
             quote! {
-                res = #ident_handle.recv() => {
+                res = #ident_rx.recv() => {
                     match res {
                         Ok(Some(s)) => {
-                            let mut tuple = (#(#q_vals)*);
+                            let mut tuple = (#(#q_pairs)*);
                             tuple.#idx = s;
                             if let Err(e) = func(tuple, #t.into()).await {
                                 tracing::error!("on_change error -- {:?}", e);
@@ -106,7 +109,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
 
             let tags = (#(#q_tags)*);
             let func = #closure;
-            #(#q_decl)*
+            #(#q_decls)*
             tokio::spawn(async move {
                 tracing::info!("{tags:?} | on_change - start");
                 loop {
