@@ -42,7 +42,10 @@ impl HasStateMachine for UnitB {
 
 impl UnitB {
     fn on_change(&self) {
-        on_change!([TagBOuter(0)], || {})
+        on_change!(TagBOuter(0), |values, tag| async move {
+            tracing::info!("{tag:?} | {values:?}");
+            Ok(())
+        })
     }
 }
 

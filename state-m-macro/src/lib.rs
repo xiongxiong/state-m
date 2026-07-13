@@ -1,4 +1,4 @@
-use iter_tools::Itertools;
+use itertools::Itertools as _;
 use macro_tools::{
     Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, ct, qt,
     return_syn_err, syn_err,
@@ -7,49 +7,57 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, ExprClosure, ExprStruct, Ident, Index, Token, Type, bracketed,
-    parenthesized,
+    Attribute, DeriveInput, Expr, ExprClosure, Index, Token, Type,
     parse::{Parse, ParseStream},
     parse_macro_input,
-    punctuated::Punctuated,
+    punctuated::{Pair, Punctuated},
 };
 
 struct OnChangeInput {
-    pub tags: Punctuated<ExprStruct, Token![,]>,
-    pub closure: ExprClosure,
+    pub params: Punctuated<Expr, Token![,]>,
 }
 
 impl Parse for OnChangeInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let content;
-        _ = bracketed!(content in input);
-        let tags = content.parse_terminated(ExprStruct::parse, Token![,])?;
-        _ = input.parse::<Token![,]>()?;
-        let closure = input.parse()?;
-        Ok(OnChangeInput { tags, closure })
+        Ok(OnChangeInput {
+            params: input.parse_terminated(Expr::parse, Token![,])?,
+        })
     }
 }
 
 #[proc_macro]
 pub fn on_change(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as OnChangeInput);
-    let closure = input.closure;
+    let mut params = input.params;
+    let closure: ExprClosure = {
+        let l_param = match params.pop() {
+            Some(p) => match p {
+                Pair::Punctuated(e, _) => e,
+                Pair::End(e) => e,
+            },
+            None => panic!("There must be a closure as the last param."),
+        };
+        match l_param {
+            Expr::Closure(c) => c,
+            _ => panic!("The last param must be a closure."),
+        }
+    };
+    let tags = params;
+    if tags.is_empty() {
+        panic!("There must be at least one tag before the closure.");
+    }
+    if !tags.iter().duplicates().collect::<Vec<_>>().is_empty() {
+        panic!("There should be no duplicate tags.");
+    }
+    if !tags.iter().all(|t| match t {
+        Expr::Struct(_) | Expr::Call(_) | Expr::Path(_) => true,
+        _ => false,
+    }) {
+        panic!("Tag values can only be the form of a struct.");
+    }
     let q_tags: Vec<_> =
-        itertools::intersperse(input.tags.iter().map(|t| quote! {#t.clone()}), quote! {,})
-            .collect();
-    if q_tags.is_empty() {
-        panic!("should use at least one tag.")
-    }
-    if !q_tags
-        .into_iter()
-        .duplicates()
-        .collect::<Vec<_>>()
-        .is_empty()
-    {
-        panic!("should not use duplicated tags.");
-    }
-    let q_decl: Vec<_> = input
-        .tags
+        itertools::intersperse(tags.iter().map(|t| quote! {#t.clone()}), quote! {,}).collect();
+    let q_decl: Vec<_> = tags
         .iter()
         .enumerate()
         .map(|(i, t)| {
@@ -60,7 +68,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         })
         .collect();
     let q_vals: Vec<_> = itertools::intersperse(
-        input.tags.iter().enumerate().map(|(i, _)| {
+        tags.iter().enumerate().map(|(i, _)| {
             let ident_handle = format_ident!("handle{}", i);
             quote! {
                 (#ident_handle.state(), #ident_handle.state())
@@ -69,8 +77,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
         quote! {,},
     )
     .collect();
-    let q_sels: Vec<_> = input
-        .tags
+    let q_sels: Vec<_> = tags
         .iter()
         .enumerate()
         .map(|(i, t)| {
@@ -82,7 +89,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
                         Ok(Some(s)) => {
                             let mut tuple = (#(#q_vals)*);
                             tuple.#idx = s;
-                            if let Err(e) = on_change(tuple, #t.into()).await {
+                            if let Err(e) = func(tuple, #t.into()).await {
                                 tracing::error!("on_change error -- {:?}", e);
                             }
                         },
@@ -98,7 +105,7 @@ pub fn on_change(item: TokenStream) -> TokenStream {
             use std::collections::HashSet;
 
             let tags = (#(#q_tags)*);
-            let on_change = #closure;
+            let func = #closure;
             #(#q_decl)*
             tokio::spawn(async move {
                 tracing::info!("{tags:?} | on_change - start");
