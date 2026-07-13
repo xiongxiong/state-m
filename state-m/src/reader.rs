@@ -1,5 +1,6 @@
 use crate::{
-    source::{AsState, Inner},
+    AsState,
+    source::Inner,
     state::{State, StateEvent},
 };
 use std::{fmt::Debug, ops::Deref};

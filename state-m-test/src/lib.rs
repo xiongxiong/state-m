@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use state_m::*;
+use state_m_macro::*;
 
 // #[state_tag]
 // #[kv_assoc(assoc = u8)]
@@ -40,22 +39,26 @@ use state_m::*;
 //     }
 // }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[state_tag]
-pub enum TagB {
-    #[kv_assoc(assoc = String)]
-    Outer(usize),
-}
+// #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+// #[state_tag]
+// pub enum TagB {
+//     #[kv_assoc(assoc = String)]
+//     Outer(usize),
+// }
 
-#[derive(Clone, Debug, Default)]
-pub struct UnitB {
-    state_machine: Arc<StateMachine<TagB>>,
-}
+// #[derive(Clone, Debug, Default)]
+// pub struct UnitB {
+//     state_machine: StateMachine<TagB>,
+// }
 
-impl HasStateMachine for UnitB {
-    type K = TagB;
+// impl HasStateMachine for UnitB {
+//     type K = TagB;
 
-    fn state_machine(&self) -> &StateMachine<Self::K> {
-        &self.state_machine
-    }
-}
+//     fn state_machine(&self) -> &StateMachine<Self::K> {
+//         &self.state_machine
+//     }
+// }
+
+pub struct UnitC;
+
+impl UnitC {}

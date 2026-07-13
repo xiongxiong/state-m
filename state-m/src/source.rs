@@ -1,10 +1,6 @@
-use crate::{reader::Reader, state::StateEvent};
+use crate::{AsState, reader::Reader, state::StateEvent};
 use std::{fmt::Debug, ops::Deref};
 use tokio::sync::broadcast::{Sender, channel};
-
-pub trait AsState: Clone + Debug + Default + PartialEq {}
-
-impl<T> AsState for T where T: Clone + Debug + Default + PartialEq {}
 
 #[derive(Clone, Debug)]
 pub struct Inner<S>

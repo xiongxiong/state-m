@@ -5,13 +5,17 @@ mod state;
 mod state_machine;
 
 pub use state::*;
-pub use state_m_macro::*;
+pub use state_m_macro::state_tag;
 pub use state_machine::*;
 use std::{fmt::Debug, hash::Hash};
 
 pub trait KvAssoc {
     type Value;
 }
+
+pub trait AsState: Clone + Debug + Default + PartialEq {}
+
+impl<T> AsState for T where T: Clone + Debug + Default + PartialEq {}
 
 pub trait AsTag: Clone + Debug + Eq + Hash + Send + Sync {}
 

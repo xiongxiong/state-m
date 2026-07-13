@@ -1,12 +1,12 @@
 use crate::{
+    AsState,
     reader::Reader,
-    source::{AsState, Source},
+    source::Source,
     state::{State, StateEvent},
 };
 use chrono::Utc;
 use std::{
     fmt::Debug,
-    pin::Pin,
     sync::{Arc, OnceLock},
 };
 use thiserror::Error;
@@ -227,42 +227,6 @@ where
                                         *cache.write().await = s_new.clone();
                                     }
                                     _ = fanout_tx.send((s_new, s_old));
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    pub async fn on_change<F>(&self, func: F)
-    where
-        F: 'static
-            + Fn(State<S>, State<S>) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-            + Send,
-    {
-        let cancel_token = self.cancel_token.clone();
-        let mut recver = self
-            .fanout_tx
-            .get()
-            .expect("The field 'fanout_tx' should have been set.")
-            .subscribe();
-        let c = cancel_token.clone();
-        let my_func = |c: CancellationToken| async move {
-            c.cancel();
-        };
-        tokio::spawn(async move {
-            loop {
-                select! {
-                    _ = cancel_token.cancelled() => break,
-                    res = recver.recv() => {
-                        my_func(c.clone()).await;
-                        match res {
-                            Ok((s_new, s_old)) => {
-                                if let Err(e) = func(s_new, s_old).await {
-                                    tracing::error!("on_change error -- {e:?}");
                                 }
                             }
                             Err(_) => break,

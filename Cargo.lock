@@ -460,6 +460,7 @@ dependencies = [
  "dashmap",
  "derivative",
  "inventory",
+ "itertools 0.15.0",
  "state-m-macro",
  "thiserror",
  "tokio",
@@ -486,6 +487,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "state-m",
+ "state-m-macro",
  "tokio",
  "tokio-util",
  "tracing",

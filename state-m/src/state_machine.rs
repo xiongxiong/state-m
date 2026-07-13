@@ -1,13 +1,16 @@
 use crate::{
-    AsTag, KvAssoc, State,
+    AsState, AsTag, KvAssoc, State,
     handle::{Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
-    source::{AsState, Source},
+    source::Source,
 };
 use async_trait::async_trait;
 use dashmap::DashMap;
-use std::{any::Any, fmt::Debug, ops::Deref, sync::Arc};
+use itertools::Itertools;
+use state_m_macro::sm_join;
+use std::{any::Any, fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
+use tokio::select;
 use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
@@ -189,6 +192,21 @@ where
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
     }
+}
+
+impl<K> StateMachine<K>
+where
+    K: 'static + AsTag,
+{
+    sm_join!(1);
+    sm_join!(2);
+    sm_join!(3);
+    sm_join!(4);
+    sm_join!(5);
+    sm_join!(6);
+    sm_join!(7);
+    sm_join!(8);
+    sm_join!(9);
 }
 
 pub trait HasStateMachine {
