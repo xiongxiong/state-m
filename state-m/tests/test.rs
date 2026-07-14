@@ -8,7 +8,7 @@ pub enum Tag {
     #[kv_assoc(assoc = String)]
     Inner(usize),
     #[kv_assoc(assoc = String)]
-    Outer,
+    Outer(usize),
     #[kv_assoc(assoc = MyState)]
     OuterEx1,
     #[kv_assoc(assoc = usize)]
@@ -70,7 +70,7 @@ mod tests {
         unit_a.add_source(TagInner(0), 10).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(TagOuter, unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
@@ -112,11 +112,46 @@ mod tests {
         unit_a.add_source(TagInner(0), 10).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(TagOuter, unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
-        unit_b.del_handle(&TagOuter);
+        unit_b.del_handle(&TagOuter(0));
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        unit_a.wait_alter(TagInner(0), "D".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_watch() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .init();
+        let unit_a = Unit::default();
+        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(1), 10).await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .await?;
+        unit_b
+            .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
+            .await?;
+        unit_b
+            .watch_2(TagOuter(0), TagOuter(1), |sc_0, sc_1, tag| {
+                Box::pin(async move {
+                    tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}, tag -- {tag:?}");
+                    anyhow::Ok(())
+                })
+            })
+            .await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        unit_b.del_handle(&TagOuter(0));
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;

@@ -193,6 +193,7 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum StateChange<T>
 where
     T: KvAssoc,
