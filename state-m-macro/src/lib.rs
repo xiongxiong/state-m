@@ -406,7 +406,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                         #(#sel_recvs)*
                     }
                 }
-                tracing::info!("watch_{} | {tags:?} -- end", #n);
+                tracing::info!("watch_{} | {tags:?} -- close", #n);
             });
             Ok(())
         }

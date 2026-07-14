@@ -116,7 +116,7 @@ mod tests {
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
-        unit_b.del_handle(&TagOuter(0));
+        unit_b.del_handle(&TagOuter(0))?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;
@@ -151,7 +151,7 @@ mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(1)).await;
             unit_a.alter(TagInner(1), format!("B_{i}")).await?;
         }
-        unit_b.del_handle(&TagOuter(0));
+        unit_b.del_handle(&TagOuter(0))?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;

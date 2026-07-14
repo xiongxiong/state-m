@@ -96,12 +96,21 @@ where
     }
 
     /// Remove state source from state machine.
-    fn del_handle<T>(&self, tag: &T) -> bool
+    fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
         T::Value: AsState,
     {
-        self.remove(&tag.clone().into()).is_some()
+        match self.remove(&tag.clone().into()) {
+            Some((_, v)) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+                Some(h) => {
+                    h.close();
+                    Ok(true)
+                }
+                None => Err(GetHandleError::TypeNotMatch),
+            },
+            None => Ok(false),
+        }
     }
 
     /// If state source of tag exists in state machine.
@@ -261,7 +270,7 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
-    fn del_handle<T>(&self, tag: &T) -> bool
+    fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
         T::Value: AsState;
@@ -350,7 +359,7 @@ where
         Ok(())
     }
 
-    fn del_handle<T>(&self, tag: &T) -> bool
+    fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<T>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
         T::Value: AsState,

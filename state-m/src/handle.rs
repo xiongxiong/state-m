@@ -152,6 +152,10 @@ where
         }
     }
 
+    pub fn close(&self) {
+        self.cancel_token.cancel();
+    }
+
     pub async fn value(&self) -> S {
         self.cache.read().await.value.clone()
     }
@@ -211,13 +215,18 @@ where
             .set(fanout_tx.clone())
             .expect("The 'init' method can only be called once.");
         tokio::spawn(async move {
+            tracing::info!("init | {tag:?} -- start");
             loop {
                 select! {
                     biased;
                     _ = cancel_token.cancelled() => break,
-                    _ = fanout_rx.recv() => {},
-                    res = recver.recv() => {
-                        match res {
+                    r = fanout_rx.recv() => {
+                        if r.is_err() {
+                            break;
+                        }
+                    },
+                    r = recver.recv() => {
+                        match r {
                             Ok(e) => {
                                 let s_old = { cache.read().await.clone() };
                                 let s_new = e.state.clone();
@@ -234,6 +243,7 @@ where
                     }
                 }
             }
+            tracing::info!("init | {tag:?} -- close");
         });
     }
 }
