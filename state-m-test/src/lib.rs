@@ -61,4 +61,6 @@ use state_m_macro::*;
 
 pub struct UnitC;
 
-impl UnitC {}
+impl UnitC {
+    sm_join!(2);
+}

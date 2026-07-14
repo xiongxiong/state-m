@@ -194,19 +194,48 @@ where
     }
 }
 
+pub enum StateChange<T>
+where
+    T: KvAssoc,
+    T::Value: AsState,
+{
+    Change(State<T::Value>, State<T::Value>),
+    UnChange(State<T::Value>),
+}
+
+impl<T> StateChange<T>
+where
+    T: KvAssoc,
+    T::Value: AsState,
+{
+    pub fn cur(&self) -> State<T::Value> {
+        match self {
+            StateChange::Change(v, _) => v.clone(),
+            StateChange::UnChange(v) => v.clone(),
+        }
+    }
+
+    pub fn old(&self) -> State<T::Value> {
+        match self {
+            StateChange::Change(_, v) => v.clone(),
+            StateChange::UnChange(v) => v.clone(),
+        }
+    }
+}
+
 impl<K> StateMachine<K>
 where
     K: 'static + AsTag,
 {
-    sm_join!(1);
-    sm_join!(2);
-    sm_join!(3);
-    sm_join!(4);
-    sm_join!(5);
-    sm_join!(6);
-    sm_join!(7);
-    sm_join!(8);
-    sm_join!(9);
+    // sm_join!(1);
+    // sm_join!(2);
+    // sm_join!(3);
+    // sm_join!(4);
+    // sm_join!(5);
+    // sm_join!(6);
+    // sm_join!(7);
+    // sm_join!(8);
+    // sm_join!(9);
 }
 
 pub trait HasStateMachine {
@@ -293,6 +322,15 @@ pub trait UseStateMachine: HasStateMachine {
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
+
+    // pub async fn join_1<T1, F>(&self, tag_1: T1, func: F) -> anyhow::Result<()>
+    //     where
+    //         T1: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+    //         T1::Value: 'static + AsState + Send,
+    //         F: 'static
+    //             + Fn(
+    //                 Option<(State<T1::Value>, State<T1::Value>)>,
+    //             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> + Send;
 }
 
 #[async_trait]

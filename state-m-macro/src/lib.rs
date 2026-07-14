@@ -266,7 +266,7 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
     let method_name = format_ident!("join_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
-            let typ = format_ident!("T{}", i + 1);
+            let typ = format_ident!("T{}", i);
             quote! {#typ}
         }),
         quote! {,},
@@ -274,8 +274,8 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
     .collect();
     let tag_params: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
-            let name = format_ident!("tag_{}", i + 1);
-            let typ = format_ident!("T{}", i + 1);
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
             quote! {
                 #name: #typ
             }
@@ -285,24 +285,24 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
     .collect();
     let tag_typ_cons: Vec<_> = (0..n)
         .map(|i| {
-            let typ = format_ident!("T{}", i + 1);
+            let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send,
+                #typ::Value: 'static + AsState + Send + Sync,
             }
         })
         .collect();
     let fn_params_typ: Vec<_> = (0..n)
         .map(|i| {
-            let typ = format_ident!("T{}", i + 1);
+            let typ = format_ident!("T{}", i);
             quote! {
-                Option<(State<#typ::Value>, State<#typ::Value>)>,
+                StateChange<#typ>,
             }
         })
         .collect();
     let vec_tags: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
-            let name = format_ident!("tag_{}", i + 1);
+            let name = format_ident!("tag_{}", i);
             quote! {
                 #name.clone().into()
             }
@@ -312,19 +312,39 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
     .collect();
     let decl_vars: Vec<_> = (0..n)
         .map(|i| {
-            let tag_name = format_ident!("tag_{}", i + 1);
-            let handle_name = format_ident!("handle_{}", i + 1);
-            let rx_name = format_ident!("rx_{}", i + 1);
-            let token_name = format_ident!("token_{}", i + 1);
+            let tag_name = format_ident!("tag_{}", i);
+            let handle_name = format_ident!("handle_{}", i);
+            let rx_name = format_ident!("rx_{}", i);
+            let token_name = format_ident!("token_{}", i);
             quote! {
-                    let #handle_name = self.get_handle(#tag_name)?;
+                    let #handle_name = self.get_handle(#tag_name.clone())?;
                     let (mut #rx_name, #token_name) = #handle_name.fanout();
             }
         })
         .collect();
+    let all_state_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("state_{}", i);
+            quote! {
+                #name
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let all_states: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let handle_name = format_ident!("handle_{}", i);
+            quote! {
+                StateChange::UnChange(#handle_name.state().await)
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
     let sel_tokens: Vec<_> = (0..n)
         .map(|i| {
-            let token_name = format_ident!("token_{}", i + 1);
+            let token_name = format_ident!("token_{}", i);
             quote! {
                 _ = #token_name.cancelled() => break,
             }
@@ -332,15 +352,17 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
         .collect();
     let sel_recvs: Vec<_> = (0..n)
         .map(|i| {
-            let rx_name = format_ident!("rx_{}", i + 1);
-            let param = quote! {Some(p),};
-            let prev_params: Vec<_> = (0..i).map(|_| quote! { None, }).collect();
-            let post_params: Vec<_> = ((i + 1)..n).map(|_| quote! { None, }).collect();
+            let idx = Index::from(i);
+            let tag_name = format_ident!("tag_{}", i);
+            let rx_name = format_ident!("rx_{}", i);
             quote! {
                 r = #rx_name.recv() => {
                     match r {
-                        Ok(p) => {
-                            if let Err(e) = func(#(#prev_params)* #param #(#post_params)*).await {
+                        Ok((v_cur, v_old)) => {
+                            let mut states = (#(#all_states)*);
+                            states.#idx = StateChange::Change(v_cur, v_old);
+                            let (#(#all_state_names)*) = states;
+                            if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
                                 tracing::error!("join error -- {e:?}");
                             }
                         }
@@ -356,7 +378,7 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
             #(#tag_typ_cons)*
             F: 'static
                 + Fn(
-                    #(#fn_params_typ)*
+                    #(#fn_params_typ)* tag: K
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                 + Send,
         {
