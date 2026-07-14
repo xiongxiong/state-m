@@ -342,7 +342,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                     }
                 } else {
                     quote! {
-                        StateChange::Change(v_cur, v_old)
+                        StateChange::Change(s_cur, s_old)
                     }
                 }
             }),
@@ -366,7 +366,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
             quote! {
                 r = #rx_name.recv() => {
                     match r {
-                        Ok((v_cur, v_old)) => {
+                        Ok((s_cur, s_old)) => {
                             let mut states = (#(#all_states)*);
                             let (#(#all_state_names)*) = states;
                             if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
@@ -536,4 +536,177 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
                 }
     }
     .into()
+}
+
+#[proc_macro]
+pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than zero.");
+    let method_name = format_ident!("fuse_reader_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                State<#typ::Value>,
+            }
+        })
+        .collect();
+    let vec_tags: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            quote! {
+                #name.clone().into()
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let decl_vars: Vec<_> = (0..n)
+        .map(|i| {
+            let tag_name = format_ident!("tag_{}", i);
+            let handle_name = format_ident!("handle_{}", i);
+            let rx_name = format_ident!("rx_{}", i);
+            let token_name = format_ident!("token_{}", i);
+            quote! {
+                    let #handle_name = self.get_handle(#tag_name.clone())?;
+                    let (mut #rx_name, #token_name) = #handle_name.fanout();
+            }
+        })
+        .collect();
+    let chan_decl = {
+        let all_capacities: Vec<_> = itertools::intersperse(
+            (0..n).map(|i| {
+                let handle_name = format_ident!("handle_{}", i);
+                quote! {
+                    #handle_name.capacity()
+                }
+            }),
+            quote! {,},
+        )
+        .collect();
+        quote! {
+            let capacity = std::cmp::max(#(#all_capacities)*);
+            let (tx, _) = tokio::sync::broadcast::channel(capacity);
+            let tx_c = tx.clone();
+        }
+    };
+    let sel_tokens: Vec<_> = (0..n)
+        .map(|i| {
+            let token_name = format_ident!("token_{}", i);
+            quote! {
+                _ = #token_name.cancelled() => break,
+            }
+        })
+        .collect();
+    let calc_state_decls = |idx| {
+        (0..n)
+            .map(|i| {
+                let handle_name = format_ident!("handle_{}", i);
+                let state_name = format_ident!("state_{}", i);
+                if i != idx {
+                    quote! {
+                        let #state_name = #handle_name.state().await;
+                    }
+                } else {
+                    quote! {
+                        let #state_name = s_cur;
+                    }
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let all_state_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let state_name = format_ident!("state_{}", i);
+            quote! {
+                #state_name
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let sel_recvs: Vec<_> = (0..n)
+        .map(|i| {
+            let state_decls = calc_state_decls(i);
+            let rx_name = format_ident!("rx_{}", i);
+            quote! {
+                r = #rx_name.recv() => {
+                    match r {
+                        Ok((s_cur, _)) => {
+                            #(#state_decls)*
+                            let state = fuse(#(#all_state_names)*);
+                            let event = StateEvent {
+                                state,
+                                is_touch: false,
+                                close_handle: None,
+                            };
+                            if tx_c.send(event).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        })
+        .collect();
+    quote! {
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<K>>
+        where
+            #(#tag_typ_cons)*
+            S: 'static + AsState + Send,
+            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send,
+        {
+            let tags: Vec<K> = vec![#(#vec_tags)*];
+            assert!(
+                tags.iter().duplicates().collect::<Vec<_>>().is_empty(),
+                "Should not use duplicate tags."
+            );
+            #(#decl_vars)*
+            #chan_decl
+            tokio::spawn(async move {
+                tracing::info!("fuse_reader_{} | {tags:?} -- start", #n);
+                loop {
+                    tokio::select! {
+                        biased;
+                        #(#sel_tokens)*
+                        #(#sel_recvs)*
+                    }
+                }
+                tracing::info!("fuse_reader_{} | {tags:?} -- close", #n);
+            });
+            Ok(Reader::new(capacity, tx))
+        }
+    }.into()
 }
