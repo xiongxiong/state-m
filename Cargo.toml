@@ -4,7 +4,6 @@ resolver = "3"
 members = [
     "state-m",
     "state-m-macro",
-    "state-m-test"
 ]
 
 [patch.crates-io]

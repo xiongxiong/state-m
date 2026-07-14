@@ -482,18 +482,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "state-m-test"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "state-m",
- "state-m-macro",
- "tokio",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
