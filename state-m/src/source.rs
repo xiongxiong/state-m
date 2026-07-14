@@ -49,6 +49,6 @@ where
     }
 
     pub fn reader(&self) -> Reader<S> {
-        Reader(self.0.clone())
+        Reader::new(self.capacity, self.sender.clone())
     }
 }

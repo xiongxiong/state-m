@@ -58,13 +58,6 @@ impl<S> Handle<S>
 where
     S: 'static + AsState,
 {
-    fn capacity(&self) -> usize {
-        match self.inner {
-            HandleI::Source(ref source, _) => source.capacity,
-            HandleI::Reader(ref reader) => reader.capacity,
-        }
-    }
-
     async fn recver(&self) -> Receiver<StateEvent<S>> {
         match self.inner {
             HandleI::Source(ref source, _) => source.sender.subscribe(),
@@ -127,6 +120,13 @@ impl<S> Handle<S>
 where
     S: 'static + AsState,
 {
+    pub fn capacity(&self) -> usize {
+        match self.inner {
+            HandleI::Source(ref source, _) => source.capacity,
+            HandleI::Reader(ref reader) => reader.capacity,
+        }
+    }
+
     pub fn from_source(source: Source<S>) -> Self {
         Self {
             inner: HandleI::Source(source, Default::default()),
@@ -235,7 +235,9 @@ where
                                     {
                                         *cache.write().await = s_new.clone();
                                     }
-                                    _ = fanout_tx.send((s_new, s_old));
+                                    if fanout_tx.send((s_new, s_old)).is_err() {
+                                        break;
+                                    }
                                 }
                             }
                             Err(_) => break,

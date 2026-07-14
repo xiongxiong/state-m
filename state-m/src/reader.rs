@@ -6,12 +6,12 @@ use crate::{
 use std::{fmt::Debug, ops::Deref};
 use tokio::{
     select,
-    sync::broadcast::{channel, error::RecvError},
+    sync::broadcast::{Sender, channel, error::RecvError},
 };
 
 /// Reader of state, to receive state change events.
 #[derive(Clone, Debug)]
-pub struct Reader<S>(pub(crate) Inner<S>)
+pub struct Reader<S>(Inner<S>)
 where
     S: 'static + AsState;
 
@@ -23,6 +23,18 @@ where
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<S> Reader<S>
+where
+    S: 'static + AsState,
+{
+    pub(crate) fn new(capacity: usize, tx: Sender<StateEvent<S>>) -> Self {
+        Self(Inner {
+            capacity: capacity,
+            sender: tx,
+        })
     }
 }
 
@@ -146,9 +158,6 @@ where
                 }
             }
         });
-        Reader(Inner {
-            capacity: self.capacity,
-            sender: tx,
-        })
+        Reader::new(capacity, tx)
     }
 }
