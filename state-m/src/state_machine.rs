@@ -203,72 +203,6 @@ where
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
     }
-
-    // async fn fuse_reader_2<T0, T1, S, F>(
-    //     &self,
-    //     tag_0: T0,
-    //     tag_1: T1,
-    //     fuse: F,
-    // ) -> Result<Reader<S>, GetHandleError<K>>
-    // where
-    //     T0: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-    //     T0::Value: 'static + AsState,
-    //     T1: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-    //     T1::Value: 'static + AsState,
-    //     S: 'static + AsState,
-    //     F: Fn(State<T0::Value>, State<T1::Value>) -> State<S>,
-    // {
-    //     let handle_0 = self.get_handle(tag_0)?;
-    //     let (mut rx_0, token_0) = handle_0.fanout();
-    //     let handle_1 = self.get_handle(tag_1)?;
-    //     let (mut rx_1, token_1) = handle_1.fanout();
-    //     let capacity = std::cmp::max(handle_0.capacity(), handle_1.capacity());
-    //     let (tx, _) = tokio::sync::broadcast::channel(capacity);
-    //     loop {
-    //         tokio::select! {
-    //             biased;
-    //             _ = token_0.cancelled() => break,
-    //             _ = token_1.cancelled() => break,
-    //             r = rx_0.recv() => {
-    //                 match r {
-    //                     Ok((new, _)) => {
-    //                         let state_0 = new;
-    //                         let state_1 = handle_1.state().await;
-    //                         let state = fuse(state_0, state_1);
-    //                         let event = StateEvent {
-    //                             state,
-    //                             is_touch: false,
-    //                             close_handle: None,
-    //                         };
-    //                         if tx.send(event).is_err() {
-    //                             break;
-    //                         }
-    //                     }
-    //                     Err(_) => break
-    //                 }
-    //             }
-    //             r = rx_1.recv() => {
-    //                 match r {
-    //                     Ok((new, _)) => {
-    //                         let state_0 = handle_0.state().await;
-    //                         let state_1 = new;
-    //                         let state = fuse(state_0, state_1);
-    //                         let event = StateEvent {
-    //                             state,
-    //                             is_touch: false,
-    //                             close_handle: None,
-    //                         };
-    //                         if tx.send(event).is_err() {
-    //                             break;
-    //                         }
-    //                     }
-    //                     Err(_) => break
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     Ok(Reader::new(capacity, tx))
-    // }
 }
 
 /// State change result.
@@ -320,6 +254,7 @@ where
     sm_watch!(7);
     sm_watch!(8);
     sm_watch!(9);
+    sm_watch!(10);
 
     sm_fuse_reader!(2);
     sm_fuse_reader!(3);
@@ -329,6 +264,7 @@ where
     sm_fuse_reader!(7);
     sm_fuse_reader!(8);
     sm_fuse_reader!(9);
+    sm_fuse_reader!(10);
 }
 
 pub trait HasStateMachine {
@@ -452,6 +388,17 @@ pub trait UseStateMachine: HasStateMachine {
     watch_decl!(7);
     watch_decl!(8);
     watch_decl!(9);
+    watch_decl!(10);
+
+    fuse_reader_decl!(2);
+    fuse_reader_decl!(3);
+    fuse_reader_decl!(4);
+    fuse_reader_decl!(5);
+    fuse_reader_decl!(6);
+    fuse_reader_decl!(7);
+    fuse_reader_decl!(8);
+    fuse_reader_decl!(9);
+    fuse_reader_decl!(10);
 }
 
 #[async_trait]
@@ -593,6 +540,17 @@ where
     watch_impl!(7);
     watch_impl!(8);
     watch_impl!(9);
+    watch_impl!(10);
+
+    fuse_reader_impl!(2);
+    fuse_reader_impl!(3);
+    fuse_reader_impl!(4);
+    fuse_reader_impl!(5);
+    fuse_reader_impl!(6);
+    fuse_reader_impl!(7);
+    fuse_reader_impl!(8);
+    fuse_reader_impl!(9);
+    fuse_reader_impl!(10);
 }
 
 /// StateChangeError

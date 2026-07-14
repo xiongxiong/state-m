@@ -616,7 +616,7 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
         )
         .collect();
         quote! {
-            let capacity = std::cmp::max(#(#all_capacities)*);
+            let capacity = itertools::max(vec![#(#all_capacities)*]).expect("Should not happen.");
             let (tx, _) = tokio::sync::broadcast::channel(capacity);
             let tx_c = tx.clone();
         }
@@ -708,5 +708,123 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
             });
             Ok(Reader::new(capacity, tx))
         }
+    }.into()
+}
+
+#[proc_macro]
+pub fn fuse_reader_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than zero.");
+    let method_name = format_ident!("fuse_reader_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                State<#typ::Value>,
+            }
+        })
+        .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        where
+            #(#tag_typ_cons)*
+            S: 'static + AsState + Send,
+            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send;
+    }.into()
+}
+
+#[proc_macro]
+pub fn fuse_reader_impl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than zero.");
+    let method_name = format_ident!("fuse_reader_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                State<#typ::Value>,
+            }
+        })
+        .collect();
+    let tag_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            quote! {
+                #name
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        where
+            #(#tag_typ_cons)*
+            S: 'static + AsState + Send,
+            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send {
+                self.state_machine().#method_name(#(#tag_names)*, fuse).await
+            }
     }.into()
 }

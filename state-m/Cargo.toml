@@ -32,7 +32,3 @@ default = []
 [[test]]
 name = "test"
 path = "tests/test.rs"
-
-[[test]]
-name = "hello"
-path = "tests/hello.rs"
