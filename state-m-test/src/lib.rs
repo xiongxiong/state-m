@@ -58,9 +58,3 @@ use state_m_macro::*;
 //         &self.state_machine
 //     }
 // }
-
-pub struct UnitC;
-
-impl UnitC {
-    sm_join!(2);
-}

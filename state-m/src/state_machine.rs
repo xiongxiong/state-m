@@ -7,10 +7,9 @@ use crate::{
 use async_trait::async_trait;
 use dashmap::DashMap;
 use itertools::Itertools;
-use state_m_macro::sm_join;
+use state_m_macro::*;
 use std::{any::Any, fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
-use tokio::select;
 use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
@@ -227,15 +226,15 @@ impl<K> StateMachine<K>
 where
     K: 'static + AsTag,
 {
-    // sm_join!(1);
-    // sm_join!(2);
-    // sm_join!(3);
-    // sm_join!(4);
-    // sm_join!(5);
-    // sm_join!(6);
-    // sm_join!(7);
-    // sm_join!(8);
-    // sm_join!(9);
+    sm_watch!(1);
+    sm_watch!(2);
+    sm_watch!(3);
+    sm_watch!(4);
+    sm_watch!(5);
+    sm_watch!(6);
+    sm_watch!(7);
+    sm_watch!(8);
+    sm_watch!(9);
 }
 
 pub trait HasStateMachine {
@@ -323,14 +322,15 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
-    // pub async fn join_1<T1, F>(&self, tag_1: T1, func: F) -> anyhow::Result<()>
-    //     where
-    //         T1: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-    //         T1::Value: 'static + AsState + Send,
-    //         F: 'static
-    //             + Fn(
-    //                 Option<(State<T1::Value>, State<T1::Value>)>,
-    //             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>> + Send;
+    watch_decl!(1);
+    watch_decl!(2);
+    watch_decl!(3);
+    watch_decl!(4);
+    watch_decl!(5);
+    watch_decl!(6);
+    watch_decl!(7);
+    watch_decl!(8);
+    watch_decl!(9);
 }
 
 #[async_trait]
@@ -458,6 +458,16 @@ where
     {
         self.state_machine().wait_amend(tag, f).await
     }
+
+    watch_impl!(1);
+    watch_impl!(2);
+    watch_impl!(3);
+    watch_impl!(4);
+    watch_impl!(5);
+    watch_impl!(6);
+    watch_impl!(7);
+    watch_impl!(8);
+    watch_impl!(9);
 }
 
 #[derive(Debug, Error)]

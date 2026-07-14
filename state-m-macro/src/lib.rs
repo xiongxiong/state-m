@@ -257,13 +257,13 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_join(input: TokenStream) -> TokenStream {
+pub fn sm_watch(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number");
     assert!(n > 0, "Input number should larger than zero.");
-    let method_name = format_ident!("join_{n}");
+    let method_name = format_ident!("watch_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -353,6 +353,15 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
     let sel_recvs: Vec<_> = (0..n)
         .map(|i| {
             let idx = Index::from(i);
+            let upd_state = if n > 1 {
+                quote! {
+                    states.#idx
+                }
+            } else {
+                quote! {
+                    states
+                }
+            };
             let tag_name = format_ident!("tag_{}", i);
             let rx_name = format_ident!("rx_{}", i);
             quote! {
@@ -360,10 +369,10 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
                     match r {
                         Ok((v_cur, v_old)) => {
                             let mut states = (#(#all_states)*);
-                            states.#idx = StateChange::Change(v_cur, v_old);
+                            #upd_state = StateChange::Change(v_cur, v_old);
                             let (#(#all_state_names)*) = states;
                             if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
-                                tracing::error!("join error -- {e:?}");
+                                tracing::error!("watch error -- {e:?}");
                             }
                         }
                         Err(_) => break,
@@ -378,7 +387,7 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
             #(#tag_typ_cons)*
             F: 'static
                 + Fn(
-                    #(#fn_params_typ)* tag: K
+                    #(#fn_params_typ)* K
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                 + Send,
         {
@@ -399,6 +408,132 @@ pub fn sm_join(input: TokenStream) -> TokenStream {
             });
             Ok(())
         }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn watch_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 0, "Input number should larger than zero.");
+    let method_name = format_ident!("watch_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                StateChange<#typ>,
+            }
+        })
+        .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> anyhow::Result<()>
+        where
+            #(#tag_typ_cons)*
+            F: 'static
+                + Fn(
+                    #(#fn_params_typ)* Self::K
+                ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                + Send;
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn watch_impl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 0, "Input number should larger than zero.");
+    let method_name = format_ident!("watch_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                StateChange<#typ>,
+            }
+        })
+        .collect();
+    let tag_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            quote! {
+                #name
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> anyhow::Result<()>
+        where
+            #(#tag_typ_cons)*
+            F: 'static
+                + Fn(
+                    #(#fn_params_typ)* Self::K
+                ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                + Send {
+                    self.state_machine().#method_name(#(#tag_names)*, func).await
+                }
     }
     .into()
 }
