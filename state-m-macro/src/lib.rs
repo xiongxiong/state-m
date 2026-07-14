@@ -382,7 +382,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> anyhow::Result<()>
+        pub async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             F: 'static
@@ -459,7 +459,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> anyhow::Result<()>
+        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             F: 'static
@@ -526,7 +526,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> anyhow::Result<()>
+        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             F: 'static
