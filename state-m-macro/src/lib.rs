@@ -332,16 +332,24 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         quote! {,},
     )
     .collect();
-    let all_states: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let handle_name = format_ident!("handle_{}", i);
-            quote! {
-                StateChange::UnChange(#handle_name.state().await)
-            }
-        }),
-        quote! {,},
-    )
-    .collect();
+    let calc_all_states = |idx: usize| {
+        itertools::intersperse(
+            (0..n).map(|i| {
+                if i != idx {
+                    let handle_name = format_ident!("handle_{}", i);
+                    quote! {
+                        StateChange::UnChange(#handle_name.state().await)
+                    }
+                } else {
+                    quote! {
+                        StateChange::Change(v_cur, v_old)
+                    }
+                }
+            }),
+            quote! {,},
+        )
+        .collect::<Vec<_>>()
+    };
     let sel_tokens: Vec<_> = (0..n)
         .map(|i| {
             let token_name = format_ident!("token_{}", i);
@@ -352,16 +360,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .collect();
     let sel_recvs: Vec<_> = (0..n)
         .map(|i| {
-            let idx = Index::from(i);
-            let upd_state = if n > 1 {
-                quote! {
-                    states.#idx
-                }
-            } else {
-                quote! {
-                    states
-                }
-            };
+            let all_states = calc_all_states(i);
             let tag_name = format_ident!("tag_{}", i);
             let rx_name = format_ident!("rx_{}", i);
             quote! {
@@ -369,7 +368,6 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                     match r {
                         Ok((v_cur, v_old)) => {
                             let mut states = (#(#all_states)*);
-                            #upd_state = StateChange::Change(v_cur, v_old);
                             let (#(#all_state_names)*) = states;
                             if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
                                 tracing::error!("watch error -- {e:?}");
