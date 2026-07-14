@@ -30,6 +30,11 @@ impl<S> Reader<S>
 where
     S: 'static + AsState + Send,
 {
+    /// Check is the channel has been closed.
+    pub fn is_closed(&self) -> bool {
+        self.sender.subscribe().is_closed()
+    }
+
     /// Convert data type of state reader.
     /// # Arguments
     /// * `capacity` - capacity of the new broadcast channel will be created.

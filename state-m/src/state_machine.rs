@@ -89,6 +89,9 @@ where
         if self.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag));
         }
+        if reader.is_closed() {
+            return Err(AddHandleError::ChannelClosed);
+        }
         let h = Arc::new(Handle::from_reader(reader));
         h.init(tag).await;
         self.insert(k, Box::new(h));
@@ -546,4 +549,6 @@ where
 {
     #[error("State handle for tag [{0:?}] already exist.")]
     AlreadyExist(T),
+    #[error("The state channel has been closed.")]
+    ChannelClosed,
 }
