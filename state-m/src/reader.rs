@@ -37,9 +37,61 @@ where
     /// Reader of new data type.
     pub fn extend<T>(&self, capacity: usize) -> Reader<T>
     where
-        T: 'static + Clone + Debug + Default + From<S> + PartialEq + Send,
+        T: AsState + From<S> + Send,
     {
-        self.extend_with(capacity, |s| async move { T::from(s) })
+        self.extend_with(capacity, T::from)
+    }
+
+    /// Convert data type of state reader, with an closure.
+    /// # Arguments
+    /// * `capacity` - capacity of the new broadcast channel will be created.
+    /// * `f` - an closure, which takes the old state value as parameter, and return the new state value.
+    /// # Returns
+    /// Reader of new data type.
+    pub fn extend_with<T, F>(&self, capacity: usize, f: F) -> Reader<T>
+    where
+        T: AsState + Send,
+        F: Fn(S) -> T + Send + 'static,
+    {
+        let (tx, _) = channel(capacity);
+        let tx_c = tx.clone();
+        let mut rx_o = self.sender.subscribe();
+        tokio::spawn(async move {
+            loop {
+                select! {
+                    res = rx_o.recv() => {
+                        match res {
+                            Ok(s) => {
+                                tracing::trace!("recv -- {:?}", s.state);
+                                let s_new = StateEvent {
+                                    state: State {
+                                        value: f(s.state.value),
+                                        timestamp: s.state.timestamp,
+                                    },
+                                    is_touch: s.is_touch,
+                                    close_handle: s.close_handle,
+                                };
+                                if tx_c.send(s_new).is_err() {
+                                    break;
+                                }
+                            },
+                            Err(e) => {
+                                match e {
+                                    RecvError::Closed => break,
+                                    RecvError::Lagged(n) => {
+                                        tracing::warn!("lagged | skipped {n} messages.")
+                                    },
+                                }
+                            },
+                        }
+                    }
+                }
+            }
+        });
+        Reader(Inner {
+            capacity: self.capacity,
+            sender: tx,
+        })
     }
 
     /// Convert data type of state reader, with an async closure.
@@ -48,7 +100,7 @@ where
     /// * `f` - an async closure, which takes the old state value as parameter, and return the new state value.
     /// # Returns
     /// Reader of new data type.
-    pub fn extend_with<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
+    pub fn async_entend<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
     where
         T: 'static + AsState + Send,
         F: Fn(S) -> Fut + Send + Sync + 'static,

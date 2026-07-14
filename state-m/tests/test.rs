@@ -90,9 +90,7 @@ mod tests {
         unit_b
             .add_reader(
                 TagOuterEx2,
-                unit_a
-                    .reader(TagInner(0))?
-                    .extend_with(10, |s| Box::pin(async move { s.len() })),
+                unit_a.reader(TagInner(0))?.extend_with(10, |s| s.len()),
             )
             .await?;
         unit_a.alter(TagInner(0), "Hello".into()).await?;
