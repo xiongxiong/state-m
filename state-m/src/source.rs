@@ -7,8 +7,8 @@ pub struct Inner<S>
 where
     S: 'static + AsState,
 {
-    pub capacity: usize,
-    pub sender: Sender<StateEvent<S>>,
+    pub(crate) capacity: usize,
+    pub(crate) sender: Sender<StateEvent<S>>,
 }
 
 impl<S> Inner<S>

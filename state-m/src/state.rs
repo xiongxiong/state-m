@@ -3,6 +3,9 @@ use derivative::Derivative;
 use std::fmt::Display;
 use tokio::sync::mpsc;
 
+/// State type.
+/// * `value` - the state value.
+/// * `timestamp` - timestamp at which the current state value was created.
 #[derive(Clone, Debug)]
 pub struct State<S>
 where
@@ -33,6 +36,8 @@ where
     }
 }
 
+/// State change event.
+/// * `state` - state associated with event.
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
 pub struct StateEvent<S>
@@ -40,9 +45,9 @@ where
     S: Default,
 {
     pub state: State<S>,
-    pub is_touch: bool,
+    pub(crate) is_touch: bool,
     #[derivative(Debug = "ignore")]
-    pub close_handle: Option<mpsc::Sender<()>>,
+    pub(crate) close_handle: Option<mpsc::Sender<()>>,
 }
 
 impl<S> Default for StateEvent<S>

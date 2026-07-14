@@ -9,6 +9,7 @@ use tokio::{
     sync::broadcast::{channel, error::RecvError},
 };
 
+/// Reader of state, to receive state change events.
 #[derive(Clone, Debug)]
 pub struct Reader<S>(pub(crate) Inner<S>)
 where
@@ -29,6 +30,11 @@ impl<S> Reader<S>
 where
     S: 'static + AsState + Send,
 {
+    /// Convert data type of state reader.
+    /// # Arguments
+    /// * `capacity` - capacity of the new broadcast channel will be created.
+    /// # Returns
+    /// Reader of new data type.
     pub fn extend<T>(&self, capacity: usize) -> Reader<T>
     where
         T: 'static + Clone + Debug + Default + From<S> + PartialEq + Send,
@@ -36,6 +42,12 @@ where
         self.extend_with(capacity, |s| async move { T::from(s) })
     }
 
+    /// Convert data type of state reader, with an async closure.
+    /// # Arguments
+    /// * `capacity` - capacity of the new broadcast channel will be created.
+    /// * `f` - an async closure, which takes the old state value as parameter, and return the new state value.
+    /// # Returns
+    /// Reader of new data type.
     pub fn extend_with<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
     where
         T: 'static + AsState + Send,
