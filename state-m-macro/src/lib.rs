@@ -398,6 +398,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
             );
             #(#decl_vars)*
             tokio::spawn(async move {
+                tracing::info!("watch_{} | {tags:?} -- start", #n);
                 loop {
                     tokio::select! {
                         biased;
@@ -405,6 +406,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                         #(#sel_recvs)*
                     }
                 }
+                tracing::info!("watch_{} | {tags:?} -- end", #n);
             });
             Ok(())
         }
