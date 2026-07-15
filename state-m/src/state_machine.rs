@@ -255,16 +255,36 @@ where
     sm_watch!(8);
     sm_watch!(9);
     sm_watch!(10);
+    sm_watch!(11);
+    sm_watch!(12);
+    sm_watch!(13);
+    sm_watch!(14);
+    sm_watch!(15);
+    sm_watch!(16);
+    sm_watch!(17);
+    sm_watch!(18);
+    sm_watch!(19);
+    sm_watch!(20);
 
-    sm_fuse_reader!(2);
-    sm_fuse_reader!(3);
-    sm_fuse_reader!(4);
-    sm_fuse_reader!(5);
-    sm_fuse_reader!(6);
-    sm_fuse_reader!(7);
-    sm_fuse_reader!(8);
-    sm_fuse_reader!(9);
-    sm_fuse_reader!(10);
+    sm_merge_reader!(2);
+    sm_merge_reader!(3);
+    sm_merge_reader!(4);
+    sm_merge_reader!(5);
+    sm_merge_reader!(6);
+    sm_merge_reader!(7);
+    sm_merge_reader!(8);
+    sm_merge_reader!(9);
+    sm_merge_reader!(10);
+    sm_merge_reader!(11);
+    sm_merge_reader!(12);
+    sm_merge_reader!(13);
+    sm_merge_reader!(14);
+    sm_merge_reader!(15);
+    sm_merge_reader!(16);
+    sm_merge_reader!(17);
+    sm_merge_reader!(18);
+    sm_merge_reader!(19);
+    sm_merge_reader!(20);
 }
 
 pub trait HasStateMachine {
@@ -389,16 +409,36 @@ pub trait UseStateMachine: HasStateMachine {
     watch_decl!(8);
     watch_decl!(9);
     watch_decl!(10);
+    watch_decl!(11);
+    watch_decl!(12);
+    watch_decl!(13);
+    watch_decl!(14);
+    watch_decl!(15);
+    watch_decl!(16);
+    watch_decl!(17);
+    watch_decl!(18);
+    watch_decl!(19);
+    watch_decl!(20);
 
-    fuse_reader_decl!(2);
-    fuse_reader_decl!(3);
-    fuse_reader_decl!(4);
-    fuse_reader_decl!(5);
-    fuse_reader_decl!(6);
-    fuse_reader_decl!(7);
-    fuse_reader_decl!(8);
-    fuse_reader_decl!(9);
-    fuse_reader_decl!(10);
+    merge_reader_decl!(2);
+    merge_reader_decl!(3);
+    merge_reader_decl!(4);
+    merge_reader_decl!(5);
+    merge_reader_decl!(6);
+    merge_reader_decl!(7);
+    merge_reader_decl!(8);
+    merge_reader_decl!(9);
+    merge_reader_decl!(10);
+    merge_reader_decl!(11);
+    merge_reader_decl!(12);
+    merge_reader_decl!(13);
+    merge_reader_decl!(14);
+    merge_reader_decl!(15);
+    merge_reader_decl!(16);
+    merge_reader_decl!(17);
+    merge_reader_decl!(18);
+    merge_reader_decl!(19);
+    merge_reader_decl!(20);
 }
 
 #[async_trait]
@@ -541,16 +581,36 @@ where
     watch_impl!(8);
     watch_impl!(9);
     watch_impl!(10);
+    watch_impl!(11);
+    watch_impl!(12);
+    watch_impl!(13);
+    watch_impl!(14);
+    watch_impl!(15);
+    watch_impl!(16);
+    watch_impl!(17);
+    watch_impl!(18);
+    watch_impl!(19);
+    watch_impl!(20);
 
-    fuse_reader_impl!(2);
-    fuse_reader_impl!(3);
-    fuse_reader_impl!(4);
-    fuse_reader_impl!(5);
-    fuse_reader_impl!(6);
-    fuse_reader_impl!(7);
-    fuse_reader_impl!(8);
-    fuse_reader_impl!(9);
-    fuse_reader_impl!(10);
+    merge_reader_impl!(2);
+    merge_reader_impl!(3);
+    merge_reader_impl!(4);
+    merge_reader_impl!(5);
+    merge_reader_impl!(6);
+    merge_reader_impl!(7);
+    merge_reader_impl!(8);
+    merge_reader_impl!(9);
+    merge_reader_impl!(10);
+    merge_reader_impl!(11);
+    merge_reader_impl!(12);
+    merge_reader_impl!(13);
+    merge_reader_impl!(14);
+    merge_reader_impl!(15);
+    merge_reader_impl!(16);
+    merge_reader_impl!(17);
+    merge_reader_impl!(18);
+    merge_reader_impl!(19);
+    merge_reader_impl!(20);
 }
 
 /// StateChangeError

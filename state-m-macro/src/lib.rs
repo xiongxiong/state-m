@@ -457,6 +457,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
+        /// Watch multiple state readers simultaneously, state events from these readers arrived in queue.
         async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
@@ -539,13 +540,13 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
+pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number");
     assert!(n > 1, "Input number should larger than zero.");
-    let method_name = format_ident!("fuse_reader_{n}");
+    let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -665,7 +666,7 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
                     match r {
                         Ok((s_cur, _)) => {
                             #(#state_decls)*
-                            let state = fuse(#(#all_state_names)*);
+                            let state = merge(#(#all_state_names)*);
                             let event = StateEvent {
                                 state,
                                 is_touch: false,
@@ -682,7 +683,7 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -696,7 +697,7 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
             #(#decl_vars)*
             #chan_decl
             tokio::spawn(async move {
-                tracing::info!("fuse_reader_{} | {tags:?} -- start", #n);
+                tracing::info!("merge_reader_{} | {tags:?} -- start", #n);
                 loop {
                     tokio::select! {
                         biased;
@@ -704,7 +705,7 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
                         #(#sel_recvs)*
                     }
                 }
-                tracing::info!("fuse_reader_{} | {tags:?} -- close", #n);
+                tracing::info!("merge_reader_{} | {tags:?} -- close", #n);
             });
             Ok(Reader::new(capacity, tx))
         }
@@ -712,13 +713,13 @@ pub fn sm_fuse_reader(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn fuse_reader_decl(input: TokenStream) -> TokenStream {
+pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number");
     assert!(n > 1, "Input number should larger than zero.");
-    let method_name = format_ident!("fuse_reader_{n}");
+    let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -756,7 +757,8 @@ pub fn fuse_reader_decl(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        /// Merge multiple state readers into one.
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -765,13 +767,13 @@ pub fn fuse_reader_decl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn fuse_reader_impl(input: TokenStream) -> TokenStream {
+pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number");
     assert!(n > 1, "Input number should larger than zero.");
-    let method_name = format_ident!("fuse_reader_{n}");
+    let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -819,12 +821,12 @@ pub fn fuse_reader_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, fuse: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
             F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send {
-                self.state_machine().#method_name(#(#tag_names)*, fuse).await
+                self.state_machine().#method_name(#(#tag_names)*, merge).await
             }
     }.into()
 }
