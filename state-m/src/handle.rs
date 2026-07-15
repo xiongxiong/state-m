@@ -30,7 +30,7 @@ use tracing::instrument;
 
 #[async_trait]
 pub trait AsHandle: Debug + Downcast + Send + Sync {
-    async fn debug_state(&self) -> String;
+    async fn debug_state(&self) -> Box<dyn Debug>;
 }
 
 impl_downcast!(AsHandle);
@@ -56,8 +56,8 @@ impl<S> AsHandle for ArcHandle<S>
 where
     S: 'static + AsState + Send + Sync,
 {
-    async fn debug_state(&self) -> String {
-        format!("{:?}", self.0.state().await)
+    async fn debug_state(&self) -> Box<dyn Debug> {
+        Box::new(self.0.state().await)
     }
 }
 
