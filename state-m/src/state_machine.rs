@@ -204,65 +204,65 @@ where
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
     }
 
-    async fn split_reader<T, F, S0, S1>(
-        &self,
-        tag: T,
-        func: F,
-    ) -> Result<(Reader<S0>, Reader<S1>), GetHandleError<K>>
-    where
-        T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState + Send,
-        F: 'static + Fn(T::Value) -> (S0, S1) + Send,
-        S0: 'static + AsState + Send,
-        S1: 'static + AsState + Send,
-    {
-        let handle = self.get_handle(tag)?;
-        let capacity = handle.capacity();
-        let (mut rx, token) = handle.fanout();
-        let (tx_0, _) = tokio::sync::broadcast::channel(capacity);
-        let (tx_1, _) = tokio::sync::broadcast::channel(capacity);
-        let tx_0_c = tx_0.clone();
-        let tx_1_c = tx_1.clone();
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    biased;
-                    _ = token.cancelled() => break,
-                    r = rx.recv() => {
-                        match r {
-                            Ok((s_cur, _)) => {
-                                let (v_0, v_1) = func(s_cur.value);
-                                let s_0 = StateEvent {
-                                    state: State {
-                                        value: v_0,
-                                        timestamp: s_cur.timestamp.clone(),
-                                    },
-                                    is_touch: false,
-                                    close_handle: None,
-                                };
-                                if tx_0_c.send(s_0).is_err() {
-                                    break;
-                                }
-                                let s_1 = StateEvent {
-                                    state: State {
-                                        value: v_1,
-                                        timestamp: s_cur.timestamp.clone(),
-                                    },
-                                    is_touch: false,
-                                    close_handle: None,
-                                };
-                                if tx_1_c.send(s_1).is_err() {
-                                    break;
-                                }
-                            },
-                            Err(_) => break,
-                        }
-                    }
-                }
-            }
-        });
-        Ok((Reader::new(capacity, tx_0), Reader::new(capacity, tx_1)))
-    }
+    // async fn split_reader<T, F, S0, S1>(
+    //     &self,
+    //     tag: T,
+    //     func: F,
+    // ) -> Result<(Reader<S0>, Reader<S1>), GetHandleError<K>>
+    // where
+    //     T: Clone + Debug + Into<K> + KvAssoc,
+    //     T::Value: 'static + AsState + Send,
+    //     F: 'static + Fn(T::Value) -> (S0, S1) + Send,
+    //     S0: 'static + AsState + Send,
+    //     S1: 'static + AsState + Send,
+    // {
+    //     let handle = self.get_handle(tag)?;
+    //     let capacity = handle.capacity();
+    //     let (mut rx, token) = handle.fanout();
+    //     let (tx_0, _) = tokio::sync::broadcast::channel(capacity);
+    //     let (tx_1, _) = tokio::sync::broadcast::channel(capacity);
+    //     let tx_0_c = tx_0.clone();
+    //     let tx_1_c = tx_1.clone();
+    //     tokio::spawn(async move {
+    //         loop {
+    //             tokio::select! {
+    //                 biased;
+    //                 _ = token.cancelled() => break,
+    //                 r = rx.recv() => {
+    //                     match r {
+    //                         Ok((s_cur, _)) => {
+    //                             let (v_0, v_1) = func(s_cur.value);
+    //                             let s_0 = StateEvent {
+    //                                 state: State {
+    //                                     value: v_0,
+    //                                     timestamp: s_cur.timestamp.clone(),
+    //                                 },
+    //                                 is_touch: false,
+    //                                 close_handle: None,
+    //                             };
+    //                             if tx_0_c.send(s_0).is_err() {
+    //                                 break;
+    //                             }
+    //                             let s_1 = StateEvent {
+    //                                 state: State {
+    //                                     value: v_1,
+    //                                     timestamp: s_cur.timestamp.clone(),
+    //                                 },
+    //                                 is_touch: false,
+    //                                 close_handle: None,
+    //                             };
+    //                             if tx_1_c.send(s_1).is_err() {
+    //                                 break;
+    //                             }
+    //                         },
+    //                         Err(_) => break,
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     });
+    //     Ok((Reader::new(capacity, tx_0), Reader::new(capacity, tx_1)))
+    // }
 }
 
 /// State change result.
@@ -345,6 +345,26 @@ where
     sm_merge_reader!(18);
     sm_merge_reader!(19);
     sm_merge_reader!(20);
+
+    sm_split_reader!(2);
+    sm_split_reader!(3);
+    sm_split_reader!(4);
+    sm_split_reader!(5);
+    sm_split_reader!(6);
+    sm_split_reader!(7);
+    sm_split_reader!(8);
+    sm_split_reader!(9);
+    sm_split_reader!(10);
+    sm_split_reader!(11);
+    sm_split_reader!(12);
+    sm_split_reader!(13);
+    sm_split_reader!(14);
+    sm_split_reader!(15);
+    sm_split_reader!(16);
+    sm_split_reader!(17);
+    sm_split_reader!(18);
+    sm_split_reader!(19);
+    sm_split_reader!(20);
 }
 
 pub trait HasStateMachine {

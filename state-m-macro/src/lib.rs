@@ -380,7 +380,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             F: 'static
@@ -545,7 +545,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number");
-    assert!(n > 1, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should larger than one.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -683,7 +683,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -828,5 +828,122 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
             F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send {
                 self.state_machine().#method_name(#(#tag_names)*, func).await
             }
+    }.into()
+}
+
+#[proc_macro]
+pub fn sm_split_reader(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than one.");
+    let method_name = format_ident!("split_reader_{n}");
+    let state_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let reader_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {Reader<#typ>}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let state_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {
+                #typ: 'static + AsState + Send,
+            }
+        })
+        .collect();
+    let decl_vars: Vec<_> = (0..n)
+        .map(|i| {
+            let tx_name = format_ident!("tx_{}", i);
+            let tx_name_c = format_ident!("tx_{}_c", i);
+            quote! {
+                let (#tx_name, _) = tokio::sync::broadcast::channel(capacity);
+                let #tx_name_c = #tx_name.clone();
+            }
+        })
+        .collect();
+    let value_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let value_name = format_ident!("v_{}", i);
+            quote! { #value_name }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let send_states: Vec<_> = (0..n)
+        .map(|i| {
+            let value_name = format_ident!("v_{}", i);
+            let event_name = format_ident!("e_{}", i);
+            let tx_name_c = format_ident!("tx_{}_c", i);
+            quote! {
+                let #event_name = StateEvent {
+                    state: State {
+                        value: #value_name,
+                        timestamp: s_cur.timestamp.clone(),
+                    },
+                    is_touch: false,
+                    close_handle: None,
+                };
+                if #tx_name_c.send(#event_name).is_err() {
+                    break;
+                }
+            }
+        })
+        .collect();
+    let res_readers: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let tx_name = format_ident!("tx_{}", i);
+            quote! {
+                Reader::new(capacity, #tx_name)
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote!{
+        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
+        where
+            T: 'static + Clone + Debug + Into<K> + KvAssoc + Send,
+            T::Value: 'static + AsState + Send,
+            F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
+            #(#state_typ_cons)*
+        {
+            let handle = self.get_handle(tag.clone())?;
+            let capacity = handle.capacity();
+            let (mut rx, token) = handle.fanout();
+            #(#decl_vars)*
+            let res_typ_name = std::any::type_name::<(#(#reader_typs)*)>();
+            tokio::spawn(async move {
+                tracing::info!("split_reader_{} | {tag:?} | {res_typ_name} -- start", #n);
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = token.cancelled() => break,
+                        r = rx.recv() => {
+                            match r {
+                                Ok((s_cur, _)) => {
+                                    let (#(#value_names)*) = func(s_cur.value);
+                                    #(#send_states)*
+                                },
+                                Err(_) => break,
+                            }
+                        }
+                    }
+                }
+                tracing::info!("split_reader_{} | {tag:?} | {res_typ_name} -- start", #n);
+            });
+            Ok((#(#res_readers)*))
+        }
     }.into()
 }
