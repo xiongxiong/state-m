@@ -1,6 +1,6 @@
 use crate::{
     AsState, AsTag, KvAssoc, State, StateEvent,
-    handle::{Handle, StateChangeError as HandleStateChangeError},
+    handle::{ArcHandle, AsHandle, Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::Source,
 };
@@ -8,14 +8,14 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use itertools::Itertools;
 use state_m_macro::*;
-use std::{any::Any, fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
+use std::{fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
 use thiserror::Error;
 use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
 #[derive(Clone, Debug)]
-pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn Any + Send + Sync>>>)
+pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn AsHandle>>>)
 where
     K: AsTag;
 
@@ -32,7 +32,7 @@ impl<K> Deref for StateMachine<K>
 where
     K: AsTag,
 {
-    type Target = Arc<DashMap<K, Box<dyn Any + Send + Sync>>>;
+    type Target = Arc<DashMap<K, Box<dyn AsHandle>>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -43,14 +43,14 @@ impl<K> StateMachine<K>
 where
     K: 'static + AsTag,
 {
-    fn get_handle<T>(&self, tag: T) -> Result<Arc<Handle<T::Value>>, GetHandleError<K>>
+    fn get_handle<T>(&self, tag: T) -> Result<ArcHandle<T::Value>, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: AsState,
+        T::Value: AsState + Send + Sync,
     {
         let k = tag.clone().into();
         match self.get(&k) {
-            Some(v) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+            Some(v) => match v.downcast_ref::<ArcHandle<T::Value>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
             },
@@ -64,7 +64,7 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<K>>
+    pub async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
@@ -73,14 +73,20 @@ where
         if self.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag.into()));
         }
-        let h = Arc::new(Handle::from_source(Source::<T::Value>::new(capacity)));
+        let h = ArcHandle(Arc::new(Handle::from_source(Source::<T::Value>::new(
+            capacity,
+        ))));
         h.init(tag).await;
         self.insert(k, Box::new(h));
         Ok(())
     }
 
     /// Add state reader into state machine.
-    async fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>) -> Result<(), AddHandleError<K>>
+    pub async fn add_reader<T>(
+        &self,
+        tag: T,
+        reader: Reader<T::Value>,
+    ) -> Result<(), AddHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
@@ -92,20 +98,20 @@ where
         if reader.is_closed() {
             return Err(AddHandleError::ChannelClosed);
         }
-        let h = Arc::new(Handle::from_reader(reader));
+        let h = ArcHandle(Arc::new(Handle::from_reader(reader)));
         h.init(tag).await;
         self.insert(k, Box::new(h));
         Ok(())
     }
 
     /// Remove state source from state machine.
-    fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<K>>
+    pub fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc,
-        T::Value: AsState,
+        T::Value: AsState + Send + Sync,
     {
         match self.remove(&tag.clone().into()) {
-            Some((_, v)) => match v.downcast_ref::<Arc<Handle<T::Value>>>() {
+            Some((_, v)) => match v.downcast_ref::<ArcHandle<T::Value>>() {
                 Some(h) => {
                     h.close();
                     Ok(true)
@@ -117,91 +123,101 @@ where
     }
 
     /// If state source of tag exists in state machine.
-    fn has_handle<T>(&self, tag: &T) -> bool
+    pub fn has_handle<T>(&self, tag: &T) -> bool
     where
         T: Clone + Into<K>,
     {
         self.contains_key(&tag.clone().into())
     }
 
-    fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<K>>
+    pub fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: AsState,
+        T::Value: AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.reader())
     }
 
-    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
+    pub async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.value().await)
     }
 
-    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<K>>
+    pub async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.state().await)
     }
 
-    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    pub async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.touch().await?)
     }
 
-    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    pub async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_touch().await?)
     }
 
-    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    pub async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.alter(s).await?)
     }
 
-    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    pub async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_alter(s).await?)
     }
 
-    async fn amend<T>(
+    pub async fn amend<T>(
         &self,
         tag: T,
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.amend(f).await?)
     }
 
-    async fn wait_amend<T>(
+    pub async fn wait_amend<T>(
         &self,
         tag: T,
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T, K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
-        T::Value: 'static + AsState,
+        T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
+    }
+
+    pub async fn debug_states(&self) -> Vec<String> {
+        let mut states = Vec::new();
+        for item in self.iter() {
+            let (k, v) = item.pair();
+            let state = format!("{:<20?} | {:?}", k, v.debug_state().await);
+            states.push(state);
+        }
+        states
     }
 }
 
@@ -210,7 +226,7 @@ where
 pub enum StateChange<T>
 where
     T: KvAssoc,
-    T::Value: AsState,
+    T::Value: AsState + Send + Sync,
 {
     /// State changed.
     /// * `0` - cur state.
@@ -224,7 +240,7 @@ where
 impl<T> StateChange<T>
 where
     T: KvAssoc,
-    T::Value: AsState,
+    T::Value: AsState + Send + Sync,
 {
     pub fn cur(&self) -> State<T::Value> {
         match self {
@@ -247,44 +263,34 @@ where
 {
     sm_watch!(1);
     sm_watch!(2);
-    // sm_watch!(3);
-    // sm_watch!(4);
-    // sm_watch!(5);
-    // sm_watch!(6);
-    // sm_watch!(7);
-    // sm_watch!(8);
-    // sm_watch!(9);
-    // sm_watch!(10);
-    // sm_watch!(11);
-    // sm_watch!(12);
-    // sm_watch!(13);
-    // sm_watch!(14);
-    // sm_watch!(15);
-    // sm_watch!(16);
-    // sm_watch!(17);
-    // sm_watch!(18);
-    // sm_watch!(19);
-    // sm_watch!(20);
+    sm_watch!(3);
+    sm_watch!(4);
+    sm_watch!(5);
+    sm_watch!(6);
+    sm_watch!(7);
+    sm_watch!(8);
+    sm_watch!(9);
+    sm_watch!(10);
 
-    // sm_merge_reader!(2);
-    // sm_merge_reader!(3);
-    // sm_merge_reader!(4);
-    // sm_merge_reader!(5);
-    // sm_merge_reader!(6);
-    // sm_merge_reader!(7);
-    // sm_merge_reader!(8);
-    // sm_merge_reader!(9);
-    // sm_merge_reader!(10);
+    sm_merge_reader!(2);
+    sm_merge_reader!(3);
+    sm_merge_reader!(4);
+    sm_merge_reader!(5);
+    sm_merge_reader!(6);
+    sm_merge_reader!(7);
+    sm_merge_reader!(8);
+    sm_merge_reader!(9);
+    sm_merge_reader!(10);
 
-    // sm_split_reader!(2);
-    // sm_split_reader!(3);
-    // sm_split_reader!(4);
-    // sm_split_reader!(5);
-    // sm_split_reader!(6);
-    // sm_split_reader!(7);
-    // sm_split_reader!(8);
-    // sm_split_reader!(9);
-    // sm_split_reader!(10);
+    sm_split_reader!(2);
+    sm_split_reader!(3);
+    sm_split_reader!(4);
+    sm_split_reader!(5);
+    sm_split_reader!(6);
+    sm_split_reader!(7);
+    sm_split_reader!(8);
+    sm_split_reader!(9);
+    sm_split_reader!(10);
 }
 
 pub trait HasStateMachine {
@@ -320,7 +326,7 @@ pub trait UseStateMachine: HasStateMachine {
     fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
-        T::Value: AsState;
+        T::Value: AsState + Send + Sync;
 
     /// If there is a handle (source or reader) in state machine for a tag.
     /// * `tag` - the `Tag` to find handle associated with it.
@@ -333,7 +339,7 @@ pub trait UseStateMachine: HasStateMachine {
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
     where
         T: Clone + Debug + Into<Self::K> + KvAssoc,
-        T::Value: AsState;
+        T::Value: AsState + Send + Sync;
 
     /// Get current state value of a tag in state machine.
     /// * `tag` - the `Tag` of the handle which you want to get state value from it.
@@ -401,44 +407,34 @@ pub trait UseStateMachine: HasStateMachine {
 
     watch_decl!(1);
     watch_decl!(2);
-    // watch_decl!(3);
-    // watch_decl!(4);
-    // watch_decl!(5);
-    // watch_decl!(6);
-    // watch_decl!(7);
-    // watch_decl!(8);
-    // watch_decl!(9);
-    // watch_decl!(10);
-    // watch_decl!(11);
-    // watch_decl!(12);
-    // watch_decl!(13);
-    // watch_decl!(14);
-    // watch_decl!(15);
-    // watch_decl!(16);
-    // watch_decl!(17);
-    // watch_decl!(18);
-    // watch_decl!(19);
-    // watch_decl!(20);
+    watch_decl!(3);
+    watch_decl!(4);
+    watch_decl!(5);
+    watch_decl!(6);
+    watch_decl!(7);
+    watch_decl!(8);
+    watch_decl!(9);
+    watch_decl!(10);
 
-    // merge_reader_decl!(2);
-    // merge_reader_decl!(3);
-    // merge_reader_decl!(4);
-    // merge_reader_decl!(5);
-    // merge_reader_decl!(6);
-    // merge_reader_decl!(7);
-    // merge_reader_decl!(8);
-    // merge_reader_decl!(9);
-    // merge_reader_decl!(10);
+    merge_reader_decl!(2);
+    merge_reader_decl!(3);
+    merge_reader_decl!(4);
+    merge_reader_decl!(5);
+    merge_reader_decl!(6);
+    merge_reader_decl!(7);
+    merge_reader_decl!(8);
+    merge_reader_decl!(9);
+    merge_reader_decl!(10);
 
-    // split_reader_decl!(2);
-    // split_reader_decl!(3);
-    // split_reader_decl!(4);
-    // split_reader_decl!(5);
-    // split_reader_decl!(6);
-    // split_reader_decl!(7);
-    // split_reader_decl!(8);
-    // split_reader_decl!(9);
-    // split_reader_decl!(10);
+    split_reader_decl!(2);
+    split_reader_decl!(3);
+    split_reader_decl!(4);
+    split_reader_decl!(5);
+    split_reader_decl!(6);
+    split_reader_decl!(7);
+    split_reader_decl!(8);
+    split_reader_decl!(9);
+    split_reader_decl!(10);
 }
 
 #[async_trait]
@@ -460,7 +456,7 @@ where
     fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
-        T::Value: AsState,
+        T::Value: AsState + Send + Sync,
     {
         self.state_machine().del_handle(tag)
     }
@@ -475,7 +471,7 @@ where
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
     where
         T: Clone + Debug + Into<Self::K> + KvAssoc,
-        T::Value: AsState,
+        T::Value: AsState + Send + Sync,
     {
         self.state_machine().reader(tag)
     }
@@ -573,44 +569,34 @@ where
 
     watch_impl!(1);
     watch_impl!(2);
-    // watch_impl!(3);
-    // watch_impl!(4);
-    // watch_impl!(5);
-    // watch_impl!(6);
-    // watch_impl!(7);
-    // watch_impl!(8);
-    // watch_impl!(9);
-    // watch_impl!(10);
-    // watch_impl!(11);
-    // watch_impl!(12);
-    // watch_impl!(13);
-    // watch_impl!(14);
-    // watch_impl!(15);
-    // watch_impl!(16);
-    // watch_impl!(17);
-    // watch_impl!(18);
-    // watch_impl!(19);
-    // watch_impl!(20);
+    watch_impl!(3);
+    watch_impl!(4);
+    watch_impl!(5);
+    watch_impl!(6);
+    watch_impl!(7);
+    watch_impl!(8);
+    watch_impl!(9);
+    watch_impl!(10);
 
-    // merge_reader_impl!(2);
-    // merge_reader_impl!(3);
-    // merge_reader_impl!(4);
-    // merge_reader_impl!(5);
-    // merge_reader_impl!(6);
-    // merge_reader_impl!(7);
-    // merge_reader_impl!(8);
-    // merge_reader_impl!(9);
-    // merge_reader_impl!(10);
+    merge_reader_impl!(2);
+    merge_reader_impl!(3);
+    merge_reader_impl!(4);
+    merge_reader_impl!(5);
+    merge_reader_impl!(6);
+    merge_reader_impl!(7);
+    merge_reader_impl!(8);
+    merge_reader_impl!(9);
+    merge_reader_impl!(10);
 
-    // split_reader_impl!(2);
-    // split_reader_impl!(3);
-    // split_reader_impl!(4);
-    // split_reader_impl!(5);
-    // split_reader_impl!(6);
-    // split_reader_impl!(7);
-    // split_reader_impl!(8);
-    // split_reader_impl!(9);
-    // split_reader_impl!(10);
+    split_reader_impl!(2);
+    split_reader_impl!(3);
+    split_reader_impl!(4);
+    split_reader_impl!(5);
+    split_reader_impl!(6);
+    split_reader_impl!(7);
+    split_reader_impl!(8);
+    split_reader_impl!(9);
+    split_reader_impl!(10);
 }
 
 /// StateChangeError

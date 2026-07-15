@@ -4,9 +4,12 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
+use async_trait::async_trait;
 use chrono::Utc;
+use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
+    ops::Deref,
     sync::{Arc, OnceLock},
 };
 use thiserror::Error;
@@ -24,6 +27,39 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
+
+#[async_trait]
+pub trait AsHandle: Debug + Downcast + Send + Sync {
+    async fn debug_state(&self) -> String;
+}
+
+impl_downcast!(AsHandle);
+
+#[derive(Clone, Debug)]
+pub(crate) struct ArcHandle<S>(pub Arc<Handle<S>>)
+where
+    S: 'static + AsState + Send + Sync;
+
+impl<S> Deref for ArcHandle<S>
+where
+    S: 'static + AsState + Send + Sync,
+{
+    type Target = Handle<S>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+#[async_trait]
+impl<S> AsHandle for ArcHandle<S>
+where
+    S: 'static + AsState + Send + Sync,
+{
+    async fn debug_state(&self) -> String {
+        format!("{:?}", self.0.state().await)
+    }
+}
 
 #[derive(Debug)]
 enum HandleI<S>
