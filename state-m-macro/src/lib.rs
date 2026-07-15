@@ -666,7 +666,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
                     match r {
                         Ok((s_cur, _)) => {
                             #(#state_decls)*
-                            let state = merge(#(#all_state_names)*);
+                            let state = func(#(#all_state_names)*);
                             let event = StateEvent {
                                 state,
                                 is_touch: false,
@@ -683,7 +683,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -758,7 +758,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         .collect();
     quote! {
         /// Merge multiple state readers into one.
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -821,12 +821,12 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, merge: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
             F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send {
-                self.state_machine().#method_name(#(#tag_names)*, merge).await
+                self.state_machine().#method_name(#(#tag_names)*, func).await
             }
     }.into()
 }
