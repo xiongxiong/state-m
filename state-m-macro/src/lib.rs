@@ -947,3 +947,89 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
         }
     }.into()
 }
+
+#[proc_macro]
+pub fn split_reader_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than one.");
+    let method_name = format_ident!("split_reader_{n}");
+    let state_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let reader_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {Reader<#typ>}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let state_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {
+                #typ: 'static + AsState + Send,
+            }
+        })
+        .collect();
+    quote!{
+        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
+        where
+            T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send,
+            T::Value: 'static + AsState + Send,
+            F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
+            #(#state_typ_cons)*;
+    }.into()
+}
+
+#[proc_macro]
+pub fn split_reader_impl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than one.");
+    let method_name = format_ident!("split_reader_{n}");
+    let state_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let reader_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {Reader<#typ>}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let state_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {
+                #typ: 'static + AsState + Send,
+            }
+        })
+        .collect();
+    quote!{
+        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
+        where
+            T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send,
+            T::Value: 'static + AsState + Send,
+            F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
+            #(#state_typ_cons)* {
+                self.state_machine().#method_name(tag, func).await
+            }
+    }.into()
+}

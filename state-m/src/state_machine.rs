@@ -203,66 +203,6 @@ where
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
     }
-
-    // async fn split_reader<T, F, S0, S1>(
-    //     &self,
-    //     tag: T,
-    //     func: F,
-    // ) -> Result<(Reader<S0>, Reader<S1>), GetHandleError<K>>
-    // where
-    //     T: Clone + Debug + Into<K> + KvAssoc,
-    //     T::Value: 'static + AsState + Send,
-    //     F: 'static + Fn(T::Value) -> (S0, S1) + Send,
-    //     S0: 'static + AsState + Send,
-    //     S1: 'static + AsState + Send,
-    // {
-    //     let handle = self.get_handle(tag)?;
-    //     let capacity = handle.capacity();
-    //     let (mut rx, token) = handle.fanout();
-    //     let (tx_0, _) = tokio::sync::broadcast::channel(capacity);
-    //     let (tx_1, _) = tokio::sync::broadcast::channel(capacity);
-    //     let tx_0_c = tx_0.clone();
-    //     let tx_1_c = tx_1.clone();
-    //     tokio::spawn(async move {
-    //         loop {
-    //             tokio::select! {
-    //                 biased;
-    //                 _ = token.cancelled() => break,
-    //                 r = rx.recv() => {
-    //                     match r {
-    //                         Ok((s_cur, _)) => {
-    //                             let (v_0, v_1) = func(s_cur.value);
-    //                             let s_0 = StateEvent {
-    //                                 state: State {
-    //                                     value: v_0,
-    //                                     timestamp: s_cur.timestamp.clone(),
-    //                                 },
-    //                                 is_touch: false,
-    //                                 close_handle: None,
-    //                             };
-    //                             if tx_0_c.send(s_0).is_err() {
-    //                                 break;
-    //                             }
-    //                             let s_1 = StateEvent {
-    //                                 state: State {
-    //                                     value: v_1,
-    //                                     timestamp: s_cur.timestamp.clone(),
-    //                                 },
-    //                                 is_touch: false,
-    //                                 close_handle: None,
-    //                             };
-    //                             if tx_1_c.send(s_1).is_err() {
-    //                                 break;
-    //                             }
-    //                         },
-    //                         Err(_) => break,
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     });
-    //     Ok((Reader::new(capacity, tx_0), Reader::new(capacity, tx_1)))
-    // }
 }
 
 /// State change result.
@@ -335,16 +275,6 @@ where
     sm_merge_reader!(8);
     sm_merge_reader!(9);
     sm_merge_reader!(10);
-    sm_merge_reader!(11);
-    sm_merge_reader!(12);
-    sm_merge_reader!(13);
-    sm_merge_reader!(14);
-    sm_merge_reader!(15);
-    sm_merge_reader!(16);
-    sm_merge_reader!(17);
-    sm_merge_reader!(18);
-    sm_merge_reader!(19);
-    sm_merge_reader!(20);
 
     sm_split_reader!(2);
     sm_split_reader!(3);
@@ -355,16 +285,6 @@ where
     sm_split_reader!(8);
     sm_split_reader!(9);
     sm_split_reader!(10);
-    sm_split_reader!(11);
-    sm_split_reader!(12);
-    sm_split_reader!(13);
-    sm_split_reader!(14);
-    sm_split_reader!(15);
-    sm_split_reader!(16);
-    sm_split_reader!(17);
-    sm_split_reader!(18);
-    sm_split_reader!(19);
-    sm_split_reader!(20);
 }
 
 pub trait HasStateMachine {
@@ -509,16 +429,16 @@ pub trait UseStateMachine: HasStateMachine {
     merge_reader_decl!(8);
     merge_reader_decl!(9);
     merge_reader_decl!(10);
-    merge_reader_decl!(11);
-    merge_reader_decl!(12);
-    merge_reader_decl!(13);
-    merge_reader_decl!(14);
-    merge_reader_decl!(15);
-    merge_reader_decl!(16);
-    merge_reader_decl!(17);
-    merge_reader_decl!(18);
-    merge_reader_decl!(19);
-    merge_reader_decl!(20);
+
+    split_reader_decl!(2);
+    split_reader_decl!(3);
+    split_reader_decl!(4);
+    split_reader_decl!(5);
+    split_reader_decl!(6);
+    split_reader_decl!(7);
+    split_reader_decl!(8);
+    split_reader_decl!(9);
+    split_reader_decl!(10);
 }
 
 #[async_trait]
@@ -681,16 +601,16 @@ where
     merge_reader_impl!(8);
     merge_reader_impl!(9);
     merge_reader_impl!(10);
-    merge_reader_impl!(11);
-    merge_reader_impl!(12);
-    merge_reader_impl!(13);
-    merge_reader_impl!(14);
-    merge_reader_impl!(15);
-    merge_reader_impl!(16);
-    merge_reader_impl!(17);
-    merge_reader_impl!(18);
-    merge_reader_impl!(19);
-    merge_reader_impl!(20);
+
+    split_reader_impl!(2);
+    split_reader_impl!(3);
+    split_reader_impl!(4);
+    split_reader_impl!(5);
+    split_reader_impl!(6);
+    split_reader_impl!(7);
+    split_reader_impl!(8);
+    split_reader_impl!(9);
+    split_reader_impl!(10);
 }
 
 /// StateChangeError
