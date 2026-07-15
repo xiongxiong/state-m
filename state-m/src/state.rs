@@ -1,12 +1,12 @@
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
-use std::fmt::Display;
+use std::fmt::{self, Debug, Display};
 use tokio::sync::mpsc;
 
 /// State type.
 /// * `value` - the state value.
 /// * `timestamp` - timestamp at which the current state value was created.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct State<S>
 where
     S: Default,
@@ -24,6 +24,15 @@ where
             value: Default::default(),
             timestamp: Utc::now(),
         }
+    }
+}
+
+impl<S> Debug for State<S>
+where
+    S: Debug + Default,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} | {:?}", self.timestamp, self.value)
     }
 }
 

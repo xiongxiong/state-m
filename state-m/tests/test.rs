@@ -112,10 +112,34 @@ mod tests {
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
+        unit_a
+            .state_machine
+            .debug_states()
+            .await
+            .iter()
+            .for_each(|s| println!("{}", s));
+        unit_b
+            .state_machine
+            .debug_states()
+            .await
+            .iter()
+            .for_each(|s| println!("{}", s));
         unit_b.del_handle(&TagOuter(0))?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;
+        unit_a
+            .state_machine
+            .debug_states()
+            .await
+            .iter()
+            .for_each(|s| println!("{}", s));
+        unit_b
+            .state_machine
+            .debug_states()
+            .await
+            .iter()
+            .for_each(|s| println!("{}", s));
         Ok(())
     }
 

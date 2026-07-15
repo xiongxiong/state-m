@@ -214,7 +214,7 @@ where
         let mut states = Vec::new();
         for item in self.iter() {
             let (k, v) = item.pair();
-            let state = format!("{:<20?} | {:?}", k, v.debug_state().await);
+            let state = format!("{:<20} | {:?}", format!("{k:?}"), v.debug_state().await);
             states.push(state);
         }
         states
