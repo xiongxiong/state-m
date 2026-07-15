@@ -981,6 +981,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote!{
+        /// Split a state reader into multiple state readers.
         async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
         where
             T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send,
