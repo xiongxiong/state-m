@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Index, LitInt, Type,
+    Attribute, DeriveInput, Index, LitInt, LitStr, Type,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
@@ -14,6 +14,7 @@ use syn::{
 #[derive(Debug, Default)]
 struct KvAssocArgs {
     pub assoc: AttributePropertyAssoc,
+    pub label: AttributePropertyLabel,
 }
 
 impl AttributeComponent for KvAssocArgs {
@@ -25,7 +26,7 @@ impl AttributeComponent for KvAssocArgs {
             syn::Meta::List(ref meta_list) => syn::parse2::<KvAssocArgs>(meta_list.tokens.clone()),
             syn::Meta::NameValue(_) => return_syn_err!(
                 attr,
-                "Expects an attribute of format `#[kv_assoc(assoc = Custom)]`. \nGot: {}",
+                "Expects an attribute of format `#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]`. \nGot: {}",
                 qt! { #attr }
             ),
         }
@@ -37,13 +38,14 @@ impl Parse for KvAssocArgs {
         let mut result = Self::default();
         let error = |ident: &syn::Ident| -> syn::Error {
             let known = ct::str::format!(
-                "Known entries of attribute {} are: {}.",
+                "Known entries of attribute {} are: {}, {}[optional].",
                 KvAssocArgs::KEYWORD,
-                AttributePropertyAssocMarker::KEYWORD
+                AttributePropertyAssocMarker::KEYWORD,
+                AttributePropertyLabelMarker::KEYWORD,
             );
             syn_err!(
                 ident,
-                r#"Expects an attribute of format '#[kv_assoc(assoc = Custom)]'
+                r#"Expects an attribute of format '#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]'
                 {known}
                 But got:
                 '{}'"#,
@@ -57,6 +59,9 @@ impl Parse for KvAssocArgs {
                 match ident.to_string().as_str() {
                     AttributePropertyAssoc::KEYWORD => {
                         result.assign(AttributePropertyAssoc::parse(input)?)
+                    }
+                    AttributePropertyLabel::KEYWORD => {
+                        result.assign(AttributePropertyLabel::parse(input)?)
                     }
                     _ => return Err(error(&ident)),
                 }
@@ -82,6 +87,16 @@ where
     }
 }
 
+impl<IntoT> Assign<AttributePropertyLabel, IntoT> for KvAssocArgs
+where
+    IntoT: Into<AttributePropertyLabel>,
+{
+    #[inline(always)]
+    fn assign(&mut self, component: IntoT) {
+        self.label = component.into()
+    }
+}
+
 type AttributePropertyAssoc = AttributePropertyOptionalSyn<Type, AttributePropertyAssocMarker>;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -89,6 +104,15 @@ struct AttributePropertyAssocMarker;
 
 impl AttributePropertyComponent for AttributePropertyAssocMarker {
     const KEYWORD: &'static str = "assoc";
+}
+
+type AttributePropertyLabel = AttributePropertyOptionalSyn<LitStr, AttributePropertyLabelMarker>;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct AttributePropertyLabelMarker;
+
+impl AttributePropertyComponent for AttributePropertyLabelMarker {
+    const KEYWORD: &'static str = "label";
 }
 
 fn kv_assoc_args(attrs: &Vec<Attribute>) -> KvAssocArgs {
@@ -212,7 +236,9 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                         });
                     }
-                    None => panic!("Expects an attribute of format `#[kv_assoc(assoc = Custom)]`."),
+                    None => {
+                        panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
+                    }
                 }
             }
             let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
@@ -244,7 +270,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     });
                 }
                 None => {
-                    panic!("Expects an attribute of format `#[kv_assoc(assoc = Custom)]`.")
+                    panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
                 }
             }
         }
