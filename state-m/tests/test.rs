@@ -3,9 +3,9 @@ use state_m::*;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[state_tag]
 pub enum Tag {
-    #[kv_assoc(assoc = String)]
+    #[kv_assoc(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[kv_assoc(assoc = String)]
+    #[kv_assoc(assoc = String, label = "Outer")]
     Outer(usize),
     #[kv_assoc(assoc = MyState)]
     OuterEx1,

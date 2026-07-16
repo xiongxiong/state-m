@@ -8,14 +8,19 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use itertools::Itertools;
 use state_m_macro::*;
-use std::{fmt::Debug, ops::Deref, pin::Pin, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    ops::Deref,
+    pin::Pin,
+    sync::Arc,
+};
 use thiserror::Error;
 use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
 #[derive(Clone, Debug)]
-pub struct StateMachine<K>(Arc<DashMap<K, Box<dyn AsHandle>>>)
+pub struct StateMachine<K>(Arc<DashMap<K, (String, Box<dyn AsHandle>)>>)
 where
     K: AsTag;
 
@@ -32,7 +37,7 @@ impl<K> Deref for StateMachine<K>
 where
     K: AsTag,
 {
-    type Target = Arc<DashMap<K, Box<dyn AsHandle>>>;
+    type Target = Arc<DashMap<K, (String, Box<dyn AsHandle>)>>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -50,7 +55,7 @@ where
     {
         let k = tag.clone().into();
         match self.get(&k) {
-            Some(v) => match v.downcast_ref::<ArcHandle<T::Value>>() {
+            Some(v) => match v.value().1.downcast_ref::<ArcHandle<T::Value>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
             },
@@ -66,7 +71,7 @@ where
     /// Add state source into state machine.
     pub async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<K>>
     where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         let k = tag.clone().into();
@@ -76,8 +81,8 @@ where
         let h = ArcHandle(Arc::new(Handle::from_source(Source::<T::Value>::new(
             capacity,
         ))));
-        h.init(tag).await;
-        self.insert(k, Box::new(h));
+        h.init(tag.clone()).await;
+        self.insert(k, (tag.to_string(), Box::new(h)));
         Ok(())
     }
 
@@ -88,7 +93,7 @@ where
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<K>>
     where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         let k = tag.clone().into();
@@ -99,8 +104,8 @@ where
             return Err(AddHandleError::ChannelClosed);
         }
         let h = ArcHandle(Arc::new(Handle::from_reader(reader)));
-        h.init(tag).await;
-        self.insert(k, Box::new(h));
+        h.init(tag.clone()).await;
+        self.insert(k, (tag.to_string(), Box::new(h)));
         Ok(())
     }
 
@@ -111,7 +116,7 @@ where
         T::Value: AsState + Send + Sync,
     {
         match self.remove(&tag.clone().into()) {
-            Some((_, v)) => match v.downcast_ref::<ArcHandle<T::Value>>() {
+            Some((_, v)) => match v.1.downcast_ref::<ArcHandle<T::Value>>() {
                 Some(h) => {
                     h.close();
                     Ok(true)
@@ -213,8 +218,8 @@ where
     pub async fn debug_states(&self) -> Vec<String> {
         let mut states = Vec::new();
         for item in self.iter() {
-            let (k, v) = item.pair();
-            let state = format!("{:<20} | {:?}", format!("{k:?}"), v.debug_state().await);
+            let (_, (l, h)) = item.pair();
+            let state = format!("{:<20} | {:?}", l, h.debug_state().await);
             states.push(state);
         }
         states
@@ -306,7 +311,7 @@ pub trait UseStateMachine: HasStateMachine {
     /// * `capacity` - the capacity of broadcast channel.
     async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Add state reader into state machine.
@@ -318,7 +323,7 @@ pub trait UseStateMachine: HasStateMachine {
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Delete state handle (source or reader) from state machine.
@@ -444,7 +449,7 @@ where
 {
     async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine()
@@ -482,7 +487,7 @@ where
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().add_reader(tag, reader).await?;

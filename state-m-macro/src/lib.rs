@@ -6,12 +6,12 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Index, LitInt, LitStr, Type,
+    Attribute, DeriveInput, Expr, Ident, Index, LitInt, Type,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 struct KvAssocArgs {
     pub assoc: AttributePropertyAssoc,
     pub label: AttributePropertyLabel,
@@ -106,7 +106,7 @@ impl AttributePropertyComponent for AttributePropertyAssocMarker {
     const KEYWORD: &'static str = "assoc";
 }
 
-type AttributePropertyLabel = AttributePropertyOptionalSyn<LitStr, AttributePropertyLabelMarker>;
+type AttributePropertyLabel = AttributePropertyOptionalSyn<Expr, AttributePropertyLabelMarker>;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct AttributePropertyLabelMarker;
@@ -159,6 +159,29 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let i_attrs = &input.attrs;
     let i_ident = &input.ident;
     let i_vis = &input.vis;
+    let impl_display = |ident: &Ident, args: KvAssocArgs, quotes: &mut Vec<TokenStream2>| match args
+        .label
+        .internal()
+    {
+        Some(expr) => {
+            quotes.push(quote! {
+                impl std::fmt::Display for #ident {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(f, "{}", #expr)
+                    }
+                }
+            });
+        }
+        None => {
+            quotes.push(quote! {
+                impl std::fmt::Display for #ident {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(f, "{:?}", self)
+                    }
+                }
+            });
+        }
+    };
     let mut quotes: Vec<_> = Vec::new();
     match input.data {
         syn::Data::Enum(data_enum) => {
@@ -228,7 +251,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 quotes.push(q_f);
 
                 let args = kv_assoc_args(&item.attrs);
-                match args.assoc.internal() {
+                match args.clone().assoc.internal() {
                     Some(typ) => {
                         quotes.push(quote! {
                             impl state_m::KvAssoc for #t_name {
@@ -240,6 +263,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
                     }
                 }
+                impl_display(&t_name, args, &mut quotes);
             }
             let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
             let mut variants = data_enum.variants.clone();
@@ -260,7 +284,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 None => quote! {},
             };
             let args = kv_assoc_args(&input.attrs);
-            match args.assoc.internal() {
+            match args.clone().assoc.internal() {
                 Some(typ) => {
                     quotes.push(quote! {
                         #q_attrs #i_vis struct #i_ident #fields #semi_colon
@@ -273,6 +297,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
                 }
             }
+            impl_display(i_ident, args, &mut quotes);
         }
         _ => panic!("Not supported."),
     };
