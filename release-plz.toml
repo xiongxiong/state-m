@@ -1,9 +1,11 @@
 [workspace]
 publish = false
 git_release_enable = false
+release_commits = "^feat[(:]"
 
 [[package]]
 name = "state-m"
+changelog_include = ["state-m-macro"]
 changelog_path = "state-m/CHANGELOG.md"
 
 [[package]]
