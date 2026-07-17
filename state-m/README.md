@@ -128,3 +128,16 @@ unit.wait_touch(TagInner(0)).await?;
 ```rust
 unit_b.del_handle(&TagOuter);
 ```
+
+- Watch state changes from several handles (source or reader), process them in queue without lock.
+
+```rust
+unit_b
+    .watch_2(TagOuter(0), TagOuter(1), |sc_0, sc_1, tag| {
+        Box::pin(async move {
+            tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}, tag -- {tag:?}");
+            anyhow::Ok(())
+        })
+    })
+    .await?;
+```
