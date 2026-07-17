@@ -389,7 +389,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                 if i != idx {
                     let handle_name = format_ident!("handle_{}", i);
                     quote! {
-                        StateChange::UnChange(#handle_name.state().await)
+                        StateChange::UnChange(#handle_name.state())
                     }
                 } else {
                     quote! {
@@ -688,7 +688,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
                 let state_name = format_ident!("state_{}", i);
                 if i != idx {
                     quote! {
-                        let #state_name = #handle_name.state().await;
+                        let #state_name = #handle_name.state();
                     }
                 } else {
                     quote! {

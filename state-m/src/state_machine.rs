@@ -9,7 +9,7 @@ use dashmap::DashMap;
 use itertools::Itertools;
 use state_m_macro::*;
 use std::{
-    fmt::{Debug, Display},
+    fmt::{self, Debug, Display},
     ops::Deref,
     pin::Pin,
     sync::Arc,
@@ -19,10 +19,23 @@ use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct StateMachine<K>(Arc<DashMap<K, (String, Box<dyn AsHandle>)>>)
 where
     K: AsTag;
+
+impl<K> Debug for StateMachine<K>
+where
+    K: AsTag,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for item in self.iter() {
+            let (_, (l, h)) = item.pair();
+            write!(f, "{:<20} | {:?}\n", l, h.debug_state())?
+        }
+        Ok(())
+    }
+}
 
 impl<K> Default for StateMachine<K>
 where
@@ -143,20 +156,20 @@ where
         Ok(self.get_handle(tag)?.reader())
     }
 
-    pub async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
+    pub fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState + Send + Sync,
     {
-        Ok(self.get_handle(tag)?.value().await)
+        Ok(self.get_handle(tag)?.value())
     }
 
-    pub async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<K>>
+    pub fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<K>>
     where
         T: Clone + Debug + Into<K> + KvAssoc,
         T::Value: 'static + AsState + Send + Sync,
     {
-        Ok(self.get_handle(tag)?.state().await)
+        Ok(self.get_handle(tag)?.state())
     }
 
     pub async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
@@ -213,16 +226,6 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
-    }
-
-    pub async fn debug_states(&self) -> Vec<String> {
-        let mut states = Vec::new();
-        for item in self.iter() {
-            let (_, (l, h)) = item.pair();
-            let state = format!("{:<20} | {:?}", l, h.debug_state().await);
-            states.push(state);
-        }
-        states
     }
 }
 
@@ -348,14 +351,14 @@ pub trait UseStateMachine: HasStateMachine {
 
     /// Get current state value of a tag in state machine.
     /// * `tag` - the `Tag` of the handle which you want to get state value from it.
-    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
+    fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Get current state of a tag in state machine.
     /// * `tag` - the `Tag` of the handle which you want to get state from it.
-    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<Self::K>>
+    fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
@@ -494,20 +497,20 @@ where
         Ok(())
     }
 
-    async fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
+    fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
-        self.state_machine().value(tag).await
+        self.state_machine().value(tag)
     }
 
-    async fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<Self::K>>
+    fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
-        self.state_machine().state(tag).await
+        self.state_machine().state(tag)
     }
 
     #[instrument(level = "trace", skip(self))]

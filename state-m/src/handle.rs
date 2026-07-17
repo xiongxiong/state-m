@@ -4,17 +4,16 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
-use async_trait::async_trait;
 use chrono::Utc;
 use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
     ops::Deref,
-    sync::{Arc, OnceLock},
+    sync::{Arc, OnceLock, RwLock},
 };
 use thiserror::Error;
 use tokio::sync::{
-    RwLock,
+    // RwLock,
     broadcast::{Sender, channel},
     mpsc,
 };
@@ -28,9 +27,8 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-#[async_trait]
 pub trait AsHandle: Debug + Downcast + Send + Sync {
-    async fn debug_state(&self) -> Box<dyn Debug>;
+    fn debug_state(&self) -> Box<dyn Debug>;
 }
 
 impl_downcast!(AsHandle);
@@ -51,13 +49,12 @@ where
     }
 }
 
-#[async_trait]
 impl<S> AsHandle for ArcHandle<S>
 where
     S: 'static + AsState + Send + Sync,
 {
-    async fn debug_state(&self) -> Box<dyn Debug> {
-        Box::new(self.0.state().await)
+    fn debug_state(&self) -> Box<dyn Debug> {
+        Box::new(self.0.state())
     }
 }
 
@@ -110,40 +107,46 @@ where
     ) -> Result<(), StateChangeError<S>> {
         match self.inner {
             HandleI::Source(ref source, ref cache) => {
-                let mut guard = cache.write().await;
-                let s_old = (*guard).value.clone();
-                let s = f(s_old.clone());
-                if is_touch || s_old != s {
-                    let (event, wait_rx) = {
-                        let state = State {
-                            value: s,
-                            timestamp: Utc::now(),
+                let res = {
+                    let mut guard = cache.write().unwrap();
+                    let s_old = (*guard).value.clone();
+                    let s = f(s_old.clone());
+                    if is_touch || s_old != s {
+                        let (event, wait_rx) = {
+                            let state = State {
+                                value: s,
+                                timestamp: Utc::now(),
+                            };
+                            if wait_arrival {
+                                let (tx, rx): (mpsc::Sender<()>, mpsc::Receiver<()>) =
+                                    mpsc::channel(1);
+                                let event = StateEvent {
+                                    state,
+                                    is_touch,
+                                    close_handle: Some(tx),
+                                };
+                                (event, Some(rx))
+                            } else {
+                                let event = StateEvent {
+                                    state,
+                                    is_touch,
+                                    close_handle: None,
+                                };
+                                (event, None)
+                            }
                         };
-                        if wait_arrival {
-                            let (tx, rx): (mpsc::Sender<()>, mpsc::Receiver<()>) = mpsc::channel(1);
-                            let event = StateEvent {
-                                state,
-                                is_touch,
-                                close_handle: Some(tx),
-                            };
-                            (event, Some(rx))
-                        } else {
-                            let event = StateEvent {
-                                state,
-                                is_touch,
-                                close_handle: None,
-                            };
-                            (event, None)
-                        }
-                    };
-                    let state = event.state.clone();
-                    let recver_count = source.sender.send(event)?;
-                    *guard = state.clone();
-                    tracing::debug!("{recver_count} | send -- {state:?}");
-                    if let Some(mut rx) = wait_rx {
-                        _ = rx.recv().await;
-                        tracing::debug!("done -- {state:?}");
+                        let state = event.state.clone();
+                        let recver_count = source.sender.send(event)?;
+                        *guard = state.clone();
+                        tracing::debug!("{recver_count} | send -- {state:?}");
+                        Some((state, wait_rx))
+                    } else {
+                        None
                     }
+                };
+                if let Some((state, Some(mut rx))) = res {
+                    _ = rx.recv().await;
+                    tracing::debug!("done -- {state:?}");
                 }
             }
             HandleI::Reader(_) => return Err(StateChangeError::StateReadOnly),
@@ -192,12 +195,12 @@ where
         self.cancel_token.cancel();
     }
 
-    pub async fn value(&self) -> S {
-        self.cache.read().await.value.clone()
+    pub fn value(&self) -> S {
+        self.cache.read().unwrap().value.clone()
     }
 
-    pub async fn state(&self) -> State<S> {
-        self.cache.read().await.clone()
+    pub fn state(&self) -> State<S> {
+        self.cache.read().unwrap().clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
@@ -264,12 +267,12 @@ where
                     r = recver.recv() => {
                         match r {
                             Ok(e) => {
-                                let s_old = { cache.read().await.clone() };
+                                let s_old = { cache.read().unwrap().clone() };
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
                                     tracing::debug!("{tag:?} | recv -- {s_new:?}");
                                     {
-                                        *cache.write().await = s_new.clone();
+                                        *cache.write().unwrap() = s_new.clone();
                                     }
                                     if fanout_tx.send((s_new, s_old)).is_err() {
                                         break;
