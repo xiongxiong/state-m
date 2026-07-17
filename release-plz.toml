@@ -1,0 +1,11 @@
+[workspace]
+publish = false
+git_release_enable = false
+
+[[package]]
+name = "state-m"
+changelog_path = "state-m/CHANGELOG.md"
+
+[[package]]
+name = "state-m-macro"
+changelog_path = "state-m-macro/CHANGELOG.md"
