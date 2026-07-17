@@ -5,7 +5,7 @@ use state_m::*;
 pub enum Tag {
     #[kv_assoc(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[kv_assoc(assoc = String, label = "Outer")]
+    #[kv_assoc(assoc = String, label = "from outer")]
     Outer(usize),
     #[kv_assoc(assoc = MyState)]
     OuterEx1,

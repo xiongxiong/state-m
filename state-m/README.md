@@ -170,7 +170,7 @@ tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
 
 ```bash
 2026-07-17T14:21:52.899915Z  INFO test::tests: state_machine: unit_b
-Hall                | 2026-07-17 14:21:52.899773965 UTC | "A_9"
+from outer           | 2026-07-17 14:21:52.899773965 UTC | "A_9"
 TagOuterEx2          | 2026-07-17 14:21:52.898533334 UTC | 3
-Hall                | 2026-07-17 14:21:52.899773965 UTC | "NEW_A_9"
+from outer           | 2026-07-17 14:21:52.899773965 UTC | "NEW_A_9"
 ```
