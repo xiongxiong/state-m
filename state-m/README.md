@@ -24,7 +24,7 @@ The library implements convenient state distribution and management mechanisms, 
 pub enum Tag {
     #[kv_assoc(assoc = String, label = format!("Layer_{}", self.0))]
     Inner(usize),
-    #[kv_assoc(assoc = String, label = "Hall")]
+    #[kv_assoc(assoc = String, label = "from outer")]
     Outer,
     #[kv_assoc(assoc = MyState)]
     OuterEx1,
