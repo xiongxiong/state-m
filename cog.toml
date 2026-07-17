@@ -24,8 +24,11 @@ authors = []
 
 [bump_profiles]
 
-[package.state-m]
+[monorepo]
+resolver = "Cargo"
+
+[monorepo.packages.state-m]
 path = "state-m"
 
-[package.state-m-macro]
+[monorepo.packages.state-m-macro]
 path = "state-m-macro"
