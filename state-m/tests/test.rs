@@ -39,6 +39,7 @@ impl From<String> for MyState {
 mod tests {
     use super::*;
     use anyhow::Result;
+    use chrono::Utc;
 
     #[tokio::test]
     async fn test_normal() -> Result<()> {
@@ -49,11 +50,9 @@ mod tests {
         unit.add_source(TagInner(0), 10).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
         for i in 0..10 {
             unit.amend(TagInner(0), |v| format!("{v}_{}", i)).await?;
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         }
         unit.wait_touch(TagInner(0)).await?;
         Ok(())
@@ -144,7 +143,6 @@ mod tests {
             .await?;
         for i in 0..10 {
             unit_a.alter(TagInner(0), format!("A_{i}")).await?;
-            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
             unit_a.alter(TagInner(1), format!("B_{i}")).await?;
         }
         tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
@@ -153,6 +151,63 @@ mod tests {
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_merge() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .init();
+        let unit_a = Unit::default();
+        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(1), 10).await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .await?;
+        unit_b
+            .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
+            .await?;
+        let reader_2 = unit_b
+            .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| State {
+                value: format!("merged [{}] and [{}]", a.value, b.value),
+                timestamp: Utc::now(),
+            })
+            .await?;
+        unit_b.add_reader(TagOuter(2), reader_2).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_split() -> Result<()> {
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .init();
+        let unit_a = Unit::default();
+        unit_a.add_source(TagInner(0), 10).await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .await?;
+        let (reader_1, reader_2) = unit_b
+            .split_reader_2(TagOuter(0), |ref v| (format!("NEW_{}", v), v.len()))
+            .await?;
+        unit_b.add_reader(TagOuter(1), reader_1).await?;
+        unit_b.add_reader(TagOuterEx2, reader_2).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
         Ok(())
     }
 }

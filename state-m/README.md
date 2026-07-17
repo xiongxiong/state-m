@@ -5,23 +5,26 @@ The library implements convenient state distribution and management mechanisms, 
 
 ## Features
 * **Separation of read-write**, sources and readers of state changes hold different data structures.
-* **Duplicate filtering**, by default, duplicate states do not trigger state changes.
+* **Duplicate filtering**, by default, duplicate states do not trigger state changes, you can 'touch' on a tag if you really want this.
 * **State transition**, supports type conversion of state.
+* **Merge events**, you can merge several state readers into one.
+* **Split event**, you can split one state reader into several.
 * **Timing control**, supports waiting for all readers to complete their work.
+* **Timestamp**, state change event have timestamp, you can know when it changed.
 
 ## Usage
 - Define 'Tag' enum to distinguish different state handles(sources and readers), all handles must use different tag values.
 - Derive traits necessary: Clone, Debug, PartialEq, Eq, Hash.
 - Use 'state_tag' attribute macro to decorate the 'Tag' enum.
-- Add 'kv_assoc' attribute to all variants of the 'Tag' enum, use 'assoc' to associate corresponding state type.
+- Add 'kv_assoc' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine.
 
 ```rust
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[state_tag]
 pub enum Tag {
-    #[kv_assoc(assoc = String)]
+    #[kv_assoc(assoc = String, label = format!("Layer_{}", self.0))]
     Inner(usize),
-    #[kv_assoc(assoc = String)]
+    #[kv_assoc(assoc = String, label = "Hall")]
     Outer,
     #[kv_assoc(assoc = MyState)]
     OuterEx1,
@@ -112,12 +115,10 @@ unit_b
 for i in 0..10 {
     unit.alter(TagInner(0), format!("{i}")).await?;
     unit.wait_alter(TagInner(0), format!("[{i}]")).await?;
-    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 }
 for i in 0..10 {
     unit.amend(TagInner(0), |v| format!("{v}_{}", i)).await?;
     unit.wait_amend(TagInner(0), |v| format!("{v}_[{}]", i)).await?;
-    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
 }
 unit.touch(TagInner(0)).await?;
 unit.wait_touch(TagInner(0)).await?;
@@ -140,4 +141,36 @@ unit_b
         })
     })
     .await?;
+```
+
+- Merge several readers into one.
+
+```rust
+let reader_2 = unit_b
+    .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| State {
+        value: format!("merged [{}] and [{}]", a.value, b.value),
+        timestamp: Utc::now(),
+    })
+    .await?;
+```
+
+- Split one reader into several readers.
+
+```rust
+let (reader_1, reader_2) = unit_b
+    .split_reader_2(TagOuter(0), |ref v| (format!("NEW_{}", v), v.len()))
+    .await?;
+```
+
+- Debug the state machine as required.
+
+```rust
+tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
+```
+
+```bash
+2026-07-17T14:21:52.899915Z  INFO test::tests: state_machine: unit_b
+Hall                | 2026-07-17 14:21:52.899773965 UTC | "A_9"
+TagOuterEx2          | 2026-07-17 14:21:52.898533334 UTC | 3
+Hall                | 2026-07-17 14:21:52.899773965 UTC | "NEW_A_9"
 ```
