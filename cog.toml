@@ -23,3 +23,9 @@ path = "CHANGELOG.md"
 authors = []
 
 [bump_profiles]
+
+[package.state-m]
+path = "state-m"
+
+[package.state-m-macro]
+path = "state-m-macro"
