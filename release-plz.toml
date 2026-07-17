@@ -1,6 +1,7 @@
 [workspace]
 publish = false
 git_release_enable = false
+git_only = true
 release_commits = "^feat[(:]"
 
 [changelog]
