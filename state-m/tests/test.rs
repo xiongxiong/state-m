@@ -7,7 +7,7 @@ pub enum Tag {
     Inner(usize),
     #[kv_assoc(assoc = String, label = "from outer")]
     Outer(usize),
-    #[kv_assoc(assoc = MyState)]
+    #[kv_assoc(assoc = CustomType)]
     OuterEx1,
     #[kv_assoc(assoc = usize)]
     OuterEx2,
@@ -27,9 +27,9 @@ impl HasStateMachine for Unit {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct MyState(usize);
+pub struct CustomType(usize);
 
-impl From<String> for MyState {
+impl From<String> for CustomType {
     fn from(value: String) -> Self {
         Self(value.len())
     }
