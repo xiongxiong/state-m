@@ -7,7 +7,7 @@ pub enum Tag {
     Inner(usize),
     #[kv_assoc(assoc = String, label = "Outer")]
     Outer(usize),
-    #[kv_assoc(assoc = MyState, label = "MyState")]
+    #[kv_assoc(assoc = MyState)]
     OuterEx1,
     #[kv_assoc(assoc = usize)]
     OuterEx2,
