@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.2.0 - 2026-07-17
+### Package updates
+- state-m-macro bumped to state-m-macro-0.1.0
+- state-m bumped to state-m-0.1.0
+### Global changes
+#### Bug Fixes
+- update readme - (4686cac) - 王继荣
+#### Miscellaneous Chores
+- update cog.toml - (2564f78) - 王继荣
+
+- - -
+
 ## 0.1.1 - 2026-07-17
 #### Bug Fixes
 - update README.md - (f1adc9f) - 王继荣
