@@ -147,6 +147,8 @@ where
                 if let Some((state, Some(mut rx))) = res {
                     _ = rx.recv().await;
                     tracing::debug!("done -- {state:?}");
+                } else {
+                    tokio::task::yield_now().await;
                 }
             }
             HandleI::Reader(_) => return Err(StateChangeError::StateReadOnly),
