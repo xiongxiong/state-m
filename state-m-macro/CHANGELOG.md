@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.1.2 - 2026-07-21
+#### Bug Fixes
+- version change - (989488d) - 王继荣
+#### Miscellaneous Chores
+- (**version**) 0.3.0 - (6b54f60) - 王继荣
+
+- - -
+
 ## state-m-macro-0.1.0 - 2026-07-17
 #### Features
 - Added watch macros. - (4f46262) - 王继荣
