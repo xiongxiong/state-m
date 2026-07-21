@@ -4,6 +4,7 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
+use arc_swap::ArcSwap;
 use chrono::Utc;
 use downcast_rs::{Downcast, impl_downcast};
 use std::{
@@ -13,7 +14,6 @@ use std::{
 };
 use thiserror::Error;
 use tokio::sync::{
-    // RwLock,
     broadcast::{Sender, channel},
     mpsc,
 };
@@ -73,7 +73,7 @@ where
     S: 'static + AsState,
 {
     inner: HandleI<S>,
-    cache: Arc<RwLock<State<S>>>,
+    cache: Arc<ArcSwap<State<S>>>,
     cancel_token: CancellationToken,
     fanout_tx: OnceLock<Sender<(State<S>, State<S>)>>,
 }
@@ -198,11 +198,11 @@ where
     }
 
     pub fn value(&self) -> S {
-        self.cache.read().unwrap().value.clone()
+        self.cache.load().value.clone()
     }
 
     pub fn state(&self) -> State<S> {
-        self.cache.read().unwrap().clone()
+        self.cache.load().as_ref().clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
@@ -269,12 +269,12 @@ where
                     r = recver.recv() => {
                         match r {
                             Ok(e) => {
-                                let s_old = { cache.read().unwrap().clone() };
+                                let s_old = { cache.load().as_ref().clone() };
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
                                     tracing::debug!("{tag:?} | recv -- {s_new:?}");
                                     {
-                                        *cache.write().unwrap() = s_new.clone();
+                                        cache.store(Arc::new(s_new.clone()));
                                     }
                                     if fanout_tx.send((s_new, s_old)).is_err() {
                                         break;

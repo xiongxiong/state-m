@@ -10,6 +10,7 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1.0"
+arc-swap = "1.9"
 async-trait = "0.1"
 chrono = "0.4"
 dashmap = "6.2"
