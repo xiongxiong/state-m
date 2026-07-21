@@ -468,7 +468,7 @@ dependencies = [
  "derivative",
  "downcast-rs",
  "itertools 0.15.0",
- "state-m-macro 0.1.1",
+ "state-m-macro",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -479,20 +479,6 @@ dependencies = [
 [[package]]
 name = "state-m-macro"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70c7370da41fa5e0708cb8c4f25e8fbdfeff97cabba195ef2d89dd5cdae5921c"
-dependencies = [
- "itertools 0.15.0",
- "macro_tools",
- "proc-macro2",
- "quote",
- "semver",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "state-m-macro"
-version = "0.6.1"
 dependencies = [
  "itertools 0.15.0",
  "macro_tools",
