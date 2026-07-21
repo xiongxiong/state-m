@@ -13,7 +13,7 @@ pre_bump_hooks = []
 post_bump_hooks = []
 pre_package_bump_hooks = [
     "echo 'upgrading {{package}}' to {{version}}",
-    "cargo set-version {{version}}"
+    "cargo set-version {{version}} --manifest-path Cargo.toml"
 ]
 post_package_bump_hooks = []
 
