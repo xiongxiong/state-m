@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.6.1 - 2026-07-21
+#### Bug Fixes
+- added arc_swap - (b10ecf3) - 王继荣
+
+- - -
+
 ## state-m-0.1.0 - 2026-07-17
 #### Features
 - added yield_now after sending state change event. - (a3bf684) - 王继荣

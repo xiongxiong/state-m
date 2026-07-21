@@ -2,6 +2,22 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.3.0 - 2026-07-21
+### Package updates
+- state-m bumped to state-m-0.6.1
+### Global changes
+#### Features
+- added macros for watch - (e1ce0f5) - wangjirong
+#### Bug Fixes
+- added arc_swap - (b10ecf3) - 王继荣
+#### Miscellaneous Chores
+- update cog.toml - (09c7234) - wangjirong
+- update - (b12b07b) - wangjirong
+- update release-plz.toml - (9f0cee5) - wangjirong
+- added please-plz - (cb9fe82) - wangjirong
+
+- - -
+
 ## 0.2.0 - 2026-07-17
 ### Package updates
 - state-m-macro bumped to state-m-macro-0.1.0
