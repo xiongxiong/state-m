@@ -1,3 +1,4 @@
+mod barrier;
 mod handle;
 mod reader;
 mod source;
