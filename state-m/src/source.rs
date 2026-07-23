@@ -1,5 +1,5 @@
-use crate::{AsState, reader::Reader, state::StateEvent};
-use std::{fmt::Debug, ops::Deref};
+use crate::{AsState, barrier::AsPassCheck, reader::Reader, state::StateEvent};
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 use tokio::sync::broadcast::{Sender, channel};
 
 #[derive(Clone, Debug)]
@@ -9,17 +9,25 @@ where
 {
     pub(crate) capacity: usize,
     pub(crate) sender: Sender<StateEvent<S>>,
+    pub(crate) pass_checks: Arc<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
 }
 
 impl<S> Inner<S>
 where
     S: 'static + AsState,
 {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Self {
         let (tx, _) = channel(capacity);
         Self {
             capacity,
             sender: tx,
+            pass_checks: match pass_checks {
+                Some(chks) => Arc::new(chks),
+                None => Arc::new(Vec::new()),
+            },
         }
     }
 }
@@ -44,11 +52,14 @@ impl<S> Source<S>
 where
     S: 'static + AsState,
 {
-    pub fn new(capacity: usize) -> Self {
-        Self(Inner::new(capacity))
+    pub fn new(
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Self {
+        Self(Inner::new(capacity, pass_checks))
     }
 
     pub fn reader(&self) -> Reader<S> {
-        Reader::new(self.capacity, self.sender.clone())
+        Reader::from(self.0.clone())
     }
 }

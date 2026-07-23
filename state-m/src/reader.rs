@@ -30,10 +30,15 @@ impl<S> Reader<S>
 where
     S: 'static + AsState,
 {
-    pub(crate) fn new(capacity: usize, tx: Sender<StateEvent<S>>) -> Self {
+    pub(crate) fn from(inner: Inner<S>) -> Self {
+        Self(inner)
+    }
+
+    pub(crate) fn new(capacity: usize, sender: Sender<StateEvent<S>>) -> Self {
         Self(Inner {
-            capacity: capacity,
-            sender: tx,
+            capacity,
+            sender,
+            pass_checks: Default::default(),
         })
     }
 }
@@ -108,6 +113,7 @@ where
         Reader(Inner {
             capacity: self.capacity,
             sender: tx,
+            pass_checks: self.pass_checks.clone(),
         })
     }
 
@@ -117,7 +123,7 @@ where
     /// * `f` - an async closure, which takes the old state value as parameter, and return the new state value.
     /// # Returns
     /// Reader of new data type.
-    pub fn async_entend<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
+    pub fn async_entend_with<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
     where
         T: 'static + AsState + Send,
         F: Fn(S) -> Fut + Send + Sync + 'static,
@@ -158,6 +164,10 @@ where
                 }
             }
         });
-        Reader::new(capacity, tx)
+        Reader(Inner {
+            capacity,
+            sender: tx,
+            pass_checks: self.pass_checks.clone(),
+        })
     }
 }

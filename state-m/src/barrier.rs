@@ -1,10 +1,13 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+use std::{
+    fmt::Debug,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
 };
 use tokio::sync::{Notify, futures::Notified};
 
-pub trait AsEntrance {
+pub trait AsPassCheck: Debug {
     fn is_open(&self) -> bool;
 
     fn notified(&self) -> Notified<'_>;
@@ -24,20 +27,10 @@ impl Drop for Barrier {
     }
 }
 
-impl AsEntrance for Barrier {
-    fn is_open(&self) -> bool {
-        self.0.load(Ordering::Acquire) == 0
-    }
-
-    fn notified(&self) -> Notified<'_> {
-        self.1.notified()
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct Barriers(Arc<AtomicUsize>, Arc<Notify>);
 
-impl AsEntrance for Barriers {
+impl AsPassCheck for Barriers {
     fn is_open(&self) -> bool {
         self.0.load(Ordering::Acquire) == 0
     }
@@ -67,7 +60,7 @@ impl Barriers {
 #[derive(Clone, Debug, Default)]
 pub struct Door(Arc<AtomicBool>, Arc<Notify>);
 
-impl AsEntrance for Door {
+impl AsPassCheck for Door {
     fn is_open(&self) -> bool {
         self.0.load(Ordering::Acquire) == false
     }

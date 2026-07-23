@@ -1,5 +1,6 @@
 use crate::{
     AsState, AsTag, KvAssoc, State, StateEvent,
+    barrier::AsPassCheck,
     handle::{ArcHandle, AsHandle, Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
     source::Source,
@@ -82,7 +83,12 @@ where
     K: 'static + AsTag,
 {
     /// Add state source into state machine.
-    pub async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<K>>
+    pub async fn add_source<T>(
+        &self,
+        tag: T,
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Result<(), AddHandleError<K>>
     where
         T: 'static + Clone + Debug + Display + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
@@ -93,6 +99,7 @@ where
         }
         let h = ArcHandle(Arc::new(Handle::from_source(Source::<T::Value>::new(
             capacity,
+            pass_checks,
         ))));
         h.init(tag.clone()).await;
         self.insert(k, (tag.to_string(), Box::new(h)));
@@ -312,7 +319,13 @@ pub trait UseStateMachine: HasStateMachine {
     /// Add state source into state machine.
     /// * `tag` - the `Tag` of the source.
     /// * `capacity` - the capacity of broadcast channel.
-    async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<Self::K>>
+    /// * `pass_checks` - check conditions to continue to recieve state change events.
+    async fn add_source<T>(
+        &self,
+        tag: T,
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Result<(), AddHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
@@ -450,13 +463,18 @@ impl<M> UseStateMachine for M
 where
     M: 'static + HasStateMachine + Send + Sync,
 {
-    async fn add_source<T>(&self, tag: T, capacity: usize) -> Result<(), AddHandleError<Self::K>>
+    async fn add_source<T>(
+        &self,
+        tag: T,
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Result<(), AddHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine()
-            .add_source(tag.clone(), capacity)
+            .add_source(tag.clone(), capacity, pass_checks)
             .await?;
         Ok(())
     }

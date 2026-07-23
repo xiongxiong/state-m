@@ -47,7 +47,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit = Unit::default();
-        unit.add_source(TagInner(0), 10).await?;
+        unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
         }
@@ -64,7 +64,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
@@ -81,7 +81,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.extend(10))
@@ -104,7 +104,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
@@ -124,8 +124,8 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
-        unit_a.add_source(TagInner(1), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
@@ -160,8 +160,8 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
-        unit_a.add_source(TagInner(1), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
@@ -192,7 +192,7 @@ mod tests {
             .with_max_level(tracing::Level::TRACE)
             .init();
         let unit_a = Unit::default();
-        unit_a.add_source(TagInner(0), 10).await?;
+        unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
