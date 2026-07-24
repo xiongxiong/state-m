@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.4.1 - 2026-07-24
+### Package updates
+- state-m bumped to state-m-0.7.1
+### Global changes
+#### Bug Fixes
+- update version - (4eaa6a0) - 王继荣
+
+- - -
+
 ## 0.4.0 - 1970-01-01
 ### Package updates
 - state-m bumped to state-m-0.7.0
