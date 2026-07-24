@@ -1,5 +1,6 @@
 use crate::{
     AsState,
+    barrier::AsPassCheck,
     reader::Reader,
     source::Source,
     state::{State, StateEvent},
@@ -91,10 +92,17 @@ impl<S> Handle<S>
 where
     S: 'static + AsState,
 {
-    async fn recver(&self) -> Receiver<StateEvent<S>> {
+    fn recver(&self) -> Receiver<StateEvent<S>> {
         match self.inner {
             HandleI::Source(ref source, _) => source.sender.subscribe(),
             HandleI::Reader(ref reader) => reader.sender.subscribe(),
+        }
+    }
+
+    fn pass_checks(&self) -> Arc<Vec<Box<dyn AsPassCheck + Send + Sync>>> {
+        match self.inner {
+            HandleI::Source(ref source, _) => source.pass_checks.clone(),
+            HandleI::Reader(ref reader) => reader.pass_checks.clone(),
         }
     }
 
@@ -112,6 +120,9 @@ where
                     let s_old = (*guard).value.clone();
                     let s = f(s_old.clone());
                     if is_touch || s_old != s {
+                        if source.pass_checks.iter().any(|p| !p.is_open()) {
+                            return Err(StateChangeError::PassCheckFail);
+                        }
                         let (event, wait_rx) = {
                             let state = State {
                                 value: s,
@@ -139,12 +150,12 @@ where
                         let recver_count = source.sender.send(event)?;
                         *guard = state.clone();
                         tracing::debug!("{recver_count} | send -- {state:?}");
-                        Some((state, wait_rx))
+                        (state, wait_rx)
                     } else {
-                        None
+                        return Err(StateChangeError::StateNotChange);
                     }
                 };
-                if let Some((state, Some(mut rx))) = res {
+                if let (state, Some(mut rx)) = res {
                     _ = rx.recv().await;
                     tracing::debug!("done -- {state:?}");
                 } else {
@@ -250,7 +261,8 @@ where
     {
         let cache = self.cache.clone();
         let cancel_token = self.cancel_token.clone();
-        let mut recver = self.recver().await;
+        let pass_checks = self.pass_checks();
+        let mut recver = self.recver();
         let (fanout_tx, mut fanout_rx) = channel(self.capacity());
         self.fanout_tx
             .set(fanout_tx.clone())
@@ -272,6 +284,12 @@ where
                                 let s_old = { cache.load().as_ref().clone() };
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
+                                    for check in pass_checks.iter() {
+                                        if !check.is_open() {
+                                            tracing::debug!("{tag:?} | wait pass_check -- {check:?}");
+                                            check.notified().await;
+                                        }
+                                    }
                                     tracing::debug!("{tag:?} | recv -- {s_new:?}");
                                     {
                                         cache.store(Arc::new(s_new.clone()));
@@ -296,8 +314,12 @@ pub enum StateChangeError<S>
 where
     S: Default,
 {
+    #[error("State not change, so there is no state change event will be emitted.")]
+    StateNotChange,
     #[error("This state is read only.")]
     StateReadOnly,
+    #[error("Fail to pass, at least one of associated doors or barriers is closed.")]
+    PassCheckFail,
     #[error(transparent)]
     SendError(#[from] SendError<StateEvent<S>>),
     #[error(transparent)]

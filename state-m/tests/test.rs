@@ -40,12 +40,21 @@ mod tests {
     use super::*;
     use anyhow::Result;
     use chrono::Utc;
+    use std::sync::Once;
+
+    static CALL_ONCE: Once = Once::new();
+
+    fn init_tracing() {
+        CALL_ONCE.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::TRACE)
+                .init();
+        });
+    }
 
     #[tokio::test]
     async fn test_normal() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit = Unit::default();
         unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
@@ -60,9 +69,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_wait() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
@@ -77,9 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_extend() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
@@ -100,9 +105,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
@@ -120,9 +123,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_watch() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
@@ -156,9 +157,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_merge() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
@@ -188,9 +187,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_split() -> Result<()> {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .init();
+        init_tracing();
         let unit_a = Unit::default();
         unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
@@ -208,6 +205,27 @@ mod tests {
         tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
         tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_stw_by_door() -> Result<()> {
+        init_tracing();
+        let door = Door::new();
+        let unit_a = Unit::default();
+        unit_a
+            .add_source(TagInner(0), 10, Some(vec![Box::new(door)]))
+            .await?;
+        let unit_b = Unit::default();
+        unit_b
+            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .await?;
+        for i in 0..100 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            if i % 10 == 0 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        }
         Ok(())
     }
 }
