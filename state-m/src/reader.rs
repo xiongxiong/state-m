@@ -54,28 +54,26 @@ where
 
     /// Convert data type of state reader.
     /// # Arguments
-    /// * `capacity` - capacity of the new broadcast channel will be created.
     /// # Returns
     /// Reader of new data type.
-    pub fn extend<T>(&self, capacity: usize) -> Reader<T>
+    pub fn derive<T>(&self) -> Reader<T>
     where
         T: AsState + From<S> + Send,
     {
-        self.extend_with(capacity, T::from)
+        self.derive_by(T::from)
     }
 
     /// Convert data type of state reader, with an closure.
     /// # Arguments
-    /// * `capacity` - capacity of the new broadcast channel will be created.
     /// * `f` - an closure, which takes the old state value as parameter, and return the new state value.
     /// # Returns
     /// Reader of new data type.
-    pub fn extend_with<T, F>(&self, capacity: usize, f: F) -> Reader<T>
+    pub fn derive_by<T, F>(&self, f: F) -> Reader<T>
     where
         T: AsState + Send,
         F: Fn(S) -> T + Send + 'static,
     {
-        let (tx, _) = channel(capacity);
+        let (tx, _) = channel(self.capacity);
         let tx_c = tx.clone();
         let mut rx_o = self.sender.subscribe();
         tokio::spawn(async move {
@@ -119,17 +117,16 @@ where
 
     /// Convert data type of state reader, with an async closure.
     /// # Arguments
-    /// * `capacity` - capacity of the new broadcast channel will be created.
     /// * `f` - an async closure, which takes the old state value as parameter, and return the new state value.
     /// # Returns
     /// Reader of new data type.
-    pub fn async_entend_with<T, F, Fut>(&self, capacity: usize, f: F) -> Reader<T>
+    pub fn derive_by_async<T, F, Fut>(&self, f: F) -> Reader<T>
     where
         T: 'static + AsState + Send,
         F: Fn(S) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = T> + Send,
     {
-        let (tx, _) = channel(capacity);
+        let (tx, _) = channel(self.capacity);
         let tx_c = tx.clone();
         let mut rx_o = self.sender.subscribe();
         tokio::spawn(async move {
@@ -165,7 +162,7 @@ where
             }
         });
         Reader(Inner {
-            capacity,
+            capacity: self.capacity,
             sender: tx,
             pass_checks: self.pass_checks.clone(),
         })

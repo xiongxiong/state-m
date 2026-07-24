@@ -93,12 +93,12 @@ mod tests {
         unit_a.add_source(TagInner(0), 10, None).await?;
         let unit_b = Unit::default();
         unit_b
-            .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.extend(10))
+            .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.derive())
             .await?;
         unit_b
             .add_reader(
                 TagOuterEx2,
-                unit_a.reader(TagInner(0))?.extend_with(10, |s| s.len()),
+                unit_a.reader(TagInner(0))?.derive_by(|s| s.len()),
             )
             .await?;
         unit_a.alter(TagInner(0), "Hello".into()).await?;

@@ -92,7 +92,7 @@ unit_b
 unit_b
     .add_reader(
         TagOuterEx1,
-        unit_a.reader(TagInner(0))?.extend(10),
+        unit_a.reader(TagInner(0))?.derive(),
         |new, old| {
             tracing::info!("[unit_b] | new -- {:?}, old -- {:?}", new, old);
             Box::pin(async move { Ok::<_, anyhow::Error>(()) })
@@ -104,7 +104,7 @@ unit_b
         TagOuterEx2,
         unit_a
             .reader(TagInner(0))?
-            .extend_with(10, |s| Box::pin(async move { s.len() })),
+            .derive_by(|s| Box::pin(async move { s.len() })),
         |new, old| {
             tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
             Box::pin(async move { Ok::<_, anyhow::Error>(()) })
