@@ -13,6 +13,19 @@ pub trait AsPassCheck: Debug {
     fn notified(&self) -> Notified<'_>;
 }
 
+impl<T> AsPassCheck for Arc<T>
+where
+    T: AsPassCheck,
+{
+    fn is_open(&self) -> bool {
+        self.as_ref().is_open()
+    }
+
+    fn notified(&self) -> Notified<'_> {
+        self.as_ref().notified()
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Barrier(Arc<AtomicUsize>, Arc<Notify>);
 

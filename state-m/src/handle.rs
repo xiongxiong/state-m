@@ -149,7 +149,7 @@ where
                         let state = event.state.clone();
                         let recver_count = source.sender.send(event)?;
                         *guard = state.clone();
-                        tracing::debug!("{recver_count} | send -- {state:?}");
+                        tracing::trace!("{recver_count} | send -- {state:?}");
                         (state, wait_rx)
                     } else {
                         return Err(StateChangeError::StateNotChange);
@@ -157,7 +157,7 @@ where
                 };
                 if let (state, Some(mut rx)) = res {
                     _ = rx.recv().await;
-                    tracing::debug!("done -- {state:?}");
+                    tracing::trace!("done -- {state:?}");
                 } else {
                     tokio::task::yield_now().await;
                 }
@@ -286,11 +286,11 @@ where
                                 if e.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
                                         if !check.is_open() {
-                                            tracing::debug!("{tag:?} | wait pass_check -- {check:?}");
+                                            tracing::trace!("{tag:?} | wait pass_check -- {check:?}");
                                             check.notified().await;
                                         }
                                     }
-                                    tracing::debug!("{tag:?} | recv -- {s_new:?}");
+                                    tracing::trace!("{tag:?} | recv -- {s_new:?}");
                                     {
                                         cache.store(Arc::new(s_new.clone()));
                                     }
