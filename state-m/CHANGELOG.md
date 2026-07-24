@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.0 - 2026-07-24
+#### Features
+- added barrier types - (cdc9d0b) - 王继荣
+#### Bug Fixes
+- update stw - (cbd69fa) - 王继荣
+#### Tests
+- added test_stw_by_barrier - (d0c770d) - 王继荣
+#### Miscellaneous Chores
+- added stop the world ability - (5a79802) - wangjirong
+
+- - -
+
 ## state-m-0.6.1 - 2026-07-21
 #### Bug Fixes
 - added arc_swap - (b10ecf3) - 王继荣
