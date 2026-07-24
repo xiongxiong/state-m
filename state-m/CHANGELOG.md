@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.2 - 2026-07-24
+#### Bug Fixes
+- renamed Reader's methods - (462bf5f) - 王继荣
+
+- - -
+
 ## state-m-0.7.1 - 2026-07-24
 #### Bug Fixes
 - update version - (4eaa6a0) - 王继荣
