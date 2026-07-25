@@ -4,9 +4,10 @@
 The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components.
 
 ## Features
-* **Separation of read-write**, sources and readers of state changes hold different data structures.
+* **Separation of concerns**, sources and readers of state changes hold different data structures.
 * **Duplicate filtering**, by default, duplicate states do not trigger state changes, you can 'touch' on a tag if you really want this.
 * **State transition**, supports type conversion of state.
+* **Stop the world (STW)**, supports stopping and resuming processing state change events at state-level.
 * **Merge events**, you can merge several state readers into one.
 * **Split event**, you can split one state reader into several.
 * **Timing control**, supports waiting for all readers to complete their work.
@@ -24,11 +25,7 @@ The library implements convenient state distribution and management mechanisms, 
 pub enum Tag {
     #[kv_assoc(assoc = String, label = format!("Layer_{}", self.0))]
     Inner(usize),
-<<<<<<< HEAD
-    #[kv_assoc(assoc = String, label = "outer")]
-=======
     #[kv_assoc(assoc = String, label = "from outer")]
->>>>>>> 700d7d3f1b7935aceae2943db4c5713764195030
     Outer,
     #[kv_assoc(assoc = CustomType)]
     OuterEx1,
@@ -64,14 +61,33 @@ impl HasStateMachine for Unit {
 ```
 
 - Add state sources to your state machine.
+- Add door or barriers to support stopping the world.
 
 ```rust
 let unit = Unit::default();
-unit.add_source(TagInner(0), 10, |new, old| {
-    tracing::info!("new -- {}, old -- {}", new, old);
-    Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-})
-.await?;
+
+// Not support stw.
+unit.add_source(TagInner(0), 10, None).await?;
+
+// Support stw by using a Door.
+let door = Arc::new(Door::new());
+unit
+    .add_source(TagInner(0), 10, Some(vec![Box::new(door.clone())]))
+    .await?;
+// Close or open the door at your need.
+door.close();
+door.open();
+
+// Support stw by using Barriers.
+let barriers = Arc::new(Barriers::new());
+unit
+    .add_source(TagInner(0), 10, Some(vec![Box::new(barriers.clone())]))
+    .await?;
+// Add barriers, when the counter of Barriers larger than zero, the state processing stopped, 
+// when a barrier is dropped, the counter of Barriers subtract one, when the counter
+// reaches zero, the state processing resumed. 
+let _barrier_1 = barriers.add_barrier();
+let _barrier_2 = barriers.add_barrier();
 ```
 
 - Add state readers to your state machine, to respond state changes from outer.
@@ -80,36 +96,18 @@ unit.add_source(TagInner(0), 10, |new, old| {
 
 ```rust
 let unit_b = Unit::default();
-unit_b
-    .add_reader(TagOuter, unit_a.reader(TagInner(0))?, |new, old| {
-        tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
-        Box::pin(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            Ok::<_, anyhow::Error>(())
-        })
-    })
-    .await?;
+unit_b.add_reader(TagOuter, unit_a.reader(TagInner(0))?).await?;
 unit_b
     .add_reader(
         TagOuterEx1,
-        unit_a.reader(TagInner(0))?.derive(),
-        |new, old| {
-            tracing::info!("[unit_b] | new -- {:?}, old -- {:?}", new, old);
-            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-        },
-    )
+        unit_a.reader(TagInner(0))?.derive())
     .await?;
 unit_b
     .add_reader(
         TagOuterEx2,
         unit_a
             .reader(TagInner(0))?
-            .derive_by(|s| Box::pin(async move { s.len() })),
-        |new, old| {
-            tracing::info!("[unit_b] | new -- {}, old -- {}", new, old);
-            Box::pin(async move { Ok::<_, anyhow::Error>(()) })
-        },
-    )
+            .derive_by(|s| Box::pin(async move { s.len() })),)
     .await?;
 ```
 
@@ -137,6 +135,15 @@ unit_b.del_handle(&TagOuter);
 - Watch state changes from several handles (source or reader), process them in queue without lock.
 
 ```rust
+unit_b
+    .watch_1(TagOuter(0), move |_, _| {
+        let counter_cc = counter_c.clone();
+        Box::pin(async move {
+            counter_cc.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        })
+    })
+    .await?;
 unit_b
     .watch_2(TagOuter(0), TagOuter(1), |sc_0, sc_1, tag| {
         Box::pin(async move {
