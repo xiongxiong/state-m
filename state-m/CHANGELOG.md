@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.4 - 2026-07-28
+#### Bug Fixes
+- update debug_state - (00a179b) - 王继荣
+- update debug_state - (0c548f7) - wangjirong
+- added debug_state method for state_machine - (eaa81b3) - wangjirong
+- update README.md - (950bcd0) - wangjirong
+- update README.md - (074ce1c) - wangjirong
+
+- - -
+
 
 ## state-m-0.7.3 - 2026-07-27
 #### Bug Fixes
