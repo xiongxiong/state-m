@@ -1,6 +1,6 @@
 use state_m::*;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[state_tag]
 pub enum Tag {
     #[kv_assoc(assoc = String, label = format!("inner_{}", self.0))]

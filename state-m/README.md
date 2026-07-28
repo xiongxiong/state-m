@@ -15,12 +15,12 @@ The library implements convenient state distribution and management mechanisms, 
 
 ## Usage
 - Define 'Tag' enum to distinguish different state handles(sources and readers), all handles must use different tag values.
-- Derive traits necessary: Clone, Debug, PartialEq, Eq, Hash.
+- Derive traits necessary: Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord.
 - Use 'state_tag' attribute macro to decorate the 'Tag' enum.
 - Add 'kv_assoc' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine.
 
 ```rust
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
 #[state_tag]
 pub enum Tag {
     #[kv_assoc(assoc = String, label = format!("Layer_{}", self.0))]

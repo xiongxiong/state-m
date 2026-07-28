@@ -30,7 +30,7 @@ where
     K: AsTag,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for item in self.iter() {
+        for item in self.iter().sorted_by_key(|k| k.key().clone()) {
             let (_, (l, h)) = item.pair();
             write!(f, "{:<20} | {:?}\n", l, h.debug_state())?
         }
@@ -234,6 +234,15 @@ where
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
     }
+
+    pub fn debug_state(&self) -> Vec<String> {
+        let mut states = Vec::new();
+        for item in self.iter().sorted_by_key(|k| k.key().clone()) {
+            let (_, (l, h)) = item.pair();
+            states.push(format!("{:<20} | {:?}\n", l, h.debug_state()));
+        }
+        states
+    }
 }
 
 /// State change result.
@@ -426,6 +435,9 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
+    /// Get debug state of state machine, ordered by tag.
+    fn debug_state(&self) -> Vec<String>;
+
     watch_decl!(1);
     watch_decl!(2);
     watch_decl!(3);
@@ -591,6 +603,10 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().wait_amend(tag, f).await
+    }
+
+    fn debug_state(&self) -> Vec<String> {
+        self.state_machine().debug_state()
     }
 
     watch_impl!(1);
