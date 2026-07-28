@@ -57,6 +57,13 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_debug_state() -> Result<()> {
+        let sm: Arc<StateMachine<Tag>> = Default::default();
+        assert_eq!("", &format!("{sm:?}"));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_normal() -> Result<()> {
         init_tracing();
         let unit = Unit::default();
