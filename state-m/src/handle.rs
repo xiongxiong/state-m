@@ -9,7 +9,7 @@ use arc_swap::ArcSwap;
 use chrono::Utc;
 use downcast_rs::{Downcast, impl_downcast};
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     ops::Deref,
     sync::{Arc, OnceLock, RwLock},
 };
@@ -29,7 +29,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 pub trait AsHandle: Debug + Downcast + Send + Sync {
-    fn debug_state(&self) -> Box<dyn Debug>;
+    fn display(&self) -> Box<dyn Display>;
 }
 
 impl_downcast!(AsHandle);
@@ -54,7 +54,7 @@ impl<S> AsHandle for ArcHandle<S>
 where
     S: 'static + AsState + Send + Sync,
 {
-    fn debug_state(&self) -> Box<dyn Debug> {
+    fn display(&self) -> Box<dyn Display> {
         Box::new(self.0.state())
     }
 }

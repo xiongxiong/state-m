@@ -18,6 +18,7 @@ The library implements convenient state distribution and management mechanisms, 
 - Derive traits necessary: Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord.
 - Use 'state_tag' attribute macro to decorate the 'Tag' enum.
 - Add 'kv_assoc' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine.
+- To be state, a type should implements these traits: Clone, Debug, Default, Display, PartialEq.
 
 ```rust
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -35,6 +36,12 @@ pub enum Tag {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CustomType(usize);
+
+impl Display for CustomType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CustomeType({})", self.0)
+    }
+}
 
 impl From<String> for CustomType {
     fn from(value: String) -> Self {
