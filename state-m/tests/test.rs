@@ -39,7 +39,6 @@ impl From<String> for CustomType {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use chrono::Utc;
     use std::sync::{
         Arc, Once,
         atomic::{AtomicUsize, Ordering},
@@ -180,9 +179,8 @@ mod tests {
             .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
             .await?;
         let reader_2 = unit_b
-            .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| State {
-                value: format!("merged [{}] and [{}]", a.value, b.value),
-                timestamp: Utc::now(),
+            .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| {
+                format!("merged [{}] and [{}]", a, b)
             })
             .await?;
         unit_b.add_reader(TagOuter(2), reader_2).await?;

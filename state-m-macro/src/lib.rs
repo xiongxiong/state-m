@@ -630,7 +630,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                State<#typ::Value>,
+                #typ::Value,
             }
         })
         .collect();
@@ -702,7 +702,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         (0..n).map(|i| {
             let state_name = format_ident!("state_{}", i);
             quote! {
-                #state_name
+                #state_name.value
             }
         }),
         quote! {,},
@@ -717,9 +717,12 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
                     match r {
                         Ok((s_cur, _)) => {
                             #(#state_decls)*
-                            let state = func(#(#all_state_names)*);
+                            let value = func(#(#all_state_names)*);
                             let event = StateEvent {
-                                state,
+                                state: State {
+                                    value,
+                                    timestamp: chrono::Utc::now(),
+                                },
                                 is_touch: false,
                                 close_handle: None,
                             };
@@ -738,7 +741,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
-            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send,
+            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send,
         {
             let tags: Vec<K> = vec![#(#vec_tags)*];
             assert!(
@@ -803,7 +806,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                State<#typ::Value>,
+                #typ::Value,
             }
         })
         .collect();
@@ -813,7 +816,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
-            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send;
+            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send;
     }.into()
 }
 
@@ -857,7 +860,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                State<#typ::Value>,
+                #typ::Value,
             }
         })
         .collect();
@@ -876,7 +879,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
-            F: 'static + Fn(#(#fn_params_typ)*) -> State<S> + Send {
+            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send {
                 self.state_machine().#method_name(#(#tag_names)*, func).await
             }
     }.into()
