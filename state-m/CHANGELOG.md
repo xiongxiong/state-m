@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.5 - 2026-07-30
+#### Bug Fixes
+- update Display for State - (41c9edc) - wangjirong
+- change debug_state to display - (43d5152) - wangjirong
+- update merge's closure type - (46427fc) - wangjirong
+#### Miscellaneous Chores
+- update - (d1df558) - 王继荣
+
+- - -
+
 ## 0.4.5 - 2026-07-30
 ### Package updates
 - state-m-macro bumped to state-m-macro-0.1.3

@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.4.5 - 2026-07-30
+### Package updates
+- state-m-macro bumped to state-m-macro-0.1.3
+- state-m bumped to state-m-0.7.5
+### Global changes
+#### Bug Fixes
+- change debug_state to display - (43d5152) - wangjirong
+
+- - -
+
 ## 0.4.4 - 2026-07-28
 ### Package updates
 - state-m bumped to state-m-0.7.4

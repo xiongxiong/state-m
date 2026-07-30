@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.1.3 - 2026-07-30
+#### Bug Fixes
+- change debug_state to display - (43d5152) - wangjirong
+- update merge's closure type - (46427fc) - wangjirong
+
+- - -
+
 ## state-m-macro-0.1.2 - 2026-07-21
 #### Bug Fixes
 - version change - (989488d) - 王继荣
