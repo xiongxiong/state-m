@@ -41,7 +41,7 @@ where
     S: Display + Default,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({}, {})", self.value, self.timestamp)
+        write!(f, "{} | {}", self.timestamp, self.value)
     }
 }
 
