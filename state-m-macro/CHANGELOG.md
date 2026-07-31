@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.1.4 - 2026-07-31
+#### Bug Fixes
+- update - (61b753f) - wangjirong
+#### Refactoring
+- add tag into handler - (182930f) - wangjirong
+
+- - -
+
 ## state-m-macro-0.1.3 - 2026-07-30
 #### Bug Fixes
 - change debug_state to display - (43d5152) - wangjirong
