@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.6 - 2026-07-31
+#### Bug Fixes
+- update stw for source's inner_change - (3d17e2b) - wangjirong
+#### Refactoring
+- add tag into handler - (182930f) - wangjirong
+
+- - -
+
 ## state-m-0.7.5 - 2026-07-30
 #### Bug Fixes
 - update Display for State - (41c9edc) - wangjirong
