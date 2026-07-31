@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# TODO
-=======
 # state-m-macro
 ---
 ## Summary
@@ -25,4 +22,3 @@ pub enum Tag {
     #[kv_assoc(assoc = usize)]
     OuterEx2,
 }
->>>>>>> 700d7d3f1b7935aceae2943db4c5713764195030
