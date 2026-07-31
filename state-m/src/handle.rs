@@ -1,5 +1,5 @@
 use crate::{
-    AsState,
+    AsState, KvAssoc,
     barrier::AsPassCheck,
     reader::Reader,
     source::Source,
@@ -35,24 +35,27 @@ pub trait AsHandle: Debug + Downcast + Send + Sync {
 impl_downcast!(AsHandle);
 
 #[derive(Clone, Debug)]
-pub(crate) struct ArcHandle<S>(pub Arc<Handle<S>>)
+pub(crate) struct ArcHandle<T>(pub Arc<Handle<T>>)
 where
-    S: 'static + AsState + Send + Sync;
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState + Send + Sync;
 
-impl<S> Deref for ArcHandle<S>
+impl<T> Deref for ArcHandle<T>
 where
-    S: 'static + AsState + Send + Sync,
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState + Send + Sync,
 {
-    type Target = Handle<S>;
+    type Target = Handle<T>;
 
     fn deref(&self) -> &Self::Target {
         self.0.as_ref()
     }
 }
 
-impl<S> AsHandle for ArcHandle<S>
+impl<T> AsHandle for ArcHandle<T>
 where
-    S: 'static + AsState + Send + Sync,
+    T: 'static + Clone + Debug + KvAssoc + Send + Sync,
+    T::Value: 'static + AsState + Send + Sync,
 {
     fn display(&self) -> Box<dyn Display> {
         Box::new(self.0.state())
@@ -69,30 +72,34 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct Handle<S>
+pub(crate) struct Handle<T>
 where
-    S: 'static + AsState,
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState,
 {
-    inner: HandleI<S>,
-    cache: Arc<ArcSwap<State<S>>>,
+    tag: T,
+    inner: HandleI<T::Value>,
+    cache: Arc<ArcSwap<State<T::Value>>>,
     cancel_token: CancellationToken,
-    fanout_tx: OnceLock<Sender<(State<S>, State<S>)>>,
+    fanout_tx: OnceLock<Sender<(State<T::Value>, State<T::Value>)>>,
 }
 
-impl<S> Drop for Handle<S>
+impl<T> Drop for Handle<T>
 where
-    S: 'static + AsState,
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState,
 {
     fn drop(&mut self) {
         self.cancel_token.cancel();
     }
 }
 
-impl<S> Handle<S>
+impl<T> Handle<T>
 where
-    S: 'static + AsState,
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState,
 {
-    fn recver(&self) -> Receiver<StateEvent<S>> {
+    fn recver(&self) -> Receiver<StateEvent<T::Value>> {
         match self.inner {
             HandleI::Source(ref source, _) => source.sender.subscribe(),
             HandleI::Reader(ref reader) => reader.sender.subscribe(),
@@ -109,15 +116,15 @@ where
     #[instrument(level = "trace", skip(self, f))]
     async fn inner_change(
         &self,
-        f: impl FnOnce(S) -> S,
+        f: impl FnOnce(T::Value) -> T::Value,
         is_touch: bool,
         wait_arrival: bool,
-    ) -> Result<(), StateChangeError<S>> {
+    ) -> Result<(), StateChangeError<T::Value>> {
         match self.inner {
             HandleI::Source(ref source, ref cache) => {
                 for check in source.pass_checks.iter() {
                     if !check.is_open() {
-                        tracing::trace!("wait pass_check -- {check:?}");
+                        tracing::trace!("{:?} | wait pass_check -- {check:?}", self.tag);
                         check.notified().await;
                     }
                 }
@@ -171,9 +178,10 @@ where
     }
 }
 
-impl<S> Handle<S>
+impl<T> Handle<T>
 where
-    S: 'static + AsState,
+    T: Clone + Debug + KvAssoc,
+    T::Value: 'static + AsState,
 {
     pub fn capacity(&self) -> usize {
         match self.inner {
@@ -182,8 +190,9 @@ where
         }
     }
 
-    pub fn from_source(source: Source<S>) -> Self {
+    pub fn from_source(tag: T, source: Source<T::Value>) -> Self {
         Self {
+            tag,
             inner: HandleI::Source(source, Default::default()),
             cache: Default::default(),
             cancel_token: Default::default(),
@@ -191,8 +200,9 @@ where
         }
     }
 
-    pub fn from_reader(reader: Reader<S>) -> Self {
+    pub fn from_reader(tag: T, reader: Reader<T::Value>) -> Self {
         Self {
+            tag,
             inner: HandleI::Reader(reader),
             cache: Default::default(),
             cancel_token: Default::default(),
@@ -200,7 +210,7 @@ where
         }
     }
 
-    pub fn reader(&self) -> Reader<S> {
+    pub fn reader(&self) -> Reader<T::Value> {
         match self.inner {
             HandleI::Source(ref source, _) => source.reader(),
             HandleI::Reader(ref reader) => reader.clone(),
@@ -211,39 +221,50 @@ where
         self.cancel_token.cancel();
     }
 
-    pub fn value(&self) -> S {
+    pub fn value(&self) -> T::Value {
         self.cache.load().value.clone()
     }
 
-    pub fn state(&self) -> State<S> {
+    pub fn state(&self) -> State<T::Value> {
         self.cache.load().as_ref().clone()
     }
 
-    pub async fn touch(&self) -> Result<(), StateChangeError<S>> {
+    pub async fn touch(&self) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(|s| s.clone(), true, false).await
     }
 
-    pub async fn wait_touch(&self) -> Result<(), StateChangeError<S>> {
+    pub async fn wait_touch(&self) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(|s| s.clone(), true, true).await
     }
 
-    pub async fn alter(&self, s: S) -> Result<(), StateChangeError<S>> {
+    pub async fn alter(&self, s: T::Value) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(|_| s, false, false).await
     }
 
-    pub async fn wait_alter(&self, s: S) -> Result<(), StateChangeError<S>> {
+    pub async fn wait_alter(&self, s: T::Value) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(|_| s, false, true).await
     }
 
-    pub async fn amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
+    pub async fn amend(
+        &self,
+        f: impl FnOnce(T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(f, false, false).await
     }
 
-    pub async fn wait_amend(&self, f: impl FnOnce(S) -> S) -> Result<(), StateChangeError<S>> {
+    pub async fn wait_amend(
+        &self,
+        f: impl FnOnce(T::Value) -> T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
         self.inner_change(f, false, false).await
     }
 
-    pub fn fanout(&self) -> (Receiver<(State<S>, State<S>)>, CancellationToken) {
+    pub fn fanout(
+        &self,
+    ) -> (
+        Receiver<(State<T::Value>, State<T::Value>)>,
+        CancellationToken,
+    ) {
         let rx = self
             .fanout_tx
             .get()
@@ -254,14 +275,13 @@ where
     }
 }
 
-impl<S> Handle<S>
+impl<T> Handle<T>
 where
-    S: 'static + AsState + Send + Sync,
+    T: 'static + Clone + Debug + KvAssoc + Send,
+    T::Value: 'static + AsState + Send + Sync,
 {
-    pub async fn init<T>(&self, tag: T)
-    where
-        T: 'static + Debug + Send,
-    {
+    pub async fn init(&self) {
+        let tag = self.tag.clone();
         let cache = self.cache.clone();
         let cancel_token = self.cancel_token.clone();
         let pass_checks = self.pass_checks();
@@ -271,7 +291,7 @@ where
             .set(fanout_tx.clone())
             .expect("The 'init' method can only be called once.");
         tokio::spawn(async move {
-            tracing::info!("init | {tag:?} -- start");
+            tracing::info!("{tag:?} | init -- start");
             loop {
                 select! {
                     biased;
@@ -307,7 +327,7 @@ where
                     }
                 }
             }
-            tracing::info!("init | {tag:?} -- close");
+            tracing::info!("{tag:?} | init -- close");
         });
     }
 }

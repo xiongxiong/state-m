@@ -62,14 +62,14 @@ impl<K> StateMachine<K>
 where
     K: 'static + AsTag,
 {
-    fn get_handle<T>(&self, tag: T) -> Result<ArcHandle<T::Value>, GetHandleError<K>>
+    fn get_handle<T>(&self, tag: T) -> Result<ArcHandle<T>, GetHandleError<K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync,
     {
         let k = tag.clone().into();
         match self.get(&k) {
-            Some(v) => match v.value().1.downcast_ref::<ArcHandle<T::Value>>() {
+            Some(v) => match v.value().1.downcast_ref::<ArcHandle<T>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
             },
@@ -97,11 +97,11 @@ where
         if self.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag.into()));
         }
-        let h = ArcHandle(Arc::new(Handle::from_source(Source::<T::Value>::new(
-            capacity,
-            pass_checks,
-        ))));
-        h.init(tag.clone()).await;
+        let h = ArcHandle(Arc::new(Handle::from_source(
+            tag.clone(),
+            Source::<T::Value>::new(capacity, pass_checks),
+        )));
+        h.init().await;
         self.insert(k, (tag.to_string(), Box::new(h)));
         Ok(())
     }
@@ -123,8 +123,8 @@ where
         if reader.is_closed() {
             return Err(AddHandleError::ChannelClosed);
         }
-        let h = ArcHandle(Arc::new(Handle::from_reader(reader)));
-        h.init(tag.clone()).await;
+        let h = ArcHandle(Arc::new(Handle::from_reader(tag.clone(), reader)));
+        h.init().await;
         self.insert(k, (tag.to_string(), Box::new(h)));
         Ok(())
     }
@@ -132,11 +132,11 @@ where
     /// Remove state source from state machine.
     pub fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<K>>
     where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync,
     {
         match self.remove(&tag.clone().into()) {
-            Some((_, v)) => match v.1.downcast_ref::<ArcHandle<T::Value>>() {
+            Some((_, v)) => match v.1.downcast_ref::<ArcHandle<T>>() {
                 Some(h) => {
                     h.close();
                     Ok(true)
@@ -157,7 +157,7 @@ where
 
     pub fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.reader())
@@ -165,7 +165,7 @@ where
 
     pub fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.value())
@@ -173,7 +173,7 @@ where
 
     pub fn state<T>(&self, tag: T) -> Result<State<T::Value>, GetHandleError<K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.state())
@@ -181,7 +181,7 @@ where
 
     pub async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.touch().await?)
@@ -189,7 +189,7 @@ where
 
     pub async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_touch().await?)
@@ -197,7 +197,7 @@ where
 
     pub async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.alter(s).await?)
@@ -205,7 +205,7 @@ where
 
     pub async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_alter(s).await?)
@@ -217,7 +217,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.amend(f).await?)
@@ -229,7 +229,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T, K>>
     where
-        T: Clone + Debug + Into<K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
@@ -355,7 +355,7 @@ pub trait UseStateMachine: HasStateMachine {
     /// * `tag` - the `Tag` of the handle to be deleted.
     fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync;
 
     /// If there is a handle (source or reader) in state machine for a tag.
@@ -368,7 +368,7 @@ pub trait UseStateMachine: HasStateMachine {
     /// * `tag` - the `Tag` of the handle which you want to get a reader from it.
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
     where
-        T: Clone + Debug + Into<Self::K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync;
 
     /// Get current state value of a tag in state machine.
@@ -493,7 +493,7 @@ where
 
     fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync,
     {
         self.state_machine().del_handle(tag)
@@ -508,7 +508,7 @@ where
 
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
     where
-        T: Clone + Debug + Into<Self::K> + KvAssoc,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState + Send + Sync,
     {
         self.state_machine().reader(tag)
