@@ -115,14 +115,17 @@ where
     ) -> Result<(), StateChangeError<S>> {
         match self.inner {
             HandleI::Source(ref source, ref cache) => {
+                for check in source.pass_checks.iter() {
+                    if !check.is_open() {
+                        tracing::trace!("wait pass_check -- {check:?}");
+                        check.notified().await;
+                    }
+                }
                 let res = {
                     let mut guard = cache.write().unwrap();
                     let s_old = (*guard).value.clone();
                     let s = f(s_old.clone());
                     if is_touch || s_old != s {
-                        if source.pass_checks.iter().any(|p| !p.is_open()) {
-                            return Err(StateChangeError::PassCheckFail);
-                        }
                         let (event, wait_rx) = {
                             let state = State {
                                 value: s,
@@ -318,8 +321,6 @@ where
     StateNotChange,
     #[error("This state is read only.")]
     StateReadOnly,
-    #[error("Fail to pass, at least one of associated doors or barriers is closed.")]
-    PassCheckFail,
     #[error(transparent)]
     SendError(#[from] SendError<StateEvent<S>>),
     #[error(transparent)]
