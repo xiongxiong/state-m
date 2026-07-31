@@ -227,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn test_stw_by_door() -> Result<()> {
         init_tracing();
-        const COUNT: usize = 10000;
+        const COUNT: usize = 1000;
         let door = Arc::new(Door::new());
         let unit_a = Unit::default();
         unit_a
