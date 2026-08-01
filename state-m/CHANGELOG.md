@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file. See [conven
 #### Bug Fixes
 - added cmp_... version methods for state_machine - (3754c89) - wangjirong
 #### Miscellaneous Chores
+- update - (01f9ca2) - 王继荣
+- associate Key with KvAssoc - (570e368) - wangjirong
+- update - (b5ffdcd) - wangjirong
+
+- - -
+
+## state-m-0.7.7 - 2026-08-01
+#### Bug Fixes
+- added cmp_... version methods for state_machine - (3754c89) - wangjirong
+#### Miscellaneous Chores
 - associate Key with KvAssoc - (570e368) - wangjirong
 - update - (b5ffdcd) - wangjirong
 
