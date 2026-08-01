@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.7 - 2026-08-01
+#### Bug Fixes
+- added cmp_... version methods for state_machine - (3754c89) - wangjirong
+#### Miscellaneous Chores
+- associate Key with KvAssoc - (570e368) - wangjirong
+- update - (b5ffdcd) - wangjirong
+
+- - -
+
 ## state-m-0.7.6 - 2026-07-31
 #### Bug Fixes
 - update stw for source's inner_change - (3d17e2b) - wangjirong
