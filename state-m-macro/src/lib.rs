@@ -255,6 +255,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     Some(typ) => {
                         quotes.push(quote! {
                             impl state_m::KvAssoc for #t_name {
+                                type Key = #i_ident;
                                 type Value = #typ;
                             }
                         });
@@ -289,6 +290,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     quotes.push(quote! {
                         #q_attrs #i_vis struct #i_ident #fields #semi_colon
                         impl state_m::KvAssoc for #i_ident {
+                            type Key = #i_ident;
                             type Value = #typ;
                         }
                     });
