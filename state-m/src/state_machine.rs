@@ -203,12 +203,38 @@ where
         Ok(self.get_handle(tag)?.alter(s).await?)
     }
 
+    pub async fn cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.cmp_alter(s, s_cmp).await?)
+    }
+
     pub async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_alter(s).await?)
+    }
+
+    pub async fn wait_cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_cmp_alter(s, s_cmp).await?)
     }
 
     pub async fn amend<T>(
@@ -223,6 +249,19 @@ where
         Ok(self.get_handle(tag)?.amend(f).await?)
     }
 
+    pub async fn cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.cmp_amend(f, s_cmp).await?)
+    }
+
     pub async fn wait_amend<T>(
         &self,
         tag: T,
@@ -233,6 +272,19 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.wait_amend(f).await?)
+    }
+
+    pub async fn wait_cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
     }
 
     pub fn debug_state(&self) -> Vec<String> {
@@ -401,21 +453,78 @@ pub trait UseStateMachine: HasStateMachine {
 
     /// Alter a state in state machine.
     /// * `tag` - the `Tag` of the handle which you want to alter.
+    /// * `s` - the state to set.
     async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    /// Alter a state in state machine.
+    /// * `tag` - the `Tag` of the handle which you want to alter.
+    /// * `s` - the state to set.
+    /// * `s_cmp` - the state to compare before set, if it is not the same as the current state, state will stay untouched.
+    async fn cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Alter a state in state machine, and wait for all readers finishing responding actions.
     /// * `tag` - the `Tag` of the handle which you want to alter.
+    /// * `s` - the state to set.
     async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    /// Alter a state in state machine, and wait for all readers finishing responding actions.
+    /// * `tag` - the `Tag` of the handle which you want to alter.
+    /// * `s` - the state to set.
+    /// * `s_cmp` - the state to compare before set, if it is not the same as the current state, state will stay untouched.
+    async fn wait_cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Amend a state in state machine, with a closure which take the current state value as parameter and return new state value.
     /// * `tag` - the `Tag` of the handle which you want to amend.
+    /// * `f` - the closure to be used on the current state to get a new state.
     async fn amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    /// Amend a state in state machine, with a closure which take the current state value as parameter and return new state value.
+    /// * `tag` - the `Tag` of the handle which you want to amend.
+    /// * `f` - the closure to be used on the current state to get a new state.
+    /// * `s_cmp` - the state to compare before set, if it is not the same as the current state, state will stay untouched.
+    async fn cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    /// Amend a state in state machine, with a closure which take the current state value as parameter and return new state value, and wait for all readers finishing responding actions.
+    /// * `tag` - the `Tag` of the handle which you want to amend.
+    /// * `f` - the closure to be used on the current state to get a new state.
+    async fn wait_amend<T>(
         &self,
         tag: T,
         f: impl FnOnce(T::Value) -> T::Value + Send,
@@ -426,10 +535,13 @@ pub trait UseStateMachine: HasStateMachine {
 
     /// Amend a state in state machine, with a closure which take the current state value as parameter and return new state value, and wait for all readers finishing responding actions.
     /// * `tag` - the `Tag` of the handle which you want to amend.
-    async fn wait_amend<T>(
+    /// * `f` - the closure to be used on the current state to get a new state.
+    /// * `s_cmp` - the state to compare before set, if it is not the same as the current state, state will stay untouched.
+    async fn wait_cmp_amend<T>(
         &self,
         tag: T,
         f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
     ) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
@@ -571,12 +683,40 @@ where
     }
 
     #[instrument(level = "trace", skip(self))]
+    async fn cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        self.state_machine().cmp_alter(tag, s, s_cmp).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
     async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().wait_alter(tag, s).await
+    }
+
+    #[instrument(level = "trace", skip(self))]
+    async fn wait_cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        self.state_machine().wait_cmp_alter(tag, s, s_cmp).await
     }
 
     #[instrument(level = "trace", skip(self, f))]
@@ -593,6 +733,20 @@ where
     }
 
     #[instrument(level = "trace", skip(self, f))]
+    async fn cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        self.state_machine().cmp_amend(tag, f, s_cmp).await
+    }
+
+    #[instrument(level = "trace", skip(self, f))]
     async fn wait_amend<T>(
         &self,
         tag: T,
@@ -603,6 +757,20 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().wait_amend(tag, f).await
+    }
+
+    #[instrument(level = "trace", skip(self, f))]
+    async fn wait_cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        self.state_machine().wait_cmp_amend(tag, f, s_cmp).await
     }
 
     fn debug_state(&self) -> Vec<String> {

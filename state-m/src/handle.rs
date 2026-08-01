@@ -119,6 +119,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value,
         is_touch: bool,
         wait_arrival: bool,
+        pre_cmp: Option<T::Value>,
     ) -> Result<(), StateChangeError<T::Value>> {
         match self.inner {
             HandleI::Source(ref source, ref cache) => {
@@ -131,6 +132,11 @@ where
                 let res = {
                     let mut guard = cache.write().unwrap();
                     let s_old = (*guard).value.clone();
+                    if let Some(s_cmp) = pre_cmp
+                        && s_cmp != s_old
+                    {
+                        return Err(StateChangeError::CompareFailure);
+                    }
                     let s = f(s_old.clone());
                     if is_touch || s_old != s {
                         let (event, wait_rx) = {
@@ -230,33 +236,65 @@ where
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(|s| s.clone(), true, false).await
+        self.inner_change(|s| s.clone(), true, false, None).await
     }
 
     pub async fn wait_touch(&self) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(|s| s.clone(), true, true).await
+        self.inner_change(|s| s.clone(), true, true, None).await
     }
 
     pub async fn alter(&self, s: T::Value) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(|_| s, false, false).await
+        self.inner_change(|_| s, false, false, None).await
+    }
+
+    pub async fn cmp_alter(
+        &self,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
+        self.inner_change(|_| s, false, false, Some(s_cmp)).await
     }
 
     pub async fn wait_alter(&self, s: T::Value) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(|_| s, false, true).await
+        self.inner_change(|_| s, false, true, None).await
+    }
+
+    pub async fn wait_cmp_alter(
+        &self,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
+        self.inner_change(|_| s, false, true, Some(s_cmp)).await
     }
 
     pub async fn amend(
         &self,
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(f, false, false).await
+        self.inner_change(f, false, false, None).await
+    }
+
+    pub async fn cmp_amend(
+        &self,
+        f: impl FnOnce(T::Value) -> T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
+        self.inner_change(f, false, false, Some(s_cmp)).await
     }
 
     pub async fn wait_amend(
         &self,
         f: impl FnOnce(T::Value) -> T::Value,
     ) -> Result<(), StateChangeError<T::Value>> {
-        self.inner_change(f, false, false).await
+        self.inner_change(f, false, false, None).await
+    }
+
+    pub async fn wait_cmp_amend(
+        &self,
+        f: impl FnOnce(T::Value) -> T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T::Value>> {
+        self.inner_change(f, false, false, Some(s_cmp)).await
     }
 
     pub fn fanout(
@@ -341,6 +379,8 @@ where
     StateNotChange,
     #[error("This state is read only.")]
     StateReadOnly,
+    #[error("This state used to compare is out of date.")]
+    CompareFailure,
     #[error(transparent)]
     SendError(#[from] SendError<StateEvent<S>>),
     #[error(transparent)]
