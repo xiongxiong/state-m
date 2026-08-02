@@ -432,7 +432,36 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
             }
         })
         .collect();
+    let meta_method = if n == 1 {
+        let params: Vec<_> = itertools::intersperse(
+            (0..n).map(|i| {
+                let name = format_ident!("tag_{}", i);
+                quote! {
+                    #name
+                }
+            }),
+            quote! {,},
+        )
+        .collect();
+        quote! {
+            async fn watch<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            where
+                #(#tag_typ_cons)*
+                F: 'static
+                    + Fn(
+                        #(#fn_params_typ)* K
+                    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                    + Send,
+            {
+                self.watch_1(#(#params)*, func).await
+            }
+        }
+    } else {
+        quote! {}
+    };
     quote! {
+        #meta_method
+
         async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
         where
             #(#tag_typ_cons)*
@@ -509,7 +538,23 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
             }
         })
         .collect();
+    let meta_method = if n == 1 {
+        quote! {
+            async fn watch<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
+            where
+                #(#tag_typ_cons)*
+                F: 'static
+                    + Fn(
+                        #(#fn_params_typ)* Self::K
+                    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                    + Send;
+        }
+    } else {
+        quote! {}
+    };
     quote! {
+        #meta_method
+
         /// Watch multiple state readers simultaneously, state events from these readers arrived in queue.
         async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
         where
@@ -577,7 +622,36 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
         quote! {,},
     )
     .collect();
+    let meta_method = if n == 1 {
+        let params: Vec<_> = itertools::intersperse(
+            (0..n).map(|i| {
+                let name = format_ident!("tag_{}", i);
+                quote! {
+                    #name
+                }
+            }),
+            quote! {,},
+        )
+        .collect();
+        quote! {
+            async fn watch<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
+            where
+                #(#tag_typ_cons)*
+                F: 'static
+                    + Fn(
+                        #(#fn_params_typ)* Self::K
+                    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                    + Send
+            {
+                self.state_machine().watch(#(#params)*, func).await
+            }
+        }
+    } else {
+        quote! {}
+    };
     quote! {
+        #meta_method
+
         async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
@@ -585,9 +659,10 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
                 + Fn(
                     #(#fn_params_typ)* Self::K
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-                + Send {
-                    self.state_machine().#method_name(#(#tag_names)*, func).await
-                }
+                + Send
+        {
+            self.state_machine().#method_name(#(#tag_names)*, func).await
+        }
     }
     .into()
 }
