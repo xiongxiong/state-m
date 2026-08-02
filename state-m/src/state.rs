@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use derivative::Derivative;
-use std::fmt::{self, Debug, Display};
+use std::fmt::{self, Debug};
 use tokio::sync::mpsc;
 
 /// State type.
@@ -33,15 +33,6 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} | {:?}", self.timestamp, self.value)
-    }
-}
-
-impl<S> Display for State<S>
-where
-    S: Display + Default,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} | {}", self.timestamp, self.value)
     }
 }
 

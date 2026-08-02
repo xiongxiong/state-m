@@ -32,7 +32,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for item in self.iter().sorted_by_key(|k| k.key().clone()) {
             let (_, (l, h)) = item.pair();
-            write!(f, "{:<20} | {}\n", l, h.display())?
+            write!(f, "{:<20} | {:?}\n", l, h.debug_state())?
         }
         Ok(())
     }
@@ -291,7 +291,7 @@ where
         let mut states = Vec::new();
         for item in self.iter().sorted_by_key(|k| k.key().clone()) {
             let (_, (l, h)) = item.pair();
-            states.push(format!("{:<20} | {}", l, h.display()));
+            states.push(format!("{:<20} | {:?}", l, h.debug_state()));
         }
         states
     }
