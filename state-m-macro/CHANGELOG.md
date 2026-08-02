@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.1.5 - 2026-08-02
+#### Bug Fixes
+- add method for watch with only one parameter - (c89812c) - wangjirong
+#### Miscellaneous Chores
+- associate Key with KvAssoc - (570e368) - wangjirong
+
+- - -
+
 ## state-m-macro-0.1.4 - 2026-07-31
 #### Bug Fixes
 - update - (61b753f) - wangjirong
