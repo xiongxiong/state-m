@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.9 - 2026-08-02
+#### Bug Fixes
+- removed Display trait from AsState - (836e651) - 王继荣
+
+- - -
+
 ## state-m-0.7.8 - 2026-08-02
 #### Bug Fixes
 - add method for watch with only one parameter - (dbfb9b5) - wangjirong
