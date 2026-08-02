@@ -240,7 +240,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch_1(TagOuter(0), move |_, _| {
+            .watch(TagOuter(0), move |_, _| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);
@@ -293,7 +293,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch_1(TagOuter(0), move |_, _| {
+            .watch(TagOuter(0), move |_, _| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);

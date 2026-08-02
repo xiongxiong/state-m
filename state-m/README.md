@@ -143,7 +143,7 @@ unit_b.del_handle(&TagOuter);
 
 ```rust
 unit_b
-    .watch_1(TagOuter(0), move |_, _| {
+    .watch(TagOuter(0), move |_, _| {
         let counter_cc = counter_c.clone();
         Box::pin(async move {
             counter_cc.fetch_add(1, Ordering::AcqRel);

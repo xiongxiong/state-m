@@ -1,3 +1,3 @@
 // use state_m_macro::*;
 
-// sm_merge_reader!(2);
+// sm_watch!(1);
