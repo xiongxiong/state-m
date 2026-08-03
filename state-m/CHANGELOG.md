@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.7.10 - 2026-08-03
+#### Bug Fixes
+- removed Display trait for Tag - (ba5d9e0) - 王继荣
+#### Miscellaneous Chores
+- update - (98cbe52) - 王继荣
+
+- - -
+
 ## state-m-0.7.9 - 2026-08-02
 #### Bug Fixes
 - removed Display trait from AsState - (836e651) - 王继荣

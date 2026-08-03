@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.1.6 - 2026-08-03
+#### Bug Fixes
+- removed Display trait for Tag - (bf96da6) - 王继荣
+
+- - -
+
 ## state-m-macro-0.1.5 - 2026-08-02
 #### Bug Fixes
 - add method for watch with only one parameter - (c89812c) - wangjirong
