@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use itertools::Itertools;
 use state_m_macro::*;
 use std::{
-    fmt::{self, Debug, Display},
+    fmt::{self, Debug},
     ops::Deref,
     pin::Pin,
     sync::Arc,
@@ -90,7 +90,7 @@ where
         pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<K>>
     where
-        T: 'static + Clone + Debug + Display + Into<K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         let k = tag.clone().into();
@@ -102,7 +102,7 @@ where
             Source::<T::Value>::new(capacity, pass_checks),
         )));
         h.init().await;
-        self.insert(k, (tag.to_string(), Box::new(h)));
+        self.insert(k, (format!("{tag:?}"), Box::new(h)));
         Ok(())
     }
 
@@ -113,7 +113,7 @@ where
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<K>>
     where
-        T: 'static + Clone + Debug + Display + Into<K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         let k = tag.clone().into();
@@ -125,7 +125,7 @@ where
         }
         let h = ArcHandle(Arc::new(Handle::from_reader(tag.clone(), reader)));
         h.init().await;
-        self.insert(k, (tag.to_string(), Box::new(h)));
+        self.insert(k, (format!("{tag:?}"), Box::new(h)));
         Ok(())
     }
 
@@ -388,7 +388,7 @@ pub trait UseStateMachine: HasStateMachine {
         pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Add state reader into state machine.
@@ -400,7 +400,7 @@ pub trait UseStateMachine: HasStateMachine {
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync;
 
     /// Delete state handle (source or reader) from state machine.
@@ -594,7 +594,7 @@ where
         pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine()
@@ -632,7 +632,7 @@ where
         reader: Reader<T::Value>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
-        T: 'static + Clone + Debug + Display + Into<Self::K> + KvAssoc + Send + Sync,
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: 'static + AsState + Send + Sync,
     {
         self.state_machine().add_reader(tag, reader).await?;
