@@ -6,7 +6,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Expr, Ident, Index, LitInt, Type,
+    Attribute, DeriveInput, Expr, Index, LitInt, Type,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
@@ -159,29 +159,6 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let i_attrs = &input.attrs;
     let i_ident = &input.ident;
     let i_vis = &input.vis;
-    let impl_display = |ident: &Ident, args: KvAssocArgs, quotes: &mut Vec<TokenStream2>| match args
-        .label
-        .internal()
-    {
-        Some(expr) => {
-            quotes.push(quote! {
-                impl std::fmt::Display for #ident {
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        write!(f, "{}", #expr)
-                    }
-                }
-            });
-        }
-        None => {
-            quotes.push(quote! {
-                impl std::fmt::Display for #ident {
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        write!(f, "{:?}", self)
-                    }
-                }
-            });
-        }
-    };
     let mut quotes: Vec<_> = Vec::new();
     match input.data {
         syn::Data::Enum(data_enum) => {
@@ -190,23 +167,24 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 let v_ident = &item.ident;
                 let v_fields = &item.fields;
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
+                let t_name_str = format!("{}{}", i_ident, v_ident);
                 let q = match v_fields {
                     syn::Fields::Named(fields_named) => quote! {
-                        #[derive(Clone, Debug)]
+                        #[derive(Clone)]
                         #q_attrs #i_vis struct #t_name #fields_named
                     },
                     syn::Fields::Unnamed(fields_unnamed) => quote! {
-                        #[derive(Clone, Debug)]
+                        #[derive(Clone)]
                         #q_attrs #i_vis struct #t_name #fields_unnamed;
                     },
                     syn::Fields::Unit => quote! {
-                        #[derive(Clone, Debug)]
+                        #[derive(Clone)]
                         #q_attrs #i_vis struct #t_name;
                     },
                 };
                 quotes.push(q);
 
-                let q_fr = match v_fields {
+                let q_from_body = match v_fields {
                     syn::Fields::Named(fields_named) => {
                         let q_params: Vec<_> = itertools::intersperse(
                             fields_named.named.iter().map(|field| {
@@ -241,14 +219,14 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         #i_ident::#v_ident
                     },
                 };
-                let q_f = quote! {
+                let q_from = quote! {
                     impl From<#t_name> for #i_ident {
                         fn from(value: #t_name) -> #i_ident {
-                            #q_fr
+                            #q_from_body
                         }
                     }
                 };
-                quotes.push(q_f);
+                quotes.push(q_from);
 
                 let args = kv_assoc_args(&item.attrs);
                 match args.clone().assoc.internal() {
@@ -264,7 +242,28 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
                     }
                 }
-                impl_display(&t_name, args, &mut quotes);
+
+                let q_debug = match args.label.internal() {
+                    Some(expr) => {
+                        quote! {
+                            impl std::fmt::Debug for #t_name {
+                                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                                    write!(f, "{}", #expr)
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        quote! {
+                            impl std::fmt::Debug for #t_name {
+                                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                                    write!(f, "{}", #t_name_str)
+                                }
+                            }
+                        }
+                    }
+                };
+                quotes.push(q_debug);
             }
             let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
             let mut variants = data_enum.variants.clone();
@@ -299,7 +298,6 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
                 }
             }
-            impl_display(i_ident, args, &mut quotes);
         }
         _ => panic!("Not supported."),
     };
