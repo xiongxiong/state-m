@@ -239,7 +239,9 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         });
                     }
                     None => {
-                        panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
+                        panic!(
+                            "Expects an attribute of format `#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]`."
+                        )
                     }
                 }
 
