@@ -8,7 +8,7 @@ mod state_machine;
 pub use barrier::*;
 pub use reader::Reader;
 pub use state::*;
-pub use state_m_macro::state_tag;
+pub use state_m_macro::StateTag;
 pub use state_machine::*;
 use std::{fmt::Debug, hash::Hash};
 

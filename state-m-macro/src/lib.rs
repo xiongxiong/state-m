@@ -11,6 +11,8 @@ use syn::{
     parse_macro_input,
 };
 
+const KV_ASSOC_ARGS: &str = "#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]";
+
 #[derive(Clone, Debug, Default)]
 struct KvAssocArgs {
     pub assoc: AttributePropertyAssoc,
@@ -26,7 +28,7 @@ impl AttributeComponent for KvAssocArgs {
             syn::Meta::List(ref meta_list) => syn::parse2::<KvAssocArgs>(meta_list.tokens.clone()),
             syn::Meta::NameValue(_) => return_syn_err!(
                 attr,
-                "Expects an attribute of format `#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]`. \nGot: {}",
+                "Expects an attribute of format `{KV_ASSOC_ARGS}`. \nGot: {}",
                 qt! { #attr }
             ),
         }
@@ -45,7 +47,7 @@ impl Parse for KvAssocArgs {
             );
             syn_err!(
                 ident,
-                r#"Expects an attribute of format '#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]'
+                r#"Expects an attribute of format '{KV_ASSOC_ARGS}'
                 {known}
                 But got:
                 '{}'"#,
@@ -150,8 +152,8 @@ fn q_attrs_except(attrs: &Vec<Attribute>, except: &str) -> TokenStream2 {
     }
 }
 
-#[proc_macro_attribute]
-pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
+#[proc_macro_derive(StateTag, attributes(kv_assoc))]
+pub fn state_tag(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     if !input.generics.params.is_empty() {
         panic!("Generics not supported.");
@@ -239,9 +241,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         });
                     }
                     None => {
-                        panic!(
-                            "Expects an attribute of format `#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]`."
-                        )
+                        panic!("Expects an attribute of format `{KV_ASSOC_ARGS}`.")
                     }
                 }
 
@@ -267,16 +267,6 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 };
                 quotes.push(q_debug);
             }
-            let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
-            let mut variants = data_enum.variants.clone();
-            for item in variants.iter_mut() {
-                item.attrs = attrs_except(&item.attrs, KvAssocArgs::KEYWORD);
-            }
-            quotes.push(quote! {
-                #q_attrs #i_vis enum #i_ident {
-                    #variants
-                }
-            });
         }
         syn::Data::Struct(data_struct) => {
             let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
@@ -297,7 +287,7 @@ pub fn state_tag(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     });
                 }
                 None => {
-                    panic!("Expects an attribute of format `#[kv_assoc(assoc = AssocType)]`.")
+                    panic!("Expects an attribute of format `{KV_ASSOC_ARGS}`.")
                 }
             }
         }
