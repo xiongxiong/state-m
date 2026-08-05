@@ -1,6 +1,6 @@
 use macro_tools::{
-    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, ct, qt,
-    return_syn_err, syn_err,
+    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn,
+    AttributePropertySyn, ct, qt, return_syn_err, syn_err,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -13,7 +13,7 @@ use syn::{
 
 const STATE_TAG_ARGS: &str = "#[state_tag(assoc = AssocType, label = \"AssocLabel\")]";
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct StateTagArgs {
     pub assoc: AttributePropertyAssoc,
     pub label: AttributePropertyLabel,
@@ -24,9 +24,8 @@ impl AttributeComponent for StateTagArgs {
 
     fn from_meta(attr: &syn::Attribute) -> syn::Result<Self> {
         match attr.meta {
-            syn::Meta::Path(ref _path) => Ok(Default::default()),
             syn::Meta::List(ref meta_list) => syn::parse2::<StateTagArgs>(meta_list.tokens.clone()),
-            syn::Meta::NameValue(_) => return_syn_err!(
+            _ => return_syn_err!(
                 attr,
                 "Expects an attribute of format `{STATE_TAG_ARGS}`. \nGot: {}",
                 qt! { #attr }
@@ -37,7 +36,6 @@ impl AttributeComponent for StateTagArgs {
 
 impl Parse for StateTagArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut result = Self::default();
         let error = |ident: &syn::Ident| -> syn::Error {
             let known = ct::str::format!(
                 "Known entries of attribute {} are: {}, {}[optional].",
@@ -54,16 +52,18 @@ impl Parse for StateTagArgs {
                 qt! { #ident }
             )
         };
+        let mut opt_assoc: Option<AttributePropertyAssoc> = None;
+        let mut opt_label: Option<AttributePropertyLabel> = None;
         while !input.is_empty() {
             let lookahead = input.lookahead1();
             if lookahead.peek(syn::Ident) {
                 let ident: syn::Ident = input.parse()?;
                 match ident.to_string().as_str() {
                     AttributePropertyAssoc::KEYWORD => {
-                        result.assign(AttributePropertyAssoc::parse(input)?)
+                        opt_assoc = Some(AttributePropertyAssoc::parse(input)?);
                     }
                     AttributePropertyLabel::KEYWORD => {
-                        result.assign(AttributePropertyLabel::parse(input)?)
+                        opt_label = Some(AttributePropertyLabel::parse(input)?);
                     }
                     _ => return Err(error(&ident)),
                 }
@@ -75,7 +75,16 @@ impl Parse for StateTagArgs {
                 input.parse::<syn::Token![,]>()?;
             }
         }
-        Ok(result)
+        match opt_assoc {
+            Some(assoc) => Ok(Self {
+                assoc,
+                label: opt_label.unwrap_or_default(),
+            }),
+            None => Err(syn_err!(
+                "Attribute property '{}' is necessary.",
+                AttributePropertyAssocMarker::KEYWORD
+            )),
+        }
     }
 }
 
@@ -99,7 +108,7 @@ where
     }
 }
 
-type AttributePropertyAssoc = AttributePropertyOptionalSyn<Type, AttributePropertyAssocMarker>;
+type AttributePropertyAssoc = AttributePropertySyn<Type, AttributePropertyAssocMarker>;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct AttributePropertyAssocMarker;
@@ -118,10 +127,9 @@ impl AttributePropertyComponent for AttributePropertyLabelMarker {
 }
 
 fn state_tag_args(attrs: &Vec<Attribute>) -> StateTagArgs {
-    let mut args = StateTagArgs::default();
     for attr in attrs {
         if attr.path().is_ident(StateTagArgs::KEYWORD) {
-            args = StateTagArgs::from_meta(attr).unwrap_or_else(|e| {
+            return StateTagArgs::from_meta(attr).unwrap_or_else(|e| {
                 panic!(
                     "Unable to parse attribute [{}] : {}",
                     StateTagArgs::KEYWORD,
@@ -130,7 +138,7 @@ fn state_tag_args(attrs: &Vec<Attribute>) -> StateTagArgs {
             });
         }
     }
-    args
+    panic!("Attribute {} is absent.", StateTagArgs::KEYWORD);
 }
 
 fn attrs_except(attrs: &Vec<Attribute>, except: &str) -> Vec<Attribute> {
@@ -231,19 +239,13 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 quotes.push(q_from);
 
                 let args = state_tag_args(&item.attrs);
-                match args.clone().assoc.internal() {
-                    Some(typ) => {
-                        quotes.push(quote! {
-                            impl state_m::KvAssoc for #t_name {
-                                type Key = #i_ident;
-                                type Value = #typ;
-                            }
-                        });
+                let typ = args.clone().assoc.internal();
+                quotes.push(quote! {
+                    impl state_m::KvAssoc for #t_name {
+                        type Key = #i_ident;
+                        type Value = #typ;
                     }
-                    None => {
-                        panic!("Expects an attribute of format `{STATE_TAG_ARGS}`.")
-                    }
-                }
+                });
 
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
@@ -276,20 +278,14 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 None => quote! {},
             };
             let args = state_tag_args(&input.attrs);
-            match args.clone().assoc.internal() {
-                Some(typ) => {
-                    quotes.push(quote! {
-                        #q_attrs #i_vis struct #i_ident #fields #semi_colon
-                        impl state_m::KvAssoc for #i_ident {
-                            type Key = #i_ident;
-                            type Value = #typ;
-                        }
-                    });
+            let typ = args.clone().assoc.internal();
+            quotes.push(quote! {
+                #q_attrs #i_vis struct #i_ident #fields #semi_colon
+                impl state_m::KvAssoc for #i_ident {
+                    type Key = #i_ident;
+                    type Value = #typ;
                 }
-                None => {
-                    panic!("Expects an attribute of format `{STATE_TAG_ARGS}`.")
-                }
-            }
+            });
         }
         _ => panic!("Not supported."),
     };
