@@ -2,13 +2,13 @@ use state_m::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
 pub enum Tag {
-    #[kv_assoc(assoc = String, label = format!("inner_{}", self.0))]
+    #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[kv_assoc(assoc = String, label = "from outer")]
+    #[state_tag(assoc = String, label = "from outer")]
     Outer(usize),
-    #[kv_assoc(assoc = CustomType)]
+    #[state_tag(assoc = CustomType)]
     OuterEx1,
-    #[kv_assoc(assoc = usize)]
+    #[state_tag(assoc = usize)]
     OuterEx2,
 }
 

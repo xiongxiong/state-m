@@ -42,7 +42,7 @@ All notable changes to this project will be documented in this file. See [conven
 ## state-m-macro-0.1.0 - 2026-07-17
 #### Features
 - Added watch macros. - (4f46262) - 王继荣
-- added 'label' for kv_assoc - (6f2d0b6) - wangjirong
+- added 'label' for state_tag - (6f2d0b6) - wangjirong
 #### Bug Fixes
 - update readme - (4686cac) - 王继荣
 - update readme - (f6dec1e) - 王继荣

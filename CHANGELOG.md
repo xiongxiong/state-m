@@ -152,7 +152,7 @@ All notable changes to this project will be documented in this file. See [conven
 #### Features
 - added yield_now after sending state change event. - (a3bf684) - 王继荣
 - Added watch macros. - (4f46262) - 王继荣
-- added 'label' for kv_assoc - (6f2d0b6) - wangjirong
+- added 'label' for state_tag - (6f2d0b6) - wangjirong
 #### Bug Fixes
 - added yield_now after sending state change event - (5eb3407) - 王继荣
 #### Refactoring

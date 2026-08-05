@@ -11,43 +11,43 @@ use syn::{
     parse_macro_input,
 };
 
-const KV_ASSOC_ARGS: &str = "#[kv_assoc(assoc = AssocType, label = \"AssocLabel\")]";
+const STATE_TAG_ARGS: &str = "#[state_tag(assoc = AssocType, label = \"AssocLabel\")]";
 
 #[derive(Clone, Debug, Default)]
-struct KvAssocArgs {
+struct StateTagArgs {
     pub assoc: AttributePropertyAssoc,
     pub label: AttributePropertyLabel,
 }
 
-impl AttributeComponent for KvAssocArgs {
-    const KEYWORD: &'static str = "kv_assoc";
+impl AttributeComponent for StateTagArgs {
+    const KEYWORD: &'static str = "state_tag";
 
     fn from_meta(attr: &syn::Attribute) -> syn::Result<Self> {
         match attr.meta {
             syn::Meta::Path(ref _path) => Ok(Default::default()),
-            syn::Meta::List(ref meta_list) => syn::parse2::<KvAssocArgs>(meta_list.tokens.clone()),
+            syn::Meta::List(ref meta_list) => syn::parse2::<StateTagArgs>(meta_list.tokens.clone()),
             syn::Meta::NameValue(_) => return_syn_err!(
                 attr,
-                "Expects an attribute of format `{KV_ASSOC_ARGS}`. \nGot: {}",
+                "Expects an attribute of format `{STATE_TAG_ARGS}`. \nGot: {}",
                 qt! { #attr }
             ),
         }
     }
 }
 
-impl Parse for KvAssocArgs {
+impl Parse for StateTagArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut result = Self::default();
         let error = |ident: &syn::Ident| -> syn::Error {
             let known = ct::str::format!(
                 "Known entries of attribute {} are: {}, {}[optional].",
-                KvAssocArgs::KEYWORD,
+                StateTagArgs::KEYWORD,
                 AttributePropertyAssocMarker::KEYWORD,
                 AttributePropertyLabelMarker::KEYWORD,
             );
             syn_err!(
                 ident,
-                r#"Expects an attribute of format '{KV_ASSOC_ARGS}'
+                r#"Expects an attribute of format '{STATE_TAG_ARGS}'
                 {known}
                 But got:
                 '{}'"#,
@@ -79,7 +79,7 @@ impl Parse for KvAssocArgs {
     }
 }
 
-impl<IntoT> Assign<AttributePropertyAssoc, IntoT> for KvAssocArgs
+impl<IntoT> Assign<AttributePropertyAssoc, IntoT> for StateTagArgs
 where
     IntoT: Into<AttributePropertyAssoc>,
 {
@@ -89,7 +89,7 @@ where
     }
 }
 
-impl<IntoT> Assign<AttributePropertyLabel, IntoT> for KvAssocArgs
+impl<IntoT> Assign<AttributePropertyLabel, IntoT> for StateTagArgs
 where
     IntoT: Into<AttributePropertyLabel>,
 {
@@ -117,14 +117,14 @@ impl AttributePropertyComponent for AttributePropertyLabelMarker {
     const KEYWORD: &'static str = "label";
 }
 
-fn kv_assoc_args(attrs: &Vec<Attribute>) -> KvAssocArgs {
-    let mut args = KvAssocArgs::default();
+fn state_tag_args(attrs: &Vec<Attribute>) -> StateTagArgs {
+    let mut args = StateTagArgs::default();
     for attr in attrs {
-        if attr.path().is_ident(KvAssocArgs::KEYWORD) {
-            args = KvAssocArgs::from_meta(attr).unwrap_or_else(|e| {
+        if attr.path().is_ident(StateTagArgs::KEYWORD) {
+            args = StateTagArgs::from_meta(attr).unwrap_or_else(|e| {
                 panic!(
                     "Unable to parse attribute [{}] : {}",
-                    KvAssocArgs::KEYWORD,
+                    StateTagArgs::KEYWORD,
                     e
                 )
             });
@@ -152,7 +152,7 @@ fn q_attrs_except(attrs: &Vec<Attribute>, except: &str) -> TokenStream2 {
     }
 }
 
-#[proc_macro_derive(StateTag, attributes(kv_assoc))]
+#[proc_macro_derive(StateTag, attributes(state_tag))]
 pub fn state_tag(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     if !input.generics.params.is_empty() {
@@ -165,7 +165,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
-                let q_attrs = q_attrs_except(&item.attrs, KvAssocArgs::KEYWORD);
+                let q_attrs = q_attrs_except(&item.attrs, StateTagArgs::KEYWORD);
                 let v_ident = &item.ident;
                 let v_fields = &item.fields;
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
@@ -230,7 +230,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 };
                 quotes.push(q_from);
 
-                let args = kv_assoc_args(&item.attrs);
+                let args = state_tag_args(&item.attrs);
                 match args.clone().assoc.internal() {
                     Some(typ) => {
                         quotes.push(quote! {
@@ -241,7 +241,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         });
                     }
                     None => {
-                        panic!("Expects an attribute of format `{KV_ASSOC_ARGS}`.")
+                        panic!("Expects an attribute of format `{STATE_TAG_ARGS}`.")
                     }
                 }
 
@@ -269,13 +269,13 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             }
         }
         syn::Data::Struct(data_struct) => {
-            let q_attrs = q_attrs_except(i_attrs, KvAssocArgs::KEYWORD);
+            let q_attrs = q_attrs_except(i_attrs, StateTagArgs::KEYWORD);
             let fields = data_struct.fields;
             let semi_colon = match data_struct.semi_token {
                 Some(_) => quote! {;},
                 None => quote! {},
             };
-            let args = kv_assoc_args(&input.attrs);
+            let args = state_tag_args(&input.attrs);
             match args.clone().assoc.internal() {
                 Some(typ) => {
                     quotes.push(quote! {
@@ -287,7 +287,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     });
                 }
                 None => {
-                    panic!("Expects an attribute of format `{KV_ASSOC_ARGS}`.")
+                    panic!("Expects an attribute of format `{STATE_TAG_ARGS}`.")
                 }
             }
         }
