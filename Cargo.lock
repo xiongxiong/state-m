@@ -424,12 +424,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
-name = "semver"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
-
-[[package]]
 name = "sharded-slab"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -468,26 +462,12 @@ dependencies = [
  "derivative",
  "downcast-rs",
  "itertools 0.15.0",
- "state-m-macro 0.1.6",
+ "state-m-macro",
  "thiserror",
  "tokio",
  "tokio-util",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "state-m-macro"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0efe7cae9a39f3157d6e61fb909d72757435a86367e480ae0b35ca153d2d4291"
-dependencies = [
- "itertools 0.15.0",
- "macro_tools",
- "proc-macro2",
- "quote",
- "semver",
- "syn 2.0.118",
 ]
 
 [[package]]

@@ -17,7 +17,7 @@ dashmap = "6.2"
 derivative = "2.2"
 downcast-rs = "2.0"
 itertools = "0.15"
-state-m-macro = "0.1"
+state-m-macro = "0.2"
 thiserror = "2.0"
 tokio = { version = "1.52", features = ["macros", "rt", "sync"] }
 tokio-util = "0.7"
