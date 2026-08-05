@@ -141,16 +141,16 @@ fn state_tag_args(attrs: &Vec<Attribute>) -> StateTagArgs {
     panic!("Attribute {} is absent.", StateTagArgs::KEYWORD);
 }
 
-fn attrs_except(attrs: &Vec<Attribute>, except: &str) -> Vec<Attribute> {
+fn attrs_except(attrs: &Vec<Attribute>, excepts: Vec<&str>) -> Vec<Attribute> {
     attrs
         .iter()
-        .filter(|v| !v.path().is_ident(except))
+        .filter(|v| excepts.iter().all(|e| !v.path().is_ident(e)))
         .cloned()
         .collect()
 }
 
-fn q_attrs_except(attrs: &Vec<Attribute>, except: &str) -> TokenStream2 {
-    let attrs_n: Vec<_> = attrs_except(attrs, except);
+fn q_attrs_except(attrs: &Vec<Attribute>, excepts: Vec<&str>) -> TokenStream2 {
+    let attrs_n: Vec<_> = attrs_except(attrs, excepts);
     let mut qs: Vec<_> = Vec::new();
     for attr in attrs_n {
         qs.push(quote! { #attr });
@@ -173,7 +173,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
-                let q_attrs = q_attrs_except(&item.attrs, StateTagArgs::KEYWORD);
+                let q_attrs = q_attrs_except(&item.attrs, vec![StateTagArgs::KEYWORD]);
                 let v_ident = &item.ident;
                 let v_fields = &item.fields;
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
@@ -271,7 +271,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             }
         }
         syn::Data::Struct(data_struct) => {
-            let q_attrs = q_attrs_except(i_attrs, StateTagArgs::KEYWORD);
+            let q_attrs = q_attrs_except(i_attrs, vec![StateTagArgs::KEYWORD]);
             let fields = data_struct.fields;
             let semi_colon = match data_struct.semi_token {
                 Some(_) => quote! {;},
