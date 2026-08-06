@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.1 - 2026-08-06
+#### Bug Fixes
+- remove StateNotChange error - (6daf42f) - wangjirong
+
+- - -
+
 ## state-m-0.8.0 - 2026-08-05
 #### Features
 - rename kv_assoc to state_tag - (33d0500) - wangjirong
