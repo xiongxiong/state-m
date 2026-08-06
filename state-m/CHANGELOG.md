@@ -2,6 +2,37 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.0 - 2026-08-05
+#### Features
+- rename kv_assoc to state_tag - (33d0500) - wangjirong
+#### Build system
+- update version - (f0e96a6) - wangjirong
+- update version - (882730e) - wangjirong
+#### Refactoring
+- update state_tag to StateTag - (2a91f9c) - wangjirong
+#### Miscellaneous Chores
+- update - (a05c4a5) - 王继荣
+- update - (ffaf325) - wangjirong
+- update - (2af20cc) - wangjirong
+
+- - -
+
+## 0.5.0 - 2026-08-05
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.0
+- state-m bumped to state-m-0.8.0
+### Global changes
+#### Features
+- rename kv_assoc to state_tag - (33d0500) - wangjirong
+#### Build system
+- update version - (f0e96a6) - wangjirong
+- update version - (882730e) - wangjirong
+#### Miscellaneous Chores
+- update - (2af20cc) - wangjirong
+- update - (d7fc6b0) - wangjirong
+
+- - -
+
 ## state-m-0.7.10 - 2026-08-03
 #### Bug Fixes
 - removed Display trait for Tag - (ba5d9e0) - 王继荣
