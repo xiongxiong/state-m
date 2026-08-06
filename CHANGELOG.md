@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.5.1 - 2026-08-06
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.1
+### Global changes
+
+- - -
+
 ## 0.5.0 - 2026-08-05
 ### Package updates
 - state-m-macro bumped to state-m-macro-0.2.0

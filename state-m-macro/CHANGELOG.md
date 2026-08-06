@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.1 - 2026-08-06
+#### Bug Fixes
+- make state_machine's watch-* methods public - (cb1d4da) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.0 - 2026-08-05
 #### Features
 - rename kv_assoc to state_tag - (33d0500) - wangjirong
