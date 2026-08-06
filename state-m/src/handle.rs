@@ -168,7 +168,7 @@ where
                         tracing::trace!("{recver_count} | send -- {state:?}");
                         (state, wait_rx)
                     } else {
-                        return Err(StateChangeError::StateNotChange);
+                        return Ok(());
                     }
                 };
                 if let (state, Some(mut rx)) = res {
@@ -375,8 +375,6 @@ pub enum StateChangeError<S>
 where
     S: Default,
 {
-    #[error("State not change, so there is no state change event will be emitted.")]
-    StateNotChange,
     #[error("This state is read only.")]
     StateReadOnly,
     #[error("This state used to compare is out of date.")]
