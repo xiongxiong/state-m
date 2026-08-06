@@ -430,7 +430,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         )
         .collect();
         quote! {
-            async fn watch<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            pub async fn watch<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -448,7 +448,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
     quote! {
         #meta_method
 
-        async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             F: 'static
@@ -800,7 +800,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -1029,7 +1029,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote!{
-        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
+        pub async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
         where
             T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
             T::Value: 'static + AsState + Send + Sync,
