@@ -1,5 +1,5 @@
 use crate::{
-    AsState, AsTag, KvAssoc, State, StateEvent,
+    AsKey, AsState, KvAssoc, State, StateEvent,
     barrier::AsPassCheck,
     handle::{ArcHandle, AsHandle, Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
@@ -22,11 +22,11 @@ use thiserror::Error;
 #[derive(Clone)]
 pub struct StateMachine<K>(String, Arc<DashMap<K, (String, Box<dyn AsHandle>)>>)
 where
-    K: AsTag;
+    K: AsKey;
 
 impl<K> Debug for StateMachine<K>
 where
-    K: AsTag,
+    K: AsKey,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for item in self.iter().sorted_by_key(|k| k.key().clone()) {
@@ -39,7 +39,7 @@ where
 
 impl<K> Default for StateMachine<K>
 where
-    K: AsTag,
+    K: AsKey,
 {
     fn default() -> Self {
         Self(Default::default(), Default::default())
@@ -48,7 +48,7 @@ where
 
 impl<K> Deref for StateMachine<K>
 where
-    K: AsTag,
+    K: AsKey,
 {
     type Target = Arc<DashMap<K, (String, Box<dyn AsHandle>)>>;
 
@@ -59,7 +59,7 @@ where
 
 impl<K> StateMachine<K>
 where
-    K: 'static + AsTag,
+    K: 'static + AsKey,
 {
     fn get_handle<T>(&self, tag: T) -> Result<ArcHandle<T>, GetHandleError<K>>
     where
@@ -75,18 +75,28 @@ where
             None => Err(GetHandleError::HandleNotExist(tag.into())),
         }
     }
+}
 
+impl<K> StateMachine<K>
+where
+    K: 'static + AsKey,
+{
     /// Create a state machine.
     /// * `id` - used to distinguish between different log messages.
     pub fn new(id: &str) -> Self {
         Self(id.into(), Default::default())
     }
-}
 
-impl<K> StateMachine<K>
-where
-    K: 'static + AsTag,
-{
+    /// Judge if a Tag for state machine is a Source or Reader.
+    /// * `tag` - the `Tag` of the source.
+    pub fn is_source<T>(&self, tag: T) -> Result<bool, GetHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: AsState + Send + Sync,
+    {
+        self.get_handle(tag).map(|v| v.is_source())
+    }
+
     /// Add state source into state machine.
     pub async fn add_source<T>(
         &self,
@@ -345,7 +355,7 @@ where
 
 impl<K> StateMachine<K>
 where
-    K: 'static + AsTag,
+    K: 'static + AsKey,
 {
     sm_watch!(1);
     sm_watch!(2);
@@ -380,13 +390,20 @@ where
 }
 
 pub trait HasStateMachine {
-    type K: AsTag;
+    type K: AsKey;
 
     fn state_machine(&self) -> &StateMachine<Self::K>;
 }
 
 #[async_trait]
 pub trait UseStateMachine: HasStateMachine {
+    /// Judge if a Tag for state machine is a Source or Reader.
+    /// * `tag` - the `Tag` of the source.
+    fn is_source<T>(&self, tag: T) -> Result<bool, GetHandleError<Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: AsState + Send + Sync;
+
     /// Add state source into state machine.
     /// * `tag` - the `Tag` of the source.
     /// * `capacity` - the capacity of broadcast channel.
@@ -597,6 +614,14 @@ impl<M> UseStateMachine for M
 where
     M: 'static + HasStateMachine + Send + Sync,
 {
+    fn is_source<T>(&self, tag: T) -> Result<bool, GetHandleError<Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: AsState + Send + Sync,
+    {
+        self.state_machine().is_source(tag)
+    }
+
     async fn add_source<T>(
         &self,
         tag: T,
@@ -815,7 +840,7 @@ pub enum StateChangeError<T, K>
 where
     T: Debug + Into<K> + KvAssoc,
     T::Value: Default,
-    K: AsTag,
+    K: AsKey,
 {
     #[error(transparent)]
     GetHandleError(#[from] GetHandleError<K>),
@@ -827,7 +852,7 @@ where
 #[derive(Debug, Error)]
 pub enum GetHandleError<K>
 where
-    K: AsTag,
+    K: AsKey,
 {
     #[error("State handle for tag [{0:?}] not exist.")]
     HandleNotExist(K),
@@ -839,7 +864,7 @@ where
 #[derive(Debug, Error)]
 pub enum AddHandleError<K>
 where
-    K: AsTag,
+    K: AsKey,
 {
     #[error("State handle for tag [{0:?}] already exist.")]
     AlreadyExist(K),

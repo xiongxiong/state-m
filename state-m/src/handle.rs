@@ -190,6 +190,13 @@ where
     T: Clone + Debug + KvAssoc,
     T::Value: 'static + AsState,
 {
+    pub fn is_source(&self) -> bool {
+        match self.inner {
+            HandleI::Source(_, _) => true,
+            HandleI::Reader(_) => false,
+        }
+    }
+
     pub fn capacity(&self) -> usize {
         match self.inner {
             HandleI::Source(ref source, _) => source.capacity,

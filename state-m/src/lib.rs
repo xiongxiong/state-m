@@ -24,6 +24,6 @@ pub trait AsState: Clone + Debug + Default + PartialEq {}
 impl<T> AsState for T where T: Clone + Debug + Default + PartialEq {}
 
 /// Tag type needs to implement these traits: Clone, Debug, Eq, Hash, Send, Sync.
-pub trait AsTag: Clone + Debug + Eq + Hash + Ord + Send + Sync {}
+pub trait AsKey: Clone + Debug + Eq + Hash + Ord + Send + Sync {}
 
-impl<T> AsTag for T where T: Clone + Debug + Eq + Hash + Ord + Send + Sync {}
+impl<T> AsKey for T where T: Clone + Debug + Eq + Hash + Ord + Send + Sync {}
