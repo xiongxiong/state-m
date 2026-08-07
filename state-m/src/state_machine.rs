@@ -16,7 +16,6 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use tracing::instrument;
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
@@ -724,7 +723,6 @@ where
         self.state_machine().wait_cmp_alter(tag, s, s_cmp).await
     }
 
-    #[instrument(level = "trace", skip(self, f))]
     async fn amend<T>(
         &self,
         tag: T,
@@ -737,7 +735,6 @@ where
         self.state_machine().amend(tag, f).await
     }
 
-    #[instrument(level = "trace", skip(self, f))]
     async fn cmp_amend<T>(
         &self,
         tag: T,
@@ -751,7 +748,6 @@ where
         self.state_machine().cmp_amend(tag, f, s_cmp).await
     }
 
-    #[instrument(level = "trace", skip(self, f))]
     async fn wait_amend<T>(
         &self,
         tag: T,
@@ -764,7 +760,6 @@ where
         self.state_machine().wait_amend(tag, f).await
     }
 
-    #[instrument(level = "trace", skip(self, f))]
     async fn wait_cmp_amend<T>(
         &self,
         tag: T,

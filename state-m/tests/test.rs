@@ -72,7 +72,7 @@ mod tests {
     #[tokio::test]
     async fn test_normal() -> Result<()> {
         init_tracing();
-        let unit = Unit::new("UNIT");
+        let unit = Unit::new("X");
         unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
@@ -87,9 +87,9 @@ mod tests {
     #[tokio::test]
     async fn test_wait() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -102,9 +102,9 @@ mod tests {
     #[tokio::test]
     async fn test_extend() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.derive())
             .await?;
@@ -123,9 +123,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -141,10 +141,10 @@ mod tests {
     #[tokio::test]
     async fn test_watch() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -175,10 +175,10 @@ mod tests {
     #[tokio::test]
     async fn test_merge() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -204,9 +204,9 @@ mod tests {
     #[tokio::test]
     async fn test_split() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -229,11 +229,11 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let door = Arc::new(Door::new());
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(door.clone())]))
             .await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -282,11 +282,11 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let barriers = Arc::new(Barriers::new());
-        let unit_a = Unit::default();
+        let unit_a = Unit::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(barriers.clone())]))
             .await?;
-        let unit_b = Unit::default();
+        let unit_b = Unit::new("B");
         unit_b
             .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
             .await?;

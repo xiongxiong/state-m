@@ -26,7 +26,6 @@ use tokio::{
     },
 };
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
 
 pub trait AsHandle: Debug + Downcast + Send + Sync {
     fn debug_state(&self) -> Box<dyn Debug>;
@@ -114,7 +113,6 @@ where
         }
     }
 
-    #[instrument(level = "trace", skip_all, fields(id = %self.sm_id))]
     async fn inner_change(
         &self,
         f: impl FnOnce(T::Value) -> T::Value,
@@ -122,11 +120,13 @@ where
         wait_arrival: bool,
         pre_cmp: Option<T::Value>,
     ) -> Result<(), StateChangeError<T::Value>> {
+        let sm_id = &self.sm_id;
+        let tag = &self.tag;
         match self.inner {
             HandleI::Source(ref source, ref cache) => {
                 for check in source.pass_checks.iter() {
                     if !check.is_open() {
-                        tracing::trace!("{:?} | wait pass_check -- {check:?}", self.tag);
+                        tracing::trace!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
                         check.notified().await;
                     }
                 }
@@ -166,7 +166,7 @@ where
                         let state = event.state.clone();
                         let recver_count = source.sender.send(event)?;
                         *guard = state.clone();
-                        tracing::trace!("{recver_count} | send -- {state:?}");
+                        tracing::trace!("{sm_id} | {tag:?} | {recver_count} | send -- {state:?}");
                         (state, wait_rx)
                     } else {
                         return Ok(());
@@ -174,7 +174,7 @@ where
                 };
                 if let (state, Some(mut rx)) = res {
                     _ = rx.recv().await;
-                    tracing::trace!("done -- {state:?}");
+                    tracing::trace!("{sm_id} | {tag:?} | done -- {state:?}");
                 } else {
                     tokio::task::yield_now().await;
                 }
@@ -321,8 +321,8 @@ where
     T: 'static + Clone + Debug + KvAssoc + Send,
     T::Value: 'static + AsState + Send + Sync,
 {
-    #[instrument(level = "trace", skip(self), fields(id = %self.sm_id))]
     pub async fn init(&self) {
+        let sm_id = self.sm_id.clone();
         let tag = self.tag.clone();
         let cache = self.cache.clone();
         let cancel_token = self.cancel_token.clone();
@@ -333,7 +333,7 @@ where
             .set(fanout_tx.clone())
             .expect("The 'init' method can only be called once.");
         tokio::spawn(async move {
-            tracing::info!("{tag:?} | init -- start");
+            tracing::info!("{sm_id} | {tag:?} | init -- start");
             loop {
                 select! {
                     biased;
@@ -351,11 +351,11 @@ where
                                 if e.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
                                         if !check.is_open() {
-                                            tracing::trace!("{tag:?} | wait pass_check -- {check:?}");
+                                            tracing::trace!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
                                             check.notified().await;
                                         }
                                     }
-                                    tracing::trace!("{tag:?} | recv -- {s_new:?}");
+                                    tracing::trace!("{sm_id} | {tag:?} | recv -- {s_new:?}");
                                     {
                                         cache.store(Arc::new(s_new.clone()));
                                     }
@@ -369,7 +369,7 @@ where
                     }
                 }
             }
-            tracing::info!("{tag:?} | init -- close");
+            tracing::info!("{sm_id} | {tag:?} | init -- close");
         });
     }
 }
