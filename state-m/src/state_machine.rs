@@ -21,7 +21,7 @@ use tracing::instrument;
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
 #[derive(Clone)]
-pub struct StateMachine<K>(Arc<DashMap<K, (String, Box<dyn AsHandle>)>>)
+pub struct StateMachine<K>(String, Arc<DashMap<K, (String, Box<dyn AsHandle>)>>)
 where
     K: AsTag;
 
@@ -43,7 +43,7 @@ where
     K: AsTag,
 {
     fn default() -> Self {
-        Self(Default::default())
+        Self(Default::default(), Default::default())
     }
 }
 
@@ -54,7 +54,7 @@ where
     type Target = Arc<DashMap<K, (String, Box<dyn AsHandle>)>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.1
     }
 }
 
@@ -75,6 +75,12 @@ where
             },
             None => Err(GetHandleError::HandleNotExist(tag.into())),
         }
+    }
+
+    /// Create a state machine.
+    /// * `id` - used to distinguish between different log messages.
+    pub fn new(id: &str) -> Self {
+        Self(id.into(), Default::default())
     }
 }
 
@@ -98,6 +104,7 @@ where
             return Err(AddHandleError::AlreadyExist(tag.into()));
         }
         let h = ArcHandle(Arc::new(Handle::from_source(
+            self.0.clone(),
             tag.clone(),
             Source::<T::Value>::new(capacity, pass_checks),
         )));
@@ -123,7 +130,11 @@ where
         if reader.is_closed() {
             return Err(AddHandleError::ChannelClosed);
         }
-        let h = ArcHandle(Arc::new(Handle::from_reader(tag.clone(), reader)));
+        let h = ArcHandle(Arc::new(Handle::from_reader(
+            self.0.clone(),
+            tag.clone(),
+            reader,
+        )));
         h.init().await;
         self.insert(k, (format!("{tag:?}"), Box::new(h)));
         Ok(())
@@ -655,7 +666,6 @@ where
         self.state_machine().state(tag)
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
@@ -664,7 +674,6 @@ where
         self.state_machine().touch(tag).await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
@@ -673,7 +682,6 @@ where
         self.state_machine().wait_touch(tag).await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
@@ -682,7 +690,6 @@ where
         self.state_machine().alter(tag, s).await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn cmp_alter<T>(
         &self,
         tag: T,
@@ -696,7 +703,6 @@ where
         self.state_machine().cmp_alter(tag, s, s_cmp).await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
@@ -705,7 +711,6 @@ where
         self.state_machine().wait_alter(tag, s).await
     }
 
-    #[instrument(level = "trace", skip(self))]
     async fn wait_cmp_alter<T>(
         &self,
         tag: T,

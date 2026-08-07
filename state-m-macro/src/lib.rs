@@ -188,7 +188,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         #q_attrs #i_vis struct #t_name #fields_unnamed;
                     },
                     syn::Fields::Unit => quote! {
-                        #[derive(Clone)]
+                        #[derive(Clone, Default)]
                         #q_attrs #i_vis struct #t_name;
                     },
                 };

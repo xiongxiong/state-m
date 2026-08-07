@@ -77,6 +77,7 @@ where
     T: Clone + Debug + KvAssoc,
     T::Value: 'static + AsState,
 {
+    sm_id: String,
     tag: T,
     inner: HandleI<T::Value>,
     cache: Arc<ArcSwap<State<T::Value>>>,
@@ -113,7 +114,7 @@ where
         }
     }
 
-    #[instrument(level = "trace", skip(self, f))]
+    #[instrument(level = "trace", skip_all, fields(id = %self.sm_id))]
     async fn inner_change(
         &self,
         f: impl FnOnce(T::Value) -> T::Value,
@@ -196,8 +197,9 @@ where
         }
     }
 
-    pub fn from_source(tag: T, source: Source<T::Value>) -> Self {
+    pub fn from_source(sm_id: String, tag: T, source: Source<T::Value>) -> Self {
         Self {
+            sm_id,
             tag,
             inner: HandleI::Source(source, Default::default()),
             cache: Default::default(),
@@ -206,8 +208,9 @@ where
         }
     }
 
-    pub fn from_reader(tag: T, reader: Reader<T::Value>) -> Self {
+    pub fn from_reader(sm_id: String, tag: T, reader: Reader<T::Value>) -> Self {
         Self {
+            sm_id,
             tag,
             inner: HandleI::Reader(reader),
             cache: Default::default(),
@@ -318,6 +321,7 @@ where
     T: 'static + Clone + Debug + KvAssoc + Send,
     T::Value: 'static + AsState + Send + Sync,
 {
+    #[instrument(level = "trace", skip(self), fields(id = %self.sm_id))]
     pub async fn init(&self) {
         let tag = self.tag.clone();
         let cache = self.cache.clone();

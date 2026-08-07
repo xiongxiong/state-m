@@ -17,6 +17,14 @@ pub struct Unit {
     state_machine: StateMachine<Tag>,
 }
 
+impl Unit {
+    pub fn new(id: &str) -> Self {
+        Self {
+            state_machine: StateMachine::<Tag>::new(id),
+        }
+    }
+}
+
 impl HasStateMachine for Unit {
     type K = Tag;
 
@@ -64,7 +72,7 @@ mod tests {
     #[tokio::test]
     async fn test_normal() -> Result<()> {
         init_tracing();
-        let unit = Unit::default();
+        let unit = Unit::new("UNIT");
         unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
