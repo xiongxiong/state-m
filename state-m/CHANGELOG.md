@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.2 - 2026-08-07
+#### Bug Fixes
+- added id for state_machine - (28a977f) - wangjirong
+- added id for state_machine - (5cf60dc) - 王继荣
+
+- - -
+
 ## state-m-0.8.1 - 2026-08-06
 #### Bug Fixes
 - remove StateNotChange error - (6daf42f) - wangjirong

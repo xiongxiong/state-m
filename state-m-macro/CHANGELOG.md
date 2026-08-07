@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.2 - 2026-08-07
+#### Bug Fixes
+- added id for state_machine - (5cf60dc) - 王继荣
+
+- - -
+
 ## state-m-macro-0.2.1 - 2026-08-06
 #### Bug Fixes
 - make state_machine's watch-* methods public - (cb1d4da) - wangjirong
