@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.6 - 2026-08-08
+#### Bug Fixes
+- update - (a8ec062) - wangjirong
+#### Miscellaneous Chores
+- update - (0f9b519) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.5 - 2026-08-08
 #### Bug Fixes
 - added trait AsStateMacine - (298b594) - wangjirong
