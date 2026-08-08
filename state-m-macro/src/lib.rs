@@ -295,73 +295,73 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
     .into()
 }
 
-#[proc_macro]
-pub fn sm_watch_decl(input: TokenStream) -> TokenStream {
-    let lit_n = parse_macro_input!(input as LitInt);
-    let n = lit_n
-        .base10_parse::<usize>()
-        .expect("Input can only be a number");
-    assert!(n > 0, "Input number should larger than zero.");
-    let tag_typs: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let typ = format_ident!("T{}", i);
-            quote! {#typ}
-        }),
-        quote! {,},
-    )
-    .collect();
-    let tag_params: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let name = format_ident!("tag_{}", i);
-            let typ = format_ident!("T{}", i);
-            quote! {
-                #name: #typ
-            }
-        }),
-        quote! {,},
-    )
-    .collect();
-    let tag_typ_cons: Vec<_> = (0..n)
-        .map(|i| {
-            let typ = format_ident!("T{}", i);
-            quote! {
-                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
-            }
-        })
-        .collect();
-    let fn_params_typ: Vec<_> = (0..n)
-        .map(|i| {
-            let typ = format_ident!("T{}", i);
-            quote! {
-                StateChange<#typ>,
-            }
-        })
-        .collect();
-    let get_q_method = move |m_name: Ident| {
-        quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
-            where
-                #(#tag_typ_cons)*
-                F: 'static
-                    + Fn(
-                        #(#fn_params_typ)* K
-                    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-                    + Send;
-        }
-    };
-    let meta_method = if n == 1 {
-        get_q_method(format_ident!("watch"))
-    } else {
-        quote! {}
-    };
-    let norm_method = get_q_method(format_ident!("watch_{n}"));
-    quote! {
-        #meta_method
-        #norm_method
-    }
-    .into()
-}
+// #[proc_macro]
+// pub fn sm_watch_decl(input: TokenStream) -> TokenStream {
+//     let lit_n = parse_macro_input!(input as LitInt);
+//     let n = lit_n
+//         .base10_parse::<usize>()
+//         .expect("Input can only be a number");
+//     assert!(n > 0, "Input number should larger than zero.");
+//     let tag_typs: Vec<_> = itertools::intersperse(
+//         (0..n).map(|i| {
+//             let typ = format_ident!("T{}", i);
+//             quote! {#typ}
+//         }),
+//         quote! {,},
+//     )
+//     .collect();
+//     let tag_params: Vec<_> = itertools::intersperse(
+//         (0..n).map(|i| {
+//             let name = format_ident!("tag_{}", i);
+//             let typ = format_ident!("T{}", i);
+//             quote! {
+//                 #name: #typ
+//             }
+//         }),
+//         quote! {,},
+//     )
+//     .collect();
+//     let tag_typ_cons: Vec<_> = (0..n)
+//         .map(|i| {
+//             let typ = format_ident!("T{}", i);
+//             quote! {
+//                 #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+//                 #typ::Value: 'static + AsState + Send + Sync,
+//             }
+//         })
+//         .collect();
+//     let fn_params_typ: Vec<_> = (0..n)
+//         .map(|i| {
+//             let typ = format_ident!("T{}", i);
+//             quote! {
+//                 StateChange<#typ>,
+//             }
+//         })
+//         .collect();
+//     let get_q_method = move |m_name: Ident| {
+//         quote! {
+//             async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+//             where
+//                 #(#tag_typ_cons)*
+//                 F: 'static
+//                     + Fn(
+//                         #(#fn_params_typ)* K
+//                     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+//                     + Send;
+//         }
+//     };
+//     let meta_method = if n == 1 {
+//         get_q_method(format_ident!("watch"))
+//     } else {
+//         quote! {}
+//     };
+//     let norm_method = get_q_method(format_ident!("watch_{n}"));
+//     quote! {
+//         #meta_method
+//         #norm_method
+//     }
+//     .into()
+// }
 
 #[proc_macro]
 pub fn sm_watch_impl(input: TokenStream) -> TokenStream {
