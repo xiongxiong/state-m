@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.4 - 2026-08-08
+#### Bug Fixes
+- update watch definition - (b7e9bd9) - wangjirong
+
+- - -
+
 ## state-m-0.8.3 - 2026-08-07
 #### Bug Fixes
 - added is_source method for Handle - (9c3b17b) - wangjirong
