@@ -1,11 +1,10 @@
 use state_m::*;
-use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
 pub enum Tag {
     #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[state_tag(assoc = String, label = "from_outer")]
+    #[state_tag(assoc = String, label = "from outer")]
     Outer(usize),
     #[state_tag(assoc = CustomType)]
     OuterEx1,
@@ -15,13 +14,13 @@ pub enum Tag {
 
 #[derive(Clone, Debug, Default)]
 pub struct Unit {
-    state_machine: Arc<StateMachine<Tag>>,
+    state_machine: StateMachine<Tag>,
 }
 
 impl Unit {
     pub fn new(id: &str) -> Self {
         Self {
-            state_machine: Arc::new(StateMachine::<Tag>::new(id)),
+            state_machine: StateMachine::<Tag>::new(id),
         }
     }
 }
@@ -29,8 +28,8 @@ impl Unit {
 impl HasStateMachine for Unit {
     type K = Tag;
 
-    fn state_machine(&self) -> Arc<StateMachine<Self::K>> {
-        self.state_machine.clone()
+    fn state_machine(&self) -> &StateMachine<Self::K> {
+        &self.state_machine
     }
 }
 

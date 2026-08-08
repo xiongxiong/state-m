@@ -353,46 +353,84 @@ where
     }
 }
 
-impl<K> StateMachine<K>
+#[async_trait]
+pub trait AsStateMachine<K>
 where
     K: 'static + AsKey,
 {
-    sm_watch!(1);
-    sm_watch!(2);
-    sm_watch!(3);
-    sm_watch!(4);
-    sm_watch!(5);
-    sm_watch!(6);
-    sm_watch!(7);
-    sm_watch!(8);
-    sm_watch!(9);
-    sm_watch!(10);
+    sm_watch_decl!(1);
+    sm_watch_decl!(2);
+    sm_watch_decl!(3);
+    sm_watch_decl!(4);
+    sm_watch_decl!(5);
+    sm_watch_decl!(6);
+    sm_watch_decl!(7);
+    sm_watch_decl!(8);
+    sm_watch_decl!(9);
+    sm_watch_decl!(10);
 
-    sm_merge_reader!(2);
-    sm_merge_reader!(3);
-    sm_merge_reader!(4);
-    sm_merge_reader!(5);
-    sm_merge_reader!(6);
-    sm_merge_reader!(7);
-    sm_merge_reader!(8);
-    sm_merge_reader!(9);
-    sm_merge_reader!(10);
+    sm_merge_reader_decl!(2);
+    sm_merge_reader_decl!(3);
+    sm_merge_reader_decl!(4);
+    sm_merge_reader_decl!(5);
+    sm_merge_reader_decl!(6);
+    sm_merge_reader_decl!(7);
+    sm_merge_reader_decl!(8);
+    sm_merge_reader_decl!(9);
+    sm_merge_reader_decl!(10);
 
-    sm_split_reader!(2);
-    sm_split_reader!(3);
-    sm_split_reader!(4);
-    sm_split_reader!(5);
-    sm_split_reader!(6);
-    sm_split_reader!(7);
-    sm_split_reader!(8);
-    sm_split_reader!(9);
-    sm_split_reader!(10);
+    sm_split_reader_decl!(2);
+    sm_split_reader_decl!(3);
+    sm_split_reader_decl!(4);
+    sm_split_reader_decl!(5);
+    sm_split_reader_decl!(6);
+    sm_split_reader_decl!(7);
+    sm_split_reader_decl!(8);
+    sm_split_reader_decl!(9);
+    sm_split_reader_decl!(10);
+}
+
+#[async_trait]
+impl<K> AsStateMachine<K> for StateMachine<K>
+where
+    K: 'static + AsKey,
+{
+    sm_watch_impl!(1);
+    sm_watch_impl!(2);
+    sm_watch_impl!(3);
+    sm_watch_impl!(4);
+    sm_watch_impl!(5);
+    sm_watch_impl!(6);
+    sm_watch_impl!(7);
+    sm_watch_impl!(8);
+    sm_watch_impl!(9);
+    sm_watch_impl!(10);
+
+    sm_merge_reader_impl!(2);
+    sm_merge_reader_impl!(3);
+    sm_merge_reader_impl!(4);
+    sm_merge_reader_impl!(5);
+    sm_merge_reader_impl!(6);
+    sm_merge_reader_impl!(7);
+    sm_merge_reader_impl!(8);
+    sm_merge_reader_impl!(9);
+    sm_merge_reader_impl!(10);
+
+    sm_split_reader_impl!(2);
+    sm_split_reader_impl!(3);
+    sm_split_reader_impl!(4);
+    sm_split_reader_impl!(5);
+    sm_split_reader_impl!(6);
+    sm_split_reader_impl!(7);
+    sm_split_reader_impl!(8);
+    sm_split_reader_impl!(9);
+    sm_split_reader_impl!(10);
 }
 
 pub trait HasStateMachine {
     type K: AsKey;
 
-    fn state_machine(&self) -> Arc<StateMachine<Self::K>>;
+    fn state_machine(&self) -> &StateMachine<Self::K>;
 }
 
 #[async_trait]

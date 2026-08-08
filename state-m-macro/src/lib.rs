@@ -296,7 +296,75 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_watch(input: TokenStream) -> TokenStream {
+pub fn sm_watch_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 0, "Input number should larger than zero.");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                StateChange<#typ>,
+            }
+        })
+        .collect();
+    let get_q_method = move |m_name: Ident| {
+        quote! {
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            where
+                #(#tag_typ_cons)*
+                F: 'static
+                    + Fn(
+                        #(#fn_params_typ)* K
+                    ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                    + Send;
+        }
+    };
+    let meta_method = if n == 1 {
+        get_q_method(format_ident!("watch"))
+    } else {
+        quote! {}
+    };
+    let norm_method = get_q_method(format_ident!("watch_{n}"));
+    quote! {
+        #meta_method
+        #norm_method
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn sm_watch_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
@@ -419,7 +487,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            pub async fn #m_name<#(#tag_typs)*, F>(self: std::sync::Arc<Self>, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -575,16 +643,6 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
             }
         })
         .collect();
-    let tag_names: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let name = format_ident!("tag_{}", i);
-            quote! {
-                #name
-            }
-        }),
-        quote! {,},
-    )
-    .collect();
     let params: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let name = format_ident!("tag_{}", i);
@@ -624,7 +682,60 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
+pub fn sm_merge_reader_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than one.");
+    let method_name = format_ident!("merge_reader_{n}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_params: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let name = format_ident!("tag_{}", i);
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #name: #typ
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+                #typ::Value: 'static + AsState + Send + Sync,
+            }
+        })
+        .collect();
+    let fn_params_typ: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ::Value,
+            }
+        })
+        .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        where
+            #(#tag_typ_cons)*
+            S: 'static + AsState + Send,
+            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send;
+    }.into()
+}
+
+#[proc_macro]
+pub fn sm_merge_reader_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
@@ -770,7 +881,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(self: std::sync::Arc<Self>, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -919,7 +1030,49 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_split_reader(input: TokenStream) -> TokenStream {
+pub fn sm_split_reader_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number");
+    assert!(n > 1, "Input number should larger than one.");
+    let method_name = format_ident!("split_reader_{n}");
+    let state_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let reader_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {Reader<#typ>}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let state_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("S{}", i);
+            quote! {
+                #typ: 'static + AsState + Send,
+            }
+        })
+        .collect();
+    quote!{
+        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
+        where
+            T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+            T::Value: 'static + AsState + Send + Sync,
+            F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
+            #(#state_typ_cons)*;
+    }.into()
+}
+
+#[proc_macro]
+pub fn sm_split_reader_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
@@ -999,7 +1152,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote!{
-        pub async fn #method_name<T, F, #(#state_typs)*>(self: std::sync::Arc<Self>, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
+        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
         where
             T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
             T::Value: 'static + AsState + Send + Sync,
