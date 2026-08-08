@@ -97,58 +97,6 @@ where
         self.get_handle(tag).map(|v| v.is_source())
     }
 
-    /// Add state source into state machine.
-    pub async fn add_source<T>(
-        &self,
-        tag: T,
-        capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
-    ) -> Result<(), AddHandleError<K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        let k = tag.clone().into();
-        if self.contains_key(&k) {
-            return Err(AddHandleError::AlreadyExist(tag.into()));
-        }
-        let h = ArcHandle(Arc::new(Handle::from_source(
-            self.0.clone(),
-            tag.clone(),
-            Source::<T::Value>::new(capacity, pass_checks),
-        )));
-        h.init().await;
-        self.insert(k, (format!("{tag:?}"), Box::new(h)));
-        Ok(())
-    }
-
-    /// Add state reader into state machine.
-    pub async fn add_reader<T>(
-        &self,
-        tag: T,
-        reader: Reader<T::Value>,
-    ) -> Result<(), AddHandleError<K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        let k = tag.clone().into();
-        if self.contains_key(&k) {
-            return Err(AddHandleError::AlreadyExist(tag.into()));
-        }
-        if reader.is_closed() {
-            return Err(AddHandleError::ChannelClosed);
-        }
-        let h = ArcHandle(Arc::new(Handle::from_reader(
-            self.0.clone(),
-            tag.clone(),
-            reader,
-        )));
-        h.init().await;
-        self.insert(k, (format!("{tag:?}"), Box::new(h)));
-        Ok(())
-    }
-
     /// Remove state source from state machine.
     pub fn del_handle<T>(&self, tag: &T) -> Result<bool, GetHandleError<K>>
     where
@@ -197,114 +145,6 @@ where
         T::Value: 'static + AsState + Send + Sync,
     {
         Ok(self.get_handle(tag)?.state())
-    }
-
-    pub async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.touch().await?)
-    }
-
-    pub async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.wait_touch().await?)
-    }
-
-    pub async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.alter(s).await?)
-    }
-
-    pub async fn cmp_alter<T>(
-        &self,
-        tag: T,
-        s: T::Value,
-        s_cmp: T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.cmp_alter(s, s_cmp).await?)
-    }
-
-    pub async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.wait_alter(s).await?)
-    }
-
-    pub async fn wait_cmp_alter<T>(
-        &self,
-        tag: T,
-        s: T::Value,
-        s_cmp: T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.wait_cmp_alter(s, s_cmp).await?)
-    }
-
-    pub async fn amend<T>(
-        &self,
-        tag: T,
-        f: impl FnOnce(T::Value) -> T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.amend(f).await?)
-    }
-
-    pub async fn cmp_amend<T>(
-        &self,
-        tag: T,
-        f: impl FnOnce(T::Value) -> T::Value,
-        s_cmp: T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.cmp_amend(f, s_cmp).await?)
-    }
-
-    pub async fn wait_amend<T>(
-        &self,
-        tag: T,
-        f: impl FnOnce(T::Value) -> T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.wait_amend(f).await?)
-    }
-
-    pub async fn wait_cmp_amend<T>(
-        &self,
-        tag: T,
-        f: impl FnOnce(T::Value) -> T::Value,
-        s_cmp: T::Value,
-    ) -> Result<(), StateChangeError<T, K>>
-    where
-        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-        T::Value: 'static + AsState + Send + Sync,
-    {
-        Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
     }
 
     pub fn debug_state(&self) -> Vec<String> {
@@ -358,6 +198,103 @@ pub trait AsStateMachine<K>
 where
     K: 'static + AsKey,
 {
+    async fn add_source<T>(
+        &self,
+        tag: T,
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Result<(), AddHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn add_reader<T>(
+        &self,
+        tag: T,
+        reader: Reader<T::Value>,
+    ) -> Result<(), AddHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn wait_cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn wait_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
+    async fn wait_cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync;
+
     sm_watch_decl!(1);
     sm_watch_decl!(2);
     sm_watch_decl!(3);
@@ -395,6 +332,160 @@ impl<K> AsStateMachine<K> for StateMachine<K>
 where
     K: 'static + AsKey,
 {
+    async fn add_source<T>(
+        &self,
+        tag: T,
+        capacity: usize,
+        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    ) -> Result<(), AddHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        let k = tag.clone().into();
+        if self.contains_key(&k) {
+            return Err(AddHandleError::AlreadyExist(tag.into()));
+        }
+        let h = ArcHandle(Arc::new(Handle::from_source(
+            self.0.clone(),
+            tag.clone(),
+            Source::<T::Value>::new(capacity, pass_checks),
+        )));
+        h.init().await;
+        self.insert(k, (format!("{tag:?}"), Box::new(h)));
+        Ok(())
+    }
+
+    async fn add_reader<T>(&self, tag: T, reader: Reader<T::Value>) -> Result<(), AddHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        let k = tag.clone().into();
+        if self.contains_key(&k) {
+            return Err(AddHandleError::AlreadyExist(tag.into()));
+        }
+        if reader.is_closed() {
+            return Err(AddHandleError::ChannelClosed);
+        }
+        let h = ArcHandle(Arc::new(Handle::from_reader(
+            self.0.clone(),
+            tag.clone(),
+            reader,
+        )));
+        h.init().await;
+        self.insert(k, (format!("{tag:?}"), Box::new(h)));
+        Ok(())
+    }
+
+    async fn touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.touch().await?)
+    }
+
+    async fn wait_touch<T>(&self, tag: T) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_touch().await?)
+    }
+
+    async fn alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.alter(s).await?)
+    }
+
+    async fn cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.cmp_alter(s, s_cmp).await?)
+    }
+
+    async fn wait_alter<T>(&self, tag: T, s: T::Value) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_alter(s).await?)
+    }
+
+    async fn wait_cmp_alter<T>(
+        &self,
+        tag: T,
+        s: T::Value,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_cmp_alter(s, s_cmp).await?)
+    }
+
+    async fn amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.amend(f).await?)
+    }
+
+    async fn cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.cmp_amend(f, s_cmp).await?)
+    }
+
+    async fn wait_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_amend(f).await?)
+    }
+
+    async fn wait_cmp_amend<T>(
+        &self,
+        tag: T,
+        f: impl FnOnce(T::Value) -> T::Value + Send,
+        s_cmp: T::Value,
+    ) -> Result<(), StateChangeError<T, K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: 'static + AsState + Send + Sync,
+    {
+        Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
+    }
+
     sm_watch_impl!(1);
     sm_watch_impl!(2);
     sm_watch_impl!(3);
