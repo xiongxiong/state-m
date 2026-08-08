@@ -392,7 +392,7 @@ where
 pub trait HasStateMachine {
     type K: AsKey;
 
-    fn state_machine(&self) -> &StateMachine<Self::K>;
+    fn state_machine(&self) -> Arc<StateMachine<Self::K>>;
 }
 
 #[async_trait]

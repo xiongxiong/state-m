@@ -419,7 +419,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            pub async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            pub async fn #m_name<#(#tag_typs)*, F>(self: std::sync::Arc<Self>, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -782,7 +782,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(self: std::sync::Arc<Self>, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
             S: 'static + AsState + Send,
@@ -1011,7 +1011,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote!{
-        pub async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
+        pub async fn #method_name<T, F, #(#state_typs)*>(self: std::sync::Arc<Self>, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
         where
             T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
             T::Value: 'static + AsState + Send + Sync,

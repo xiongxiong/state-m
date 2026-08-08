@@ -46,18 +46,27 @@ impl From<String> for CustomType {
 ```
 
 - Implement 'HasStateMachine' trait for you data structure.
+- You can assign an id to your state machine, so that you can distinguish logs from different state machines which may have similar tags.
 
 ```rust
 #[derive(Clone, Debug, Default)]
 pub struct Unit {
-    state_machine: StateMachine<Tag>,
+    state_machine: Arc<StateMachine<Tag>>,
+}
+
+impl Unit {
+    pub fn new(id: &str) -> Self {
+        Self {
+            state_machine: Arc::new(StateMachine::<Tag>::new(id)),
+        }
+    }
 }
 
 impl HasStateMachine for Unit {
     type K = Tag;
 
-    fn state_machine(&self) -> &StateMachine<Self::K> {
-        &self.state_machine
+    fn state_machine(&self) -> Arc<StateMachine<Tag>> {
+        self.state_machine.clone()
     }
 }
 ```
