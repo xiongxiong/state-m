@@ -525,7 +525,7 @@ pub trait HasStateMachine {
 }
 
 #[async_trait]
-pub trait UseStateMachine: 'static + HasStateMachine + Send + Sync {
+pub trait UseStateMachine: HasStateMachine {
     /// Judge if a Tag for state machine is a Source or Reader.
     /// * `tag` - the `Tag` of the source.
     fn is_source<T>(&self, tag: T) -> Result<bool, GetHandleError<Self::K>>
