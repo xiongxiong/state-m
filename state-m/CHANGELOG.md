@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.11 - 2026-08-08
+#### Bug Fixes
+- update trait HasStateMachine - (c95a587) - wangjirong
+
+- - -
+
 ## state-m-0.8.10 - 2026-08-08
 #### Bug Fixes
 - update - (cc98b4a) - wangjirong
