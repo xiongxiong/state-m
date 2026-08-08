@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.6 - 2026-08-08
+#### Bug Fixes
+- use async RwLock - (8599895) - wangjirong
+
+- - -
+
 ## state-m-0.8.5 - 2026-08-08
 #### Bug Fixes
 - update method signatures - (940f30d) - wangjirong
