@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.7 - 2026-08-08
+#### Bug Fixes
+- update trait AsStateMachine - (9528574) - wangjirong
+- added trait AsStateMacine - (298b594) - wangjirong
+
+- - -
+
 ## state-m-0.8.6 - 2026-08-08
 #### Bug Fixes
 - use async RwLock - (8599895) - wangjirong
