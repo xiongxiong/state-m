@@ -314,36 +314,36 @@ where
         Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
     }
 
-    sm_watch_impl!(1);
-    sm_watch_impl!(2);
-    sm_watch_impl!(3);
-    sm_watch_impl!(4);
-    sm_watch_impl!(5);
-    sm_watch_impl!(6);
-    sm_watch_impl!(7);
-    sm_watch_impl!(8);
-    sm_watch_impl!(9);
-    sm_watch_impl!(10);
+    sm_watch!(1);
+    sm_watch!(2);
+    sm_watch!(3);
+    sm_watch!(4);
+    sm_watch!(5);
+    sm_watch!(6);
+    sm_watch!(7);
+    sm_watch!(8);
+    sm_watch!(9);
+    sm_watch!(10);
 
-    sm_merge_reader_impl!(2);
-    sm_merge_reader_impl!(3);
-    sm_merge_reader_impl!(4);
-    sm_merge_reader_impl!(5);
-    sm_merge_reader_impl!(6);
-    sm_merge_reader_impl!(7);
-    sm_merge_reader_impl!(8);
-    sm_merge_reader_impl!(9);
-    sm_merge_reader_impl!(10);
+    sm_merge_reader!(2);
+    sm_merge_reader!(3);
+    sm_merge_reader!(4);
+    sm_merge_reader!(5);
+    sm_merge_reader!(6);
+    sm_merge_reader!(7);
+    sm_merge_reader!(8);
+    sm_merge_reader!(9);
+    sm_merge_reader!(10);
 
-    sm_split_reader_impl!(2);
-    sm_split_reader_impl!(3);
-    sm_split_reader_impl!(4);
-    sm_split_reader_impl!(5);
-    sm_split_reader_impl!(6);
-    sm_split_reader_impl!(7);
-    sm_split_reader_impl!(8);
-    sm_split_reader_impl!(9);
-    sm_split_reader_impl!(10);
+    sm_split_reader!(2);
+    sm_split_reader!(3);
+    sm_split_reader!(4);
+    sm_split_reader!(5);
+    sm_split_reader!(6);
+    sm_split_reader!(7);
+    sm_split_reader!(8);
+    sm_split_reader!(9);
+    sm_split_reader!(10);
 }
 
 /// State change result.
