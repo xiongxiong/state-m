@@ -11,10 +11,11 @@ use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
     ops::Deref,
-    sync::{Arc, OnceLock, RwLock},
+    sync::{Arc, OnceLock},
 };
 use thiserror::Error;
 use tokio::sync::{
+    RwLock,
     broadcast::{Sender, channel},
     mpsc,
 };
@@ -131,7 +132,7 @@ where
                     }
                 }
                 let res = {
-                    let mut guard = cache.write().unwrap();
+                    let mut guard = cache.write().await;
                     let s_old = (*guard).value.clone();
                     if let Some(s_cmp) = pre_cmp
                         && s_cmp != s_old
