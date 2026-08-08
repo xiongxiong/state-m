@@ -1,6 +1,6 @@
 [package]
 name = "state-m"
-version = "0.8.2"
+version = "0.8.3"
 edition = "2024"
 description = "The library implements convenient state distribution and management mechanisms, facilitating collaborative work between components."
 repository = "https://github.com/xiongxiong/state-m"

@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.3 - 2026-08-07
+#### Bug Fixes
+- added is_source method for Handle - (9c3b17b) - wangjirong
+
+- - -
+
 ## state-m-0.8.2 - 2026-08-07
 #### Bug Fixes
 - added id for state_machine - (28a977f) - wangjirong
