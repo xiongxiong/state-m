@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.7 - 2026-08-08
+#### Bug Fixes
+- update - (cc98b4a) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.6 - 2026-08-08
 #### Bug Fixes
 - update - (a8ec062) - wangjirong

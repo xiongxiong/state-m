@@ -452,7 +452,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
 name = "state-m"
-version = "0.8.9"
+version = "0.8.10"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -472,7 +472,7 @@ dependencies = [
 
 [[package]]
 name = "state-m-macro"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "itertools 0.15.0",
  "macro_tools",
