@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.12 - 2026-08-10
+#### Bug Fixes
+- update watch method - (42813c2) - wangjirong
+
+- - -
+
 ## state-m-0.8.11 - 2026-08-08
 #### Bug Fixes
 - update trait HasStateMachine - (c95a587) - wangjirong
