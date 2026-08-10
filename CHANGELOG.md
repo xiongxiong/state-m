@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.5.14 - 1970-01-01
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.9
+- state-m bumped to state-m-0.8.13
+### Global changes
+
+- - -
+
 ## 0.5.13 - 1970-01-01
 ### Package updates
 - state-m-macro bumped to state-m-macro-0.2.8

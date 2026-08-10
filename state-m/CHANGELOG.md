@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.13 - 2026-08-10
+#### Bug Fixes
+- update macro of StateTag - (c9989b6) - wangjirong
+
+- - -
+
 ## state-m-0.8.12 - 2026-08-10
 #### Bug Fixes
 - update watch method - (42813c2) - wangjirong
