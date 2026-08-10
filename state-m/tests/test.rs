@@ -155,7 +155,7 @@ mod tests {
             .watch_2(TagOuter(0), TagOuter(1), |sc_0, sc_1, tag| {
                 Box::pin(async move {
                     tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}, tag -- {tag:?}");
-                    anyhow::Ok(())
+                    return Err(anyhow::anyhow!("error happened"));
                 })
             })
             .await?;

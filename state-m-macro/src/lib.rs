@@ -408,7 +408,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                             let mut states = (#(#all_states)*);
                             let (#(#all_state_names)*) = states;
                             if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
-                                tracing::error!("watch error -- {e:?}");
+                                tracing::error!("{id} | {:?} | watch error -- {e:?}", #tag_name);
                             }
                         }
                         Err(_) => break,
@@ -433,6 +433,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                     tags.iter().duplicates().collect::<Vec<_>>().is_empty(),
                     "Should not use duplicate tags."
                 );
+                let id = self.0.clone();
                 #(#decl_vars)*
                 tokio::spawn(async move {
                     tracing::info!("watch_{} | {tags:?} -- start", #n);
