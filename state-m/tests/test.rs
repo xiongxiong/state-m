@@ -4,7 +4,7 @@ use state_m::*;
 pub enum Tag {
     #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[state_tag(assoc = String, label = "from outer")]
+    #[state_tag(assoc = String, label = format!("outer_{}", self.0))]
     Outer(usize),
     #[state_tag(assoc = CustomType)]
     OuterEx1,

@@ -6,7 +6,8 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Expr, Ident, Index, LitInt, Type,
+    Attribute, DeriveInput, Expr, Field, FieldsNamed, FieldsUnnamed, Ident, Index, LitInt, Type,
+    Visibility,
     parse::{Parse, ParseStream},
     parse_macro_input,
 };
@@ -179,14 +180,46 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
                 let t_name_str = format!("{}{}", i_ident, v_ident);
                 let q = match v_fields {
-                    syn::Fields::Named(fields_named) => quote! {
-                        #[derive(Clone)]
-                        #q_attrs #i_vis struct #t_name #fields_named
-                    },
-                    syn::Fields::Unnamed(fields_unnamed) => quote! {
-                        #[derive(Clone)]
-                        #q_attrs #i_vis struct #t_name #fields_unnamed;
-                    },
+                    syn::Fields::Named(fields_named) => {
+                        let fields_named_new = FieldsNamed {
+                            named: fields_named
+                                .named
+                                .iter()
+                                .map(|f| {
+                                    let field = f.clone();
+                                    Field {
+                                        vis: Visibility::Public(Default::default()),
+                                        ..field
+                                    }
+                                })
+                                .collect(),
+                            ..*fields_named
+                        };
+                        quote! {
+                            #[derive(Clone)]
+                            #q_attrs #i_vis struct #t_name #fields_named_new
+                        }
+                    }
+                    syn::Fields::Unnamed(fields_unnamed) => {
+                        let fields_unnamed_new = FieldsUnnamed {
+                            unnamed: fields_unnamed
+                                .unnamed
+                                .iter()
+                                .map(|f| {
+                                    let field = f.clone();
+                                    Field {
+                                        vis: Visibility::Public(Default::default()),
+                                        ..field
+                                    }
+                                })
+                                .collect(),
+                            ..*fields_unnamed
+                        };
+                        quote! {
+                            #[derive(Clone)]
+                            #q_attrs #i_vis struct #t_name #fields_unnamed_new;
+                        }
+                    }
                     syn::Fields::Unit => quote! {
                         #[derive(Clone, Default)]
                         #q_attrs #i_vis struct #t_name;
