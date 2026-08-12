@@ -10,6 +10,8 @@ use syn::{
     Visibility,
     parse::{Parse, ParseStream},
     parse_macro_input,
+    punctuated::Punctuated,
+    token::Comma,
 };
 
 const STATE_TAG_ARGS: &str = "#[state_tag(assoc = AssocType, label = \"AssocLabel\")]";
@@ -164,13 +166,55 @@ fn q_attrs_except(attrs: &Vec<Attribute>, excepts: Vec<&str>) -> TokenStream2 {
 #[proc_macro_derive(StateTag, attributes(state_tag))]
 pub fn state_tag(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    if !input.generics.params.is_empty() {
-        panic!("Generics not supported.");
-    }
+    let i_gene = &input.generics;
+    let i_g_idents = i_gene
+        .params
+        .iter()
+        .map(|v| match v {
+            syn::GenericParam::Type(type_param) => Some(type_param.ident.clone()),
+            _ => None,
+        })
+        .filter(|v| v.is_some())
+        .map(|v| v.unwrap())
+        .collect::<Vec<Ident>>();
     let i_attrs = &input.attrs;
     let i_ident = &input.ident;
     let i_vis = &input.vis;
     let mut quotes: Vec<_> = Vec::new();
+    let q_i_g_args = if i_g_idents.len() > 0 {
+        quote! {
+            <#(#i_g_idents)*>
+        }
+    } else {
+        quote! {}
+    };
+    let get_f_ty_idents = |fields: &Punctuated<Field, Comma>| {
+        fields
+            .iter()
+            .map(|v| match &v.ty {
+                Type::Path(type_path) => type_path.path.segments.last().map(|s| s.ident.clone()),
+                _ => None,
+            })
+            .filter(|v| v.is_some())
+            .map(|v| v.unwrap())
+            .collect::<Vec<_>>()
+    };
+    let get_q_t_g_args = |items: &Punctuated<Field, Comma>| {
+        let idents = itertools::intersperse(
+            get_f_ty_idents(items)
+                .iter()
+                .filter(|v| i_g_idents.contains(v))
+                .map(|v| quote! {#v})
+                .collect::<Vec<_>>(),
+            quote! {,},
+        )
+        .collect::<Vec<_>>();
+        if idents.len() > 0 {
+            quote! {<#(#idents)*>}
+        } else {
+            quote! {}
+        }
+    };
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
@@ -179,10 +223,11 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let v_fields = &item.fields;
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
                 let t_name_str = format!("{}{}", i_ident, v_ident);
-                let q = match v_fields {
-                    syn::Fields::Named(fields_named) => {
+                let (q, q_t_g_args) = match v_fields {
+                    syn::Fields::Named(fields) => {
+                        let q_t_g_args = get_q_t_g_args(&fields.named);
                         let fields_named_new = FieldsNamed {
-                            named: fields_named
+                            named: fields
                                 .named
                                 .iter()
                                 .map(|f| {
@@ -193,16 +238,18 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                                     }
                                 })
                                 .collect(),
-                            ..*fields_named
+                            ..*fields
                         };
-                        quote! {
+                        let q = quote! {
                             #[derive(Clone)]
-                            #q_attrs #i_vis struct #t_name #fields_named_new
-                        }
+                            #q_attrs #i_vis struct #t_name #q_t_g_args #fields_named_new
+                        };
+                        (q, q_t_g_args)
                     }
-                    syn::Fields::Unnamed(fields_unnamed) => {
+                    syn::Fields::Unnamed(fields) => {
+                        let q_t_g_args = get_q_t_g_args(&fields.unnamed);
                         let fields_unnamed_new = FieldsUnnamed {
-                            unnamed: fields_unnamed
+                            unnamed: fields
                                 .unnamed
                                 .iter()
                                 .map(|f| {
@@ -213,24 +260,28 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                                     }
                                 })
                                 .collect(),
-                            ..*fields_unnamed
+                            ..*fields
                         };
-                        quote! {
+                        let q = quote! {
                             #[derive(Clone)]
-                            #q_attrs #i_vis struct #t_name #fields_unnamed_new;
-                        }
+                            #q_attrs #i_vis struct #t_name #q_t_g_args #fields_unnamed_new;
+                        };
+                        (q, q_t_g_args)
                     }
-                    syn::Fields::Unit => quote! {
-                        #[derive(Clone, Default)]
-                        #q_attrs #i_vis struct #t_name;
-                    },
+                    syn::Fields::Unit => {
+                        let q = quote! {
+                            #[derive(Clone, Default)]
+                            #q_attrs #i_vis struct #t_name;
+                        };
+                        (q, quote! {})
+                    }
                 };
                 quotes.push(q);
 
                 let q_from_body = match v_fields {
-                    syn::Fields::Named(fields_named) => {
+                    syn::Fields::Named(fields) => {
                         let q_params: Vec<_> = itertools::intersperse(
-                            fields_named.named.iter().map(|field| {
+                            fields.named.iter().map(|field| {
                                 let ident = match field.ident {
                                     Some(ref ident) => ident.clone(),
                                     None => panic!("field should be named"),
@@ -244,8 +295,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             #i_ident::#v_ident{#(#q_params)*}
                         }
                     }
-                    syn::Fields::Unnamed(fields_unnamed) => {
-                        let len = fields_unnamed.unnamed.len();
+                    syn::Fields::Unnamed(fields) => {
+                        let len = fields.unnamed.len();
                         let q_params: Vec<_> = itertools::intersperse(
                             (0..len).map(|i| {
                                 let idx = Index::from(i);
@@ -263,8 +314,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     },
                 };
                 let q_from = quote! {
-                    impl From<#t_name> for #i_ident {
-                        fn from(value: #t_name) -> #i_ident {
+                    impl #q_i_g_args From<#t_name #q_t_g_args> for #i_ident #i_gene {
+                        fn from(value: #t_name #q_t_g_args) -> #i_ident #i_gene {
                             #q_from_body
                         }
                     }
@@ -274,7 +325,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
-                    impl state_m::KvAssoc for #t_name {
+                    impl #q_i_g_args state_m::KvAssoc for #t_name #q_t_g_args #i_gene {
                         type Key = #i_ident;
                         type Value = #typ;
                     }
@@ -283,7 +334,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
                         quote! {
-                            impl std::fmt::Debug for #t_name {
+                            impl std::fmt::Debug for #t_name #q_t_g_args {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #expr)
                                 }
@@ -292,7 +343,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                     None => {
                         quote! {
-                            impl std::fmt::Debug for #t_name {
+                            impl std::fmt::Debug for #t_name #q_t_g_args {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #t_name_str)
                                 }
@@ -313,8 +364,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             let args = state_tag_args(&input.attrs);
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
-                #q_attrs #i_vis struct #i_ident #fields #semi_colon
-                impl state_m::KvAssoc for #i_ident {
+                #q_attrs #i_vis struct #i_ident #i_gene #fields #semi_colon
+                impl #q_i_g_args state_m::KvAssoc for #i_ident #i_gene {
                     type Key = #i_ident;
                     type Value = #typ;
                 }
