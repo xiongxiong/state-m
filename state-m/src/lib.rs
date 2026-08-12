@@ -14,7 +14,6 @@ use std::{fmt::Debug, hash::Hash};
 
 /// Associate a Key type and a Value type.
 pub trait KvAssoc {
-    type Key;
     type Value;
 }
 
