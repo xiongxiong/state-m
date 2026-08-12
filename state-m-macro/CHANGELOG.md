@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.10 - 2026-08-12
+#### Bug Fixes
+- added generic support for StateTag - (810777c) - 王继荣
+#### Miscellaneous Chores
+- update - (b2fccbb) - 王继荣
+- update - (4c7bf36) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.9 - 2026-08-10
 #### Bug Fixes
 - update macro of StateTag - (c9989b6) - wangjirong
