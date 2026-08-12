@@ -166,7 +166,14 @@ fn q_attrs_except(attrs: &Vec<Attribute>, excepts: Vec<&str>) -> TokenStream2 {
 #[proc_macro_derive(StateTag, attributes(state_tag))]
 pub fn state_tag(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
+    let i_attrs = &input.attrs;
+    let i_ident = &input.ident;
+    let i_vis = &input.vis;
     let i_gene = &input.generics;
+    let i_where = match &i_gene.where_clause {
+        Some(clause) => quote! {#clause},
+        None => quote! {},
+    };
     let i_g_idents = i_gene
         .params
         .iter()
@@ -177,10 +184,6 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
         .filter(|v| v.is_some())
         .map(|v| v.unwrap())
         .collect::<Vec<Ident>>();
-    let i_attrs = &input.attrs;
-    let i_ident = &input.ident;
-    let i_vis = &input.vis;
-    let mut quotes: Vec<_> = Vec::new();
     let q_i_g_args = if i_g_idents.len() > 0 {
         quote! {
             <#(#i_g_idents)*>
@@ -188,7 +191,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
     } else {
         quote! {}
     };
-    let get_f_ty_idents = |fields: &Punctuated<Field, Comma>| {
+    let get_t_g_idents = |fields: &Punctuated<Field, Comma>| {
         fields
             .iter()
             .map(|v| match &v.ty {
@@ -199,9 +202,9 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             .map(|v| v.unwrap())
             .collect::<Vec<_>>()
     };
-    let get_q_t_g_args = |items: &Punctuated<Field, Comma>| {
-        let idents = itertools::intersperse(
-            get_f_ty_idents(items)
+    let get_q_t_g_args = |fields: &Punctuated<Field, Comma>| {
+        let q_idents = itertools::intersperse(
+            get_t_g_idents(fields)
                 .iter()
                 .filter(|v| i_g_idents.contains(v))
                 .map(|v| quote! {#v})
@@ -209,12 +212,51 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             quote! {,},
         )
         .collect::<Vec<_>>();
-        if idents.len() > 0 {
-            quote! {<#(#idents)*>}
+        if q_idents.len() > 0 {
+            quote! {<#(#q_idents)*>}
         } else {
             quote! {}
         }
     };
+    let get_q_t_where = |items: &Punctuated<Field, Comma>| {
+        let t_g_idents = get_t_g_idents(items);
+        match &i_gene.where_clause {
+            Some(clause) => {
+                let q_pres = itertools::intersperse(
+                    clause
+                        .predicates
+                        .iter()
+                        .filter(|v| match v {
+                            syn::WherePredicate::Type(predicate_type) => {
+                                match &predicate_type.bounded_ty {
+                                    Type::Path(type_path) => type_path
+                                        .path
+                                        .segments
+                                        .last()
+                                        .map(|s| t_g_idents.contains(&s.ident))
+                                        .unwrap_or_default(),
+                                    _ => false,
+                                }
+                            }
+                            _ => false,
+                        })
+                        .cloned()
+                        .map(|v| quote! { #v }),
+                    quote! {,},
+                )
+                .collect::<Vec<_>>();
+                if q_pres.len() > 0 {
+                    quote! {
+                        where #(#q_pres)*
+                    }
+                } else {
+                    quote! {}
+                }
+            }
+            None => quote! {},
+        }
+    };
+    let mut quotes: Vec<_> = Vec::new();
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
@@ -223,9 +265,10 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let v_fields = &item.fields;
                 let t_name = format_ident!("{}{}", i_ident, v_ident);
                 let t_name_str = format!("{}{}", i_ident, v_ident);
-                let (q, q_t_g_args) = match v_fields {
+                let (q, q_t_g_args, q_t_where) = match v_fields {
                     syn::Fields::Named(fields) => {
                         let q_t_g_args = get_q_t_g_args(&fields.named);
+                        let q_t_where = get_q_t_where(&fields.named);
                         let fields_named_new = FieldsNamed {
                             named: fields
                                 .named
@@ -242,12 +285,13 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         };
                         let q = quote! {
                             #[derive(Clone)]
-                            #q_attrs #i_vis struct #t_name #q_t_g_args #fields_named_new
+                            #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_where #fields_named_new
                         };
-                        (q, q_t_g_args)
+                        (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unnamed(fields) => {
                         let q_t_g_args = get_q_t_g_args(&fields.unnamed);
+                        let q_t_where = get_q_t_where(&fields.unnamed);
                         let fields_unnamed_new = FieldsUnnamed {
                             unnamed: fields
                                 .unnamed
@@ -264,16 +308,16 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         };
                         let q = quote! {
                             #[derive(Clone)]
-                            #q_attrs #i_vis struct #t_name #q_t_g_args #fields_unnamed_new;
+                            #q_attrs #i_vis struct #t_name #q_t_g_args #fields_unnamed_new #q_t_where;
                         };
-                        (q, q_t_g_args)
+                        (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unit => {
                         let q = quote! {
                             #[derive(Clone, Default)]
                             #q_attrs #i_vis struct #t_name;
                         };
-                        (q, quote! {})
+                        (q, quote! {}, quote! {})
                     }
                 };
                 quotes.push(q);
@@ -314,8 +358,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     },
                 };
                 let q_from = quote! {
-                    impl #q_i_g_args From<#t_name #q_t_g_args> for #i_ident #i_gene {
-                        fn from(value: #t_name #q_t_g_args) -> #i_ident #i_gene {
+                    impl #q_i_g_args From<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
+                        fn from(value: #t_name #q_t_g_args) -> #i_ident #q_i_g_args {
                             #q_from_body
                         }
                     }
@@ -325,8 +369,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
-                    impl #q_i_g_args state_m::KvAssoc for #t_name #q_t_g_args #i_gene {
-                        type Key = #i_ident;
+                    impl #q_i_g_args state_m::KvAssoc for #t_name #q_t_g_args #i_where {
+                        type Key = #i_ident #q_i_g_args;
                         type Value = #typ;
                     }
                 });
@@ -334,7 +378,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
                         quote! {
-                            impl std::fmt::Debug for #t_name #q_t_g_args {
+                            impl #q_i_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #expr)
                                 }
@@ -343,7 +387,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                     None => {
                         quote! {
-                            impl std::fmt::Debug for #t_name #q_t_g_args {
+                            impl #q_i_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #t_name_str)
                                 }
@@ -364,9 +408,9 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             let args = state_tag_args(&input.attrs);
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
-                #q_attrs #i_vis struct #i_ident #i_gene #fields #semi_colon
-                impl #q_i_g_args state_m::KvAssoc for #i_ident #i_gene {
-                    type Key = #i_ident;
+                #q_attrs #i_vis struct #i_ident #q_i_g_args #fields #semi_colon
+                impl #q_i_g_args state_m::KvAssoc for #i_ident #q_i_g_args #i_where {
+                    type Key = #i_ident #q_i_g_args;
                     type Value = #typ;
                 }
             });
