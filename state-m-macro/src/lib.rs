@@ -1,6 +1,6 @@
 use macro_tools::{
     Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn,
-    AttributePropertySyn, ct, qt, return_syn_err, syn_err,
+    AttributePropertySyn, qt, return_syn_err, syn_err,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -40,7 +40,7 @@ impl AttributeComponent for StateTagArgs {
 impl Parse for StateTagArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let error = |ident: &syn::Ident| -> syn::Error {
-            let known = ct::str::format!(
+            let known = format!(
                 "Known entries of attribute {} are: {}, {}[optional].",
                 StateTagArgs::KEYWORD,
                 AttributePropertyAssocMarker::KEYWORD,
@@ -369,8 +369,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
-                    impl #q_i_g_args state_m::KvAssoc for #t_name #q_t_g_args #i_where {
-                        type Key = #i_ident #q_i_g_args;
+                    impl #q_t_g_args state_m::KvAssoc for #t_name #q_t_g_args #q_t_where {
                         type Value = #typ;
                     }
                 });
@@ -378,7 +377,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
                         quote! {
-                            impl #q_i_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
+                            impl #q_t_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #expr)
                                 }
@@ -387,7 +386,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                     None => {
                         quote! {
-                            impl #q_i_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
+                            impl #q_t_g_args std::fmt::Debug for #t_name #q_t_g_args #q_t_where {
                                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                                     write!(f, "{}", #t_name_str)
                                 }
@@ -410,7 +409,6 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             quotes.push(quote! {
                 #q_attrs #i_vis struct #i_ident #q_i_g_args #fields #semi_colon
                 impl #q_i_g_args state_m::KvAssoc for #i_ident #q_i_g_args #i_where {
-                    type Key = #i_ident #q_i_g_args;
                     type Value = #typ;
                 }
             });
