@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.12 - 2026-08-13
+#### Bug Fixes
+- fixed problems of generic - (0e9dd09) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.11 - 2026-08-13
 #### Bug Fixes
 - update trait AsState - (7a5ed6e) - wangjirong
