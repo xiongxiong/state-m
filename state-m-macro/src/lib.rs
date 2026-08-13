@@ -564,7 +564,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                 let id = self.0.clone();
                 #(#decl_vars)*
                 tokio::spawn(async move {
-                    tracing::info!("watch_{} | {tags:?} -- start", #n);
+                    tracing::info!("{id} | watch_{} | {tags:?} -- start", #n);
                     loop {
                         tokio::select! {
                             biased;
@@ -572,20 +572,14 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                             #(#sel_recvs)*
                         }
                     }
-                    tracing::info!("watch_{} | {tags:?} -- close", #n);
+                    tracing::info!("{id} | watch_{} | {tags:?} -- close", #n);
                 });
                 Ok(())
             }
         }
     };
-    let meta_method = if n == 1 {
-        get_q_method(format_ident!("watch"))
-    } else {
-        quote! {}
-    };
     let norm_method = get_q_method(format_ident!("watch_{n}"));
     quote! {
-        #meta_method
         #norm_method
     }
     .into()
@@ -646,15 +640,8 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
                     + Send;
         }
     };
-    let meta_method = if n == 1 {
-        get_q_method(format_ident!("watch"))
-    } else {
-        quote! {}
-    };
     let norm_method = get_q_method(format_ident!("watch_{n}"));
     quote! {
-        #meta_method
-
         /// Watch multiple state readers simultaneously, state events from these readers arrived in queue.
         #norm_method
     }
@@ -729,14 +716,8 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
             }
         }
     };
-    let meta_method = if n == 1 {
-        get_q_method(format_ident!("watch"))
-    } else {
-        quote! {}
-    };
     let norm_method = get_q_method(format_ident!("watch_{n}"));
     quote! {
-        #meta_method
         #norm_method
     }
     .into()
@@ -900,10 +881,11 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
                 tags.iter().duplicates().collect::<Vec<_>>().is_empty(),
                 "Should not use duplicate tags."
             );
+            let id = self.0.clone();
             #(#decl_vars)*
             #chan_decl
             tokio::spawn(async move {
-                tracing::info!("merge_reader_{} | {tags:?} -- start", #n);
+                tracing::info!("{id} | merge_reader_{} | {tags:?} -- start", #n);
                 loop {
                     tokio::select! {
                         biased;
@@ -911,7 +893,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
                         #(#sel_recvs)*
                     }
                 }
-                tracing::info!("merge_reader_{} | {tags:?} -- close", #n);
+                tracing::info!("{id} | merge_reader_{} | {tags:?} -- close", #n);
             });
             Ok(Reader::new(capacity, tx))
         }
@@ -1125,13 +1107,14 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)*
         {
+            let id = self.0.clone();
             let handle = self.get_handle(tag.clone())?;
             let capacity = handle.capacity();
             let (mut rx, token) = handle.fanout();
             #(#decl_vars)*
             let res_typ_name = std::any::type_name::<(#(#reader_typs)*)>();
             tokio::spawn(async move {
-                tracing::info!("split_reader_{} | {tag:?} | {res_typ_name} -- start", #n);
+                tracing::info!("{id} | split_reader_{} | {tag:?} | {res_typ_name} -- start", #n);
                 loop {
                     tokio::select! {
                         biased;
@@ -1147,7 +1130,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
                         }
                     }
                 }
-                tracing::info!("split_reader_{} | {tag:?} | {res_typ_name} -- start", #n);
+                tracing::info!("{id} | split_reader_{} | {tag:?} | {res_typ_name} -- close", #n);
             });
             Ok((#(#res_readers)*))
         }
