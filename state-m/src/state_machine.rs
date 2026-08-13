@@ -314,7 +314,37 @@ where
         Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
     }
 
-    sm_watch!(1);
+    pub async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<K>>
+    where
+        T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+        T::Value: AsState,
+        F: 'static
+            + Fn(StateChange<T>, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
+    {
+        let id = self.0.clone();
+        let handle = self.get_handle(tag.clone())?;
+        let (mut rx, token) = handle.fanout();
+        tokio::spawn(async move {
+            tracing::info!("watch | {tag:?} -- start");
+            loop {
+                tokio::select! {
+                    _ = token.cancelled() => break,
+                    r = rx.recv() => match r {
+                        Ok((s_cur, s_old)) => {
+                            if let Err(e) = func(StateChange::Change(s_cur, s_old), tag.clone().into()).await {
+                                tracing::error!("{id} | {:?} | watch error -- {e:?}", tag);
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+            tracing::info!("watch | {tag:?} -- close");
+        });
+        Ok(())
+    }
+
     sm_watch!(2);
     sm_watch!(3);
     sm_watch!(4);
@@ -570,7 +600,17 @@ pub trait UseStateMachine: HasStateMachine {
     /// Get debug state of state machine, ordered by tag.
     fn debug_state(&self) -> Vec<String>;
 
-    watch_decl!(1);
+    /// Watch a state handle, responding to state change events.
+    /// * `tag` - the 'Tag' of the state handle.
+    /// * `func` - the function used to handle state change events.
+    async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: AsState,
+        F: 'static
+            + Fn(StateChange<T>, Self::K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send;
+
     watch_decl!(2);
     watch_decl!(3);
     watch_decl!(4);
@@ -795,7 +835,17 @@ where
         self.state_machine().debug_state()
     }
 
-    watch_impl!(1);
+    async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<Self::K>>
+    where
+        T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+        T::Value: AsState,
+        F: 'static
+            + Fn(StateChange<T>, Self::K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
+    {
+        self.state_machine().watch(tag, func).await
+    }
+
     watch_impl!(2);
     watch_impl!(3);
     watch_impl!(4);
