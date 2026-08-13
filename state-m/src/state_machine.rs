@@ -11,7 +11,6 @@ use itertools::Itertools;
 use state_m_macro::*;
 use std::{
     fmt::{self, Debug},
-    ops::Deref,
     pin::Pin,
     sync::Arc,
 };
@@ -29,7 +28,7 @@ where
     K: AsKey,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for item in self.iter().sorted_by_key(|k| k.key().clone()) {
+        for item in self.1.iter().sorted_by_key(|k| k.key().clone()) {
             let (_, (l, h)) = item.pair();
             write!(f, "{:<20} | {:?}\n", l, h.debug_state())?
         }
@@ -46,17 +45,6 @@ where
     }
 }
 
-impl<K> Deref for StateMachine<K>
-where
-    K: AsKey,
-{
-    type Target = Arc<DashMap<K, (String, Box<dyn AsHandle>)>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.1
-    }
-}
-
 impl<K> StateMachine<K>
 where
     K: 'static + AsKey,
@@ -67,7 +55,7 @@ where
         T::Value: AsState,
     {
         let k = tag.clone().into();
-        match self.get(&k) {
+        match self.1.get(&k) {
             Some(v) => match v.value().1.downcast_ref::<ArcHandle<T>>() {
                 Some(h) => Ok(h.clone()),
                 None => Err(GetHandleError::TypeNotMatch),
@@ -103,7 +91,7 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState,
     {
-        match self.remove(&tag.clone().into()) {
+        match self.1.remove(&tag.clone().into()) {
             Some((_, v)) => match v.1.downcast_ref::<ArcHandle<T>>() {
                 Some(h) => {
                     h.close();
@@ -120,7 +108,7 @@ where
     where
         T: Clone + Into<K>,
     {
-        self.contains_key(&tag.clone().into())
+        self.1.contains_key(&tag.clone().into())
     }
 
     pub fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<K>>
@@ -129,6 +117,10 @@ where
         T::Value: AsState,
     {
         Ok(self.get_handle(tag)?.reader())
+    }
+
+    pub fn keys(&self) -> Vec<K> {
+        self.1.iter().map(|v| v.key().clone()).sorted().collect()
     }
 
     pub fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
@@ -149,7 +141,7 @@ where
 
     pub fn debug_state(&self) -> Vec<String> {
         let mut states = Vec::new();
-        for item in self.iter().sorted_by_key(|k| k.key().clone()) {
+        for item in self.1.iter().sorted_by_key(|k| k.key().clone()) {
             let (_, (l, h)) = item.pair();
             states.push(format!("{:<20} | {:?}", l, h.debug_state()));
         }
@@ -167,7 +159,7 @@ where
         T::Value: AsState,
     {
         let k = tag.clone().into();
-        if self.contains_key(&k) {
+        if self.1.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag.into()));
         }
         let h = ArcHandle(Arc::new(Handle::from_source(
@@ -176,7 +168,7 @@ where
             Source::<T::Value>::new(capacity, pass_checks),
         )));
         h.init().await;
-        self.insert(k, (format!("{tag:?}"), Box::new(h)));
+        self.1.insert(k, (format!("{tag:?}"), Box::new(h)));
         Ok(())
     }
 
@@ -190,7 +182,7 @@ where
         T::Value: AsState,
     {
         let k = tag.clone().into();
-        if self.contains_key(&k) {
+        if self.1.contains_key(&k) {
             return Err(AddHandleError::AlreadyExist(tag.into()));
         }
         if reader.is_closed() {
@@ -202,7 +194,7 @@ where
             reader,
         )));
         h.init().await;
-        self.insert(k, (format!("{tag:?}"), Box::new(h)));
+        self.1.insert(k, (format!("{tag:?}"), Box::new(h)));
         Ok(())
     }
 
@@ -473,6 +465,9 @@ pub trait UseStateMachine: HasStateMachine {
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState;
 
+    /// Get all keys of state machine.
+    fn keys(&self) -> Vec<Self::K>;
+
     /// Get current state value of a tag in state machine.
     /// * `tag` - the `Tag` of the handle which you want to get state value from it.
     fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
@@ -705,6 +700,10 @@ where
     {
         self.state_machine().add_reader(tag, reader).await?;
         Ok(())
+    }
+
+    fn keys(&self) -> Vec<Self::K> {
+        self.state_machine().keys()
     }
 
     fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
