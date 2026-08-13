@@ -183,10 +183,12 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
         })
         .filter(|v| v.is_some())
         .map(|v| v.unwrap())
-        .collect::<Vec<Ident>>();
+        .collect::<Vec<_>>();
     let q_i_g_args = if i_g_idents.len() > 0 {
+        let qs = itertools::intersperse(i_g_idents.iter().map(|v| quote! {#v}), quote! {,})
+            .collect::<Vec<_>>();
         quote! {
-            <#(#i_g_idents)*>
+            <#(#qs)*>
         }
     } else {
         quote! {}
