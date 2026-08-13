@@ -326,7 +326,7 @@ where
         let handle = self.get_handle(tag.clone())?;
         let (mut rx, token) = handle.fanout();
         tokio::spawn(async move {
-            tracing::info!("watch | {tag:?} -- start");
+            tracing::info!("{id} | {tag:?} -- start");
             loop {
                 tokio::select! {
                     _ = token.cancelled() => break,
@@ -340,7 +340,7 @@ where
                     }
                 }
             }
-            tracing::info!("watch | {tag:?} -- close");
+            tracing::info!("{id} | {tag:?} -- close");
         });
         Ok(())
     }
