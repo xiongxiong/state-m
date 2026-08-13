@@ -37,12 +37,12 @@ impl_downcast!(AsHandle);
 pub(crate) struct ArcHandle<T>(pub Arc<Handle<T>>)
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState + Send + Sync;
+    T::Value: AsState;
 
 impl<T> Deref for ArcHandle<T>
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState + Send + Sync,
+    T::Value: AsState,
 {
     type Target = Handle<T>;
 
@@ -54,7 +54,7 @@ where
 impl<T> AsHandle for ArcHandle<T>
 where
     T: 'static + Clone + Debug + KvAssoc + Send + Sync,
-    T::Value: 'static + AsState + Send + Sync,
+    T::Value: AsState,
 {
     fn debug_state(&self) -> Box<dyn Debug> {
         Box::new(self.0.state())
@@ -64,7 +64,7 @@ where
 #[derive(Debug)]
 enum HandleI<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     Source(Source<S>, Arc<RwLock<State<S>>>),
     Reader(Reader<S>),
@@ -74,7 +74,7 @@ where
 pub(crate) struct Handle<T>
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState,
+    T::Value: AsState,
 {
     sm_id: String,
     tag: T,
@@ -87,7 +87,7 @@ where
 impl<T> Drop for Handle<T>
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState,
+    T::Value: AsState,
 {
     fn drop(&mut self) {
         self.cancel_token.cancel();
@@ -97,7 +97,7 @@ where
 impl<T> Handle<T>
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState,
+    T::Value: AsState,
 {
     fn recver(&self) -> Receiver<StateEvent<T::Value>> {
         match self.inner {
@@ -188,7 +188,7 @@ where
 impl<T> Handle<T>
 where
     T: Clone + Debug + KvAssoc,
-    T::Value: 'static + AsState,
+    T::Value: AsState,
 {
     pub fn is_source(&self) -> bool {
         match self.inner {
@@ -326,7 +326,7 @@ where
 impl<T> Handle<T>
 where
     T: 'static + Clone + Debug + KvAssoc + Send,
-    T::Value: 'static + AsState + Send + Sync,
+    T::Value: AsState,
 {
     pub async fn init(&self) {
         let sm_id = self.sm_id.clone();

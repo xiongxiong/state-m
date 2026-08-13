@@ -18,9 +18,9 @@ pub trait KvAssoc {
 }
 
 /// State type needs to implement these traits: Clone, Debug, Default, PartialEq.
-pub trait AsState: Clone + Debug + Default + PartialEq {}
+pub trait AsState: 'static + Clone + Debug + Default + PartialEq + Send + Sync {}
 
-impl<T> AsState for T where T: Clone + Debug + Default + PartialEq {}
+impl<T> AsState for T where T: 'static + Clone + Debug + Default + PartialEq + Send + Sync {}
 
 /// Tag type needs to implement these traits: Clone, Debug, Eq, Hash, Send, Sync.
 pub trait AsKey: 'static + Clone + Debug + Eq + Hash + Ord + Send + Sync {}

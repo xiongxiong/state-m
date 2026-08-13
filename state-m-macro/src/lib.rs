@@ -452,7 +452,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -620,7 +620,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -690,7 +690,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -772,7 +772,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -890,7 +890,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
         where
             #(#tag_typ_cons)*
-            S: 'static + AsState + Send,
+            S: AsState,
             F: 'static + Fn(#(#fn_params_typ)*) -> S + Send,
         {
             let tags: Vec<K> = vec![#(#vec_tags)*];
@@ -948,7 +948,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -965,7 +965,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
-            S: 'static + AsState + Send,
+            S: AsState,
             F: 'static + Fn(#(#fn_params_typ)*) -> S + Send;
     }.into()
 }
@@ -1002,7 +1002,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
             let typ = format_ident!("T{}", i);
             quote! {
                 #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-                #typ::Value: 'static + AsState + Send + Sync,
+                #typ::Value: AsState,
             }
         })
         .collect();
@@ -1028,7 +1028,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
         async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
         where
             #(#tag_typ_cons)*
-            S: 'static + AsState + Send,
+            S: AsState,
             F: 'static + Fn(#(#fn_params_typ)*) -> S + Send {
                 self.state_machine().#method_name(#(#tag_names)*, func).await
             }
@@ -1063,7 +1063,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("S{}", i);
             quote! {
-                #typ: 'static + AsState + Send,
+                #typ: AsState,
             }
         })
         .collect();
@@ -1119,7 +1119,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
         pub async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
         where
             T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
-            T::Value: 'static + AsState + Send + Sync,
+            T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)*
         {
@@ -1180,7 +1180,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("S{}", i);
             quote! {
-                #typ: 'static + AsState + Send,
+                #typ: AsState,
             }
         })
         .collect();
@@ -1189,7 +1189,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
         async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
         where
             T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-            T::Value: 'static + AsState + Send + Sync,
+            T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)*;
     }.into()
@@ -1223,7 +1223,7 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("S{}", i);
             quote! {
-                #typ: 'static + AsState + Send,
+                #typ: AsState,
             }
         })
         .collect();
@@ -1231,7 +1231,7 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
         async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
         where
             T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
-            T::Value: 'static + AsState + Send + Sync,
+            T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)* {
                 self.state_machine().#method_name(tag, func).await

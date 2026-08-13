@@ -13,11 +13,11 @@ use tokio::{
 #[derive(Clone, Debug)]
 pub struct Reader<S>(Inner<S>)
 where
-    S: 'static + AsState;
+    S: AsState;
 
 impl<S> Deref for Reader<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     type Target = Inner<S>;
 
@@ -28,7 +28,7 @@ where
 
 impl<S> Reader<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     pub(crate) fn from(inner: Inner<S>) -> Self {
         Self(inner)
@@ -45,7 +45,7 @@ where
 
 impl<S> Reader<S>
 where
-    S: 'static + AsState + Send,
+    S: AsState,
 {
     /// Check is the channel has been closed.
     pub fn is_closed(&self) -> bool {
@@ -70,7 +70,7 @@ where
     /// Reader of new data type.
     pub fn derive_by<T, F>(&self, f: F) -> Reader<T>
     where
-        T: AsState + Send,
+        T: AsState,
         F: Fn(S) -> T + Send + 'static,
     {
         let (tx, _) = channel(self.capacity);
@@ -122,7 +122,7 @@ where
     /// Reader of new data type.
     pub fn derive_by_async<T, F, Fut>(&self, f: F) -> Reader<T>
     where
-        T: 'static + AsState + Send,
+        T: AsState,
         F: Fn(S) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = T> + Send,
     {

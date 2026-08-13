@@ -5,7 +5,7 @@ use tokio::sync::broadcast::{Sender, channel};
 #[derive(Clone, Debug)]
 pub struct Inner<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     pub(crate) capacity: usize,
     pub(crate) sender: Sender<StateEvent<S>>,
@@ -14,7 +14,7 @@ where
 
 impl<S> Inner<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     pub fn new(
         capacity: usize,
@@ -35,11 +35,11 @@ where
 #[derive(Debug)]
 pub(crate) struct Source<S>(Inner<S>)
 where
-    S: 'static + AsState;
+    S: AsState;
 
 impl<S> Deref for Source<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     type Target = Inner<S>;
 
@@ -50,7 +50,7 @@ where
 
 impl<S> Source<S>
 where
-    S: 'static + AsState,
+    S: AsState,
 {
     pub fn new(
         capacity: usize,
