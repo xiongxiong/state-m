@@ -17,6 +17,11 @@ pub trait KvAssoc {
     type Value;
 }
 
+/// Judge if a key associated with a tag or not.
+pub trait KeyIsTag<T> {
+    fn predicate(&self) -> bool;
+}
+
 /// State type needs to implement these traits: Clone, Debug, Default, PartialEq.
 pub trait AsState: 'static + Clone + Debug + Default + PartialEq + Send + Sync {}
 

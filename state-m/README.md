@@ -169,7 +169,7 @@ unit_b
 
 ```rust
 let reader_2 = unit_b
-    .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| State {
+    .merge_reader_2(TagOuter(0), TagOuter(1), 10, |a, b| State {
         value: format!("merged [{}] and [{}]", a.value, b.value),
         timestamp: Utc::now(),
     })

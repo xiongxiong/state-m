@@ -208,7 +208,7 @@ mod tests {
             .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
             .await?;
         let reader_2 = unit_b
-            .merge_reader_2(TagOuter(0), TagOuter(1), |a, b| {
+            .merge_reader_2(TagOuter(0), TagOuter(1), 10, |a, b| {
                 format!("merged [{}] and [{}]", a, b)
             })
             .await?;

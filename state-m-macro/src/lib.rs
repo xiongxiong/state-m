@@ -324,7 +324,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 };
                 quotes.push(q);
 
-                let q_from_body = match v_fields {
+                // From
+                let q_from_pat = match v_fields {
                     syn::Fields::Named(fields) => {
                         let q_params: Vec<_> = itertools::intersperse(
                             fields.named.iter().map(|field| {
@@ -360,14 +361,100 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     },
                 };
                 let q_from = quote! {
-                    impl #q_i_g_args From<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
+                    impl #q_i_g_args std::convert::From<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
                         fn from(value: #t_name #q_t_g_args) -> #i_ident #q_i_g_args {
-                            #q_from_body
+                            #q_from_pat
                         }
                     }
                 };
                 quotes.push(q_from);
 
+                // TryFrom
+                let q_try_from_pat = match v_fields {
+                    syn::Fields::Named(fields) => {
+                        let q_params: Vec<_> = itertools::intersperse(
+                            fields.named.iter().map(|field| {
+                                let ident = match field.ident {
+                                    Some(ref ident) => ident.clone(),
+                                    None => panic!("field should be named"),
+                                };
+                                quote! {#ident}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
+                        quote! {
+                            #i_ident::#v_ident{#(#q_params)*}
+                        }
+                    }
+                    syn::Fields::Unnamed(fields) => {
+                        let len = fields.unnamed.len();
+                        let q_params: Vec<_> = itertools::intersperse(
+                            (0..len).map(|i| {
+                                let idx = format_ident!("v_{i}");
+                                quote! {#idx}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
+                        quote! {
+                            #i_ident::#v_ident(#(#q_params)*)
+                        }
+                    }
+                    syn::Fields::Unit => quote! {
+                        #i_ident::#v_ident
+                    },
+                };
+                let q_try_from_res = match v_fields {
+                    syn::Fields::Named(fields) => {
+                        let q_params: Vec<_> = itertools::intersperse(
+                            fields.named.iter().map(|field| {
+                                let ident = match field.ident {
+                                    Some(ref ident) => ident.clone(),
+                                    None => panic!("field should be named"),
+                                };
+                                quote! {#ident}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
+                        quote! {
+                            #t_name{#(#q_params)*}
+                        }
+                    }
+                    syn::Fields::Unnamed(fields) => {
+                        let len = fields.unnamed.len();
+                        let q_params: Vec<_> = itertools::intersperse(
+                            (0..len).map(|i| {
+                                let idx = format_ident!("v_{i}");
+                                quote! {#idx}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
+                        quote! {
+                            #t_name(#(#q_params)*)
+                        }
+                    }
+                    syn::Fields::Unit => quote! {
+                        #t_name
+                    },
+                };
+                let q_try_from = quote! {
+                    impl #q_i_g_args std::convert::TryFrom<#i_ident #q_i_g_args> for #t_name #q_t_g_args #i_where {
+                        type Error = &'static str;
+
+                        fn try_from(value: #i_ident #q_i_g_args) -> Result<Self, Self::Error> {
+                            match value {
+                                #q_try_from_pat => Ok(#q_try_from_res),
+                                _ => Err("Unsupported convertion.")
+                            }
+                        }
+                    }
+                };
+                quotes.push(q_try_from);
+
+                // KvAssoc
                 let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
@@ -376,6 +463,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                 });
 
+                // Debug
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
                         quote! {
@@ -397,6 +485,42 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                 };
                 quotes.push(q_debug);
+
+                // IsTag
+                let q_is_tag_pat = match v_fields {
+                    syn::Fields::Named(_) => {
+                        quote! {
+                            #i_ident::#v_ident(_)
+                        }
+                    }
+                    syn::Fields::Unnamed(fields) => {
+                        let len = fields.unnamed.len();
+                        let qs: Vec<_> = itertools::intersperse(
+                            (0..len).map(|_| {
+                                quote! {_}
+                            }),
+                            quote! {,},
+                        )
+                        .collect();
+                        quote! {
+                            #i_ident::#v_ident(#(#qs)*)
+                        }
+                    }
+                    syn::Fields::Unit => quote! {
+                        #i_ident::#v_ident
+                    },
+                };
+                let q_is_tag = quote! {
+                    impl #q_i_g_args state_m::KeyIsTag<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
+                        fn predicate(&self) -> bool {
+                            match self {
+                                #q_is_tag_pat => true,
+                                _ => false
+                            }
+                        }
+                    }
+                };
+                quotes.push(q_is_tag);
             }
         }
         syn::Data::Struct(data_struct) => {
@@ -547,7 +671,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            pub async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<K>>
+            pub async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -557,10 +681,9 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                     + Send,
             {
                 let tags: Vec<K> = vec![#(#vec_tags)*];
-                assert!(
-                    tags.iter().duplicates().collect::<Vec<_>>().is_empty(),
-                    "Should not use duplicate tags."
-                );
+                if !tags.iter().duplicates().collect::<Vec<_>>().is_empty() {
+                    return Err(TagUsageError::DuplicatedTags);
+                }
                 let id = self.0.clone();
                 #(#decl_vars)*
                 tokio::spawn(async move {
@@ -630,7 +753,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<Self::K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -703,7 +826,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), GetHandleError<Self::K>>
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<Self::K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -790,18 +913,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     let chan_decl = {
-        let all_capacities: Vec<_> = itertools::intersperse(
-            (0..n).map(|i| {
-                let handle_name = format_ident!("handle_{}", i);
-                quote! {
-                    #handle_name.capacity()
-                }
-            }),
-            quote! {,},
-        )
-        .collect();
         quote! {
-            let capacity = itertools::max(vec![#(#all_capacities)*]).expect("Should not happen.");
             let (tx, _) = tokio::sync::broadcast::channel(capacity);
             let tx_c = tx.clone();
         }
@@ -870,17 +982,16 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Result<Reader<S>, TagUsageError<K>>
         where
             #(#tag_typ_cons)*
             S: AsState,
             F: 'static + Fn(#(#fn_params_typ)*) -> S + Send,
         {
             let tags: Vec<K> = vec![#(#vec_tags)*];
-            assert!(
-                tags.iter().duplicates().collect::<Vec<_>>().is_empty(),
-                "Should not use duplicate tags."
-            );
+            if !tags.iter().duplicates().collect::<Vec<_>>().is_empty() {
+                return Err(TagUsageError::DuplicatedTags);
+            }
             let id = self.0.clone();
             #(#decl_vars)*
             #chan_decl
@@ -946,7 +1057,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         .collect();
     quote! {
         /// Merge multiple state readers into one.
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Result<Reader<S>, TagUsageError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: AsState,
@@ -1009,12 +1120,12 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, func: F) -> Result<Reader<S>, GetHandleError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Result<Reader<S>, TagUsageError<Self::K>>
         where
             #(#tag_typ_cons)*
             S: AsState,
             F: 'static + Fn(#(#fn_params_typ)*) -> S + Send {
-                self.state_machine().#method_name(#(#tag_names)*, func).await
+                self.state_machine().#method_name(#(#tag_names)*, capacity, func).await
             }
     }.into()
 }
