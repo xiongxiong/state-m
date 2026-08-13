@@ -337,46 +337,47 @@ where
         Ok(())
     }
 
-    // pub async fn merge_same<T0, F>(&self, func: F) -> Result<Reader<T0::Value>, MergeSameError<K>>
-    // where
-    //     K: KeyIsTag<T0>,
-    //     T0: 'static
-    //         + Clone
-    //         + Debug
-    //         + Eq
-    //         + std::hash::Hash
-    //         + Into<K>
-    //         + KvAssoc
-    //         + PartialEq
-    //         + Send
-    //         + Sync
-    //         + TryFrom<K, Error = &'static str>,
-    //     T0::Value: AsState,
-    //     F: 'static
-    //         + Fn(StateChange<T0>, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-    //         + Send,
-    // {
-    //     let mut all_keys: Vec<K> = Vec::new();
-    //     let tags_0 = self
-    //         .1
-    //         .iter()
-    //         .filter(|v| KeyIsTag::predicate(v.key()))
-    //         .map(|v| T0::try_from(v.key().clone()).unwrap())
-    //         .collect::<Vec<_>>();
-    //     if tags_0.is_empty() {
-    //         return Err(MergeSameError::NoTagOfTyp(
-    //             std::any::type_name::<T0>().into(),
-    //         ));
-    //     }
-    //     let mut keys_0: Vec<K> = tags_0.iter().map(|t| t.clone().into()).collect();
-    //     all_keys.append(&mut keys_0);
-    //     if !all_keys.iter().duplicates().collect::<Vec<_>>().is_empty() {
-    //         return Err(TagUsageError::DuplicatedTags.into());
-    //     }
-    //     let id = self.0.clone();
+    pub async fn merge_same<T0, F, S>(
+        &self,
+        func: F,
+    ) -> Result<Reader<T0::Value>, MergeSameError<K>>
+    where
+        K: KeyIsTag<T0>,
+        T0: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<K, Error = &'static str>,
+        T0::Value: AsState,
+        F: 'static + Fn(Vec<(T0, T0::Value)>) -> S + Send,
+    {
+        let mut all_keys: Vec<K> = Vec::new();
+        let tags_0 = self
+            .1
+            .iter()
+            .filter(|v| KeyIsTag::predicate(v.key()))
+            .map(|v| T0::try_from(v.key().clone()).unwrap())
+            .collect::<Vec<_>>();
+        if tags_0.is_empty() {
+            return Err(MergeSameError::NoTagOfTyp(
+                std::any::type_name::<T0>().into(),
+            ));
+        }
+        let mut keys_0: Vec<K> = tags_0.iter().map(|t| t.clone().into()).collect();
+        all_keys.append(&mut keys_0);
+        if !all_keys.iter().duplicates().collect::<Vec<_>>().is_empty() {
+            return Err(TagUsageError::DuplicatedTags.into());
+        }
+        let id = self.0.clone();
 
-    //     todo!()
-    // }
+        todo!()
+    }
 
     sm_watch!(2);
     sm_watch!(3);
