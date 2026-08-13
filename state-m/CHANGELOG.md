@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.19 - 2026-08-13
+#### Bug Fixes
+- added method keys() - (a7d03b2) - wangjirong
+
+- - -
+
 ## state-m-0.8.18 - 2026-08-13
 #### Bug Fixes
 - update - (c0f67c7) - wangjirong
