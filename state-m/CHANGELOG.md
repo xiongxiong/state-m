@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.20 - 2026-08-14
+#### Bug Fixes
+- added method merge_same - (0001b11) - wangjirong
+- changed sm_merge_reader - (1c1da57) - 王继荣
+#### Miscellaneous Chores
+- update - (2db171e) - 王继荣
+
+- - -
+
 ## state-m-0.8.19 - 2026-08-13
 #### Bug Fixes
 - added method keys() - (a7d03b2) - wangjirong

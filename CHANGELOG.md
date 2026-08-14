@@ -2,6 +2,16 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.5.21 - 2026-08-14
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.14
+- state-m bumped to state-m-0.8.20
+### Global changes
+#### Bug Fixes
+- added method merge_same - (0001b11) - wangjirong
+
+- - -
+
 ## 0.5.20 - 1970-01-01
 ### Package updates
 - state-m bumped to state-m-0.8.19

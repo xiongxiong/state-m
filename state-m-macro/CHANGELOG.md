@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.14 - 2026-08-14
+#### Bug Fixes
+- added method merge_same - (0001b11) - wangjirong
+- changed sm_merge_reader - (1c1da57) - 王继荣
+
+- - -
+
 ## state-m-macro-0.2.13 - 2026-08-13
 #### Bug Fixes
 - update - (0226227) - wangjirong
