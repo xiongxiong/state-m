@@ -9,46 +9,52 @@ impl KvAssoc for MyId {
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
-pub enum Tag<Id>
+pub enum Tag<IdI, IdO>
 where
-    Id: AsKey + KvAssoc,
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
 {
     #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[state_tag(assoc = String, label = format!("outer_{}", self.0))]
-    Outer(usize),
-    #[state_tag(assoc = CustomType)]
+    #[state_tag(assoc = String, label = format!("outer_{}_{}", self.0, self.1))]
+    Outer(usize, usize),
+    #[state_tag(assoc = MyCusTyp)]
     OuterEx1,
     #[state_tag(assoc = usize)]
-    OuterEx2,
-    #[state_tag(assoc = Id::Value, label = format!("route_{:?}", self.0))]
-    Route(Id),
+    OuterEx2(OuterEx2),
+    #[state_tag(assoc = IdI::Value, label = format!("route_i_{:?}", self.0))]
+    RouteI(IdI),
+    #[state_tag(assoc = IdO::Value, label = format!("route_o_{:?}", self.0))]
+    RouteO(IdO),
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Unit<Id>
+pub struct Unit<IdI, IdO>
 where
-    Id: AsKey + KvAssoc,
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
 {
-    state_machine: StateMachine<Tag<Id>>,
+    state_machine: StateMachine<Tag<IdI, IdO>>,
 }
 
-impl<Id> Unit<Id>
+impl<IdI, IdO> Unit<IdI, IdO>
 where
-    Id: AsKey + KvAssoc,
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
 {
     pub fn new(id: &str) -> Self {
         Self {
-            state_machine: StateMachine::<Tag<Id>>::new(id),
+            state_machine: StateMachine::<Tag<IdI, IdO>>::new(id),
         }
     }
 }
 
-impl<Id> HasStateMachine for Unit<Id>
+impl<IdI, IdO> HasStateMachine for Unit<IdI, IdO>
 where
-    Id: AsKey + KvAssoc,
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
 {
-    type K = Tag<Id>;
+    type K = Tag<IdI, IdO>;
 
     fn state_machine(&self) -> &StateMachine<Self::K> {
         &self.state_machine
@@ -56,12 +62,18 @@ where
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct CustomType(usize);
+pub struct MyCusTyp(usize);
 
-impl From<String> for CustomType {
+impl From<String> for MyCusTyp {
     fn from(value: String) -> Self {
         Self(value.len())
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct OuterEx2 {
+    pub name: String,
+    pub age: u8,
 }
 
 #[cfg(test)]
@@ -86,7 +98,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_debug_state() -> Result<()> {
-        let sm: Arc<StateMachine<Tag<MyId>>> = Default::default();
+        let sm: Arc<StateMachine<Tag<MyId, MyId>>> = Default::default();
         assert_eq!("", &format!("{sm:?}"));
         Ok(())
     }
@@ -94,7 +106,7 @@ mod tests {
     #[tokio::test]
     async fn test_normal() -> Result<()> {
         init_tracing();
-        let unit = Unit::<MyId>::new("X");
+        let unit = Unit::<MyId, MyId>::new("X");
         unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
@@ -109,11 +121,11 @@ mod tests {
     #[tokio::test]
     async fn test_wait() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
@@ -124,15 +136,18 @@ mod tests {
     #[tokio::test]
     async fn test_extend() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
             .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.derive())
             .await?;
         unit_b
             .add_reader(
-                TagOuterEx2,
+                TagOuterEx2(OuterEx2 {
+                    name: "wang".into(),
+                    age: 18,
+                }),
                 unit_a.reader(TagInner(0))?.derive_by(|s| s.len()),
             )
             .await?;
@@ -145,15 +160,15 @@ mod tests {
     #[tokio::test]
     async fn test_delete() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_a.wait_alter(TagInner(0), "A".into()).await?;
         unit_a.wait_alter(TagInner(0), "B".into()).await?;
-        unit_b.del_handle(&TagOuter(0))?;
+        unit_b.del_handle(&TagOuter(0, 0))?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;
@@ -163,18 +178,18 @@ mod tests {
     #[tokio::test]
     async fn test_watch() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_b
-            .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
+            .add_reader(TagOuter(0, 1), unit_a.reader(TagInner(1))?)
             .await?;
         unit_b
-            .watch_2(TagOuter(0), TagOuter(1), |sc_0, sc_1, tag| {
+            .watch_2(TagOuter(0, 0), TagOuter(0, 1), |sc_0, sc_1, tag| {
                 Box::pin(async move {
                     tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}, tag -- {tag:?}");
                     return Err(anyhow::anyhow!("error happened"));
@@ -187,7 +202,7 @@ mod tests {
         }
         tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
         tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
-        unit_b.del_handle(&TagOuter(0))?;
+        unit_b.del_handle(&TagOuter(0, 0))?;
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         unit_a.wait_alter(TagInner(0), "D".into()).await?;
@@ -197,22 +212,22 @@ mod tests {
     #[tokio::test]
     async fn test_merge() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         unit_b
-            .add_reader(TagOuter(1), unit_a.reader(TagInner(1))?)
+            .add_reader(TagOuter(0, 1), unit_a.reader(TagInner(1))?)
             .await?;
         let reader_2 = unit_b
-            .merge_reader_2(TagOuter(0), TagOuter(1), 10, |a, b| {
+            .merge_reader_2(TagOuter(0, 0), TagOuter(0, 1), 10, |a, b| {
                 format!("merged [{}] and [{}]", a, b)
             })
             .await?;
-        unit_b.add_reader(TagOuter(2), reader_2).await?;
+        unit_b.add_reader(TagOuter(0, 2), reader_2).await?;
         for i in 0..10 {
             unit_a.alter(TagInner(0), format!("A_{i}")).await?;
             unit_a.alter(TagInner(1), format!("B_{i}")).await?;
@@ -226,17 +241,25 @@ mod tests {
     #[tokio::test]
     async fn test_split() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         let (reader_1, reader_2) = unit_b
-            .split_reader_2(TagOuter(0), |ref v| (format!("NEW_{}", v), v.len()))
+            .split_reader_2(TagOuter(0, 0), |ref v| (format!("NEW_{}", v), v.len()))
             .await?;
-        unit_b.add_reader(TagOuter(1), reader_1).await?;
-        unit_b.add_reader(TagOuterEx2, reader_2).await?;
+        unit_b.add_reader(TagOuter(0, 1), reader_1).await?;
+        unit_b
+            .add_reader(
+                TagOuterEx2(OuterEx2 {
+                    name: "wang".into(),
+                    age: 18,
+                }),
+                reader_2,
+            )
+            .await?;
         for i in 0..10 {
             unit_a.alter(TagInner(0), format!("A_{i}")).await?;
         }
@@ -251,18 +274,18 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let door = Arc::new(Door::new());
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(door.clone())]))
             .await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch(TagOuter(0), move |_, _| {
+            .watch(TagOuter(0, 0), move |_, _| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);
@@ -304,18 +327,18 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let barriers = Arc::new(Barriers::new());
-        let unit_a = Unit::<MyId>::new("A");
+        let unit_a = Unit::<MyId, MyId>::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(barriers.clone())]))
             .await?;
-        let unit_b = Unit::<MyId>::new("B");
+        let unit_b = Unit::<MyId, MyId>::new("B");
         unit_b
-            .add_reader(TagOuter(0), unit_a.reader(TagInner(0))?)
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch(TagOuter(0), move |_, _| {
+            .watch(TagOuter(0, 0), move |_, _| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);

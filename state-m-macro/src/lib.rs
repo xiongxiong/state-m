@@ -458,7 +458,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
-                    impl #q_t_g_args state_m::KvAssoc for #t_name #q_t_g_args #q_t_where {
+                    impl #q_t_g_args KvAssoc for #t_name #q_t_g_args #q_t_where {
                         type Value = #typ;
                     }
                 });
@@ -511,7 +511,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     },
                 };
                 let q_is_tag = quote! {
-                    impl #q_i_g_args state_m::KeyIsTag<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
+                    impl #q_i_g_args KeyIsTag<#t_name #q_t_g_args> for #i_ident #q_i_g_args #i_where {
                         fn predicate(&self) -> bool {
                             match self {
                                 #q_is_tag_pat => true,
@@ -534,7 +534,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
                 #q_attrs #i_vis struct #i_ident #q_i_g_args #fields #semi_colon
-                impl #q_i_g_args state_m::KvAssoc for #i_ident #q_i_g_args #i_where {
+                impl #q_i_g_args KvAssoc for #i_ident #q_i_g_args #i_where {
                     type Value = #typ;
                 }
             });
@@ -552,7 +552,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 0, "Input number should larger than zero.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -713,7 +713,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 0, "Input number should larger than zero.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -776,7 +776,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 0, "Input number should larger than zero.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -851,7 +851,7 @@ pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than one.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1016,7 +1016,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than zero.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1070,7 +1070,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than zero.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1135,7 +1135,7 @@ pub fn sm_split_reader(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than one.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
@@ -1253,7 +1253,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than one.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
@@ -1296,7 +1296,7 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
-        .expect("Input can only be a number");
+        .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should larger than one.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
@@ -1333,4 +1333,290 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
                 self.state_machine().#method_name(tag, func).await
             }
     }.into()
+}
+
+#[proc_macro]
+pub fn sm_merge_same(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    let method_name_str = if n > 1 {
+        format!("merge_same_{n}")
+    } else {
+        format!("merge_same")
+    };
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str>,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, #typ::Value)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let all_tag_typ_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{i}");
+            quote! {
+                std::any::type_name::<#typ>().into()
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let decl_vars = (0..n).map(|i| {
+        let typ = format_ident!("T{i}");
+        let tags = format_ident!("tags_{i}");
+        let handles = format_ident!("handles_{i}");
+        let stream_map = format_ident!("stream_map_{i}");
+        quote! {
+            let #tags = self
+                .1
+                .iter()
+                .filter(|v| KeyIsTag::<#typ>::predicate(v.key()))
+                .map(|v| #typ::try_from(v.key().clone()).unwrap())
+                .collect::<Vec<_>>();
+            if #tags.is_empty() {
+                return Err(MergeSameError::NoTagOfTyp(
+                    std::any::type_name::<T0>().into(),
+                ));
+            }
+            let #handles: Vec<_> = #tags
+                .iter()
+                .map(|t| self.get_handle(t.clone()).unwrap())
+                .collect();
+            let mut #stream_map: StreamMap<usize, _> = StreamMap::new();
+            for (j, h) in #handles.iter().enumerate() {
+                #stream_map.insert(j, BroadcastStream::new(h.fanout().0));
+            }
+        }
+    });
+    let states_names = itertools::intersperse(
+        (0..n).map(|i| {
+            let states = format_ident!("states_{i}");
+            quote! {#states}
+        }),
+        quote! {,},
+    )
+    .collect::<Vec<_>>();
+    let decl_get_all_states = {
+        let decl_states = (0..n).map(|i| {
+            let states = format_ident!("states_{i}");
+            let tags = format_ident!("tags_{i}");
+            let handles = format_ident!("handles_{i}");
+            quote! {
+                let #states = #tags
+                    .iter()
+                    .zip(#handles.iter())
+                    .map(|(t, h)| (t.clone(), h.value()))
+                    .collect::<Vec<_>>();
+            }
+        });
+        quote! {
+            let get_all_states = || {
+                #(#decl_states)*
+                (#(#states_names)*)
+            };
+        }
+    };
+    let sel_branchs = (0..n).map(|i| {
+        let stream_map = format_ident!("stream_map_{i}");
+        quote! {
+            r = #stream_map.next() => {
+                match r {
+                    Some((j, Ok(_))) => {
+                        let (#(#states_names)*) = get_all_states();
+                        let value = func(#(#states_names)*);
+                        let event = StateEvent {
+                            state: State {
+                                value,
+                                timestamp: chrono::Utc::now(),
+                            },
+                            is_touch: false,
+                            close_handle: None,
+                        };
+                        if tx_c.send(event).is_err() {
+                            break;
+                        }
+                    }
+                    _ => break
+                }
+            }
+        }
+    });
+    quote! {
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            S: AsState,
+            F: 'static + Fn(#(#func_arg_typs)*) -> S + Send,
+        {
+            let all_tag_typ_names: Vec<String> = vec![#(#all_tag_typ_names)*];
+            if !all_tag_typ_names.iter().duplicates().collect::<Vec<_>>().is_empty() {
+                return Err(MergeSameError::DuplicatedTagTyps.into());
+            }
+            #(#decl_vars)*
+            #decl_get_all_states
+            let id = self.0.clone();
+            let (tx, _) = tokio::sync::broadcast::channel(capacity);
+            let tx_c = tx.clone();
+            tracing::info!("{id} | {} -- start", #method_name_str);
+            loop {
+                tokio::select! {
+                    #(#sel_branchs)*
+                }
+            }
+            tracing::info!("{id} | {} -- close", #method_name_str);
+            Ok(Reader::new(capacity, tx))
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn merge_same_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    let method_name_str = if n > 1 {
+        format!("merge_same_{n}")
+    } else {
+        format!("merge_same")
+    };
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Self::K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str>,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, #typ::Value)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<Self::K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            S: AsState,
+            F: 'static + Fn(#(#func_arg_typs)*) -> S + Send;
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn merge_same_impl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    let method_name_str = if n > 1 {
+        format!("merge_same_{n}")
+    } else {
+        format!("merge_same")
+    };
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Self::K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str>,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, #typ::Value)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<Self::K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            S: AsState,
+            F: 'static + Fn(#(#func_arg_typs)*) -> S + Send
+        {
+            self.state_machine().#method_name(capacity, func).await
+        }
+    }
+    .into()
 }

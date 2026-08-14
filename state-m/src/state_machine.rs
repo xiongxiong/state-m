@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
+use tokio_stream::{StreamExt, StreamMap, wrappers::BroadcastStream};
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
@@ -337,13 +338,14 @@ where
         Ok(())
     }
 
-    pub async fn merge_same<T0, F, S>(
+    pub async fn merge_same<T, S, F>(
         &self,
+        capacity: usize,
         func: F,
-    ) -> Result<Reader<T0::Value>, MergeSameError<K>>
+    ) -> Result<Reader<S>, MergeSameError<K>>
     where
-        K: KeyIsTag<T0>,
-        T0: 'static
+        K: KeyIsTag<T>,
+        T: 'static
             + Clone
             + Debug
             + Eq
@@ -354,29 +356,67 @@ where
             + Send
             + Sync
             + TryFrom<K, Error = &'static str>,
-        T0::Value: AsState,
-        F: 'static + Fn(Vec<(T0, T0::Value)>) -> S + Send,
+        T::Value: AsState,
+        S: AsState,
+        F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send,
     {
-        let mut all_keys: Vec<K> = Vec::new();
-        let tags_0 = self
+        let tags = self
             .1
             .iter()
-            .filter(|v| KeyIsTag::predicate(v.key()))
-            .map(|v| T0::try_from(v.key().clone()).unwrap())
+            .filter(|v| KeyIsTag::<T>::predicate(v.key()))
+            .map(|v| T::try_from(v.key().clone()).unwrap())
             .collect::<Vec<_>>();
-        if tags_0.is_empty() {
+        if tags.is_empty() {
             return Err(MergeSameError::NoTagOfTyp(
-                std::any::type_name::<T0>().into(),
+                std::any::type_name::<T>().into(),
             ));
         }
-        let mut keys_0: Vec<K> = tags_0.iter().map(|t| t.clone().into()).collect();
-        all_keys.append(&mut keys_0);
-        if !all_keys.iter().duplicates().collect::<Vec<_>>().is_empty() {
-            return Err(TagUsageError::DuplicatedTags.into());
+        let handles: Vec<_> = tags
+            .iter()
+            .map(|t| self.get_handle(t.clone()).unwrap())
+            .collect();
+        let mut stream_map: StreamMap<usize, _> = StreamMap::new();
+        for (i, h) in handles.iter().enumerate() {
+            stream_map.insert(i, BroadcastStream::new(h.fanout().0));
         }
+        let get_all_states = || {
+            let states = tags
+                .iter()
+                .zip(handles.iter())
+                .map(|(t, h)| (t.clone(), h.value()))
+                .collect::<Vec<_>>();
+            states
+        };
         let id = self.0.clone();
-
-        todo!()
+        let (tx, _) = tokio::sync::broadcast::channel(capacity);
+        let tx_c = tx.clone();
+        tracing::info!("{id} | merge_same -- start");
+        loop {
+            tokio::select! {
+                r = stream_map.next() => {
+                    match r {
+                        Some((_, Ok(_))) => {
+                            let states = get_all_states();
+                            let value = func(states);
+                            let event = StateEvent {
+                                state: State {
+                                    value,
+                                    timestamp: chrono::Utc::now(),
+                                },
+                                is_touch: false,
+                                close_handle: None,
+                            };
+                            if tx_c.send(event).is_err() {
+                                break;
+                            }
+                        }
+                        _ => break
+                    }
+                }
+            }
+        }
+        tracing::info!("{id} | merge_same -- close");
+        Ok(Reader::new(capacity, tx))
     }
 
     sm_watch!(2);
@@ -408,6 +448,16 @@ where
     sm_split_reader!(8);
     sm_split_reader!(9);
     sm_split_reader!(10);
+
+    sm_merge_same!(2);
+    sm_merge_same!(3);
+    sm_merge_same!(4);
+    sm_merge_same!(5);
+    sm_merge_same!(6);
+    sm_merge_same!(7);
+    sm_merge_same!(8);
+    sm_merge_same!(9);
+    sm_merge_same!(10);
 }
 
 /// State change result.
@@ -648,6 +698,31 @@ pub trait UseStateMachine: HasStateMachine {
             + Fn(StateChange<T>, Self::K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
+    /// Merge states of tags in the dimension of tag type.
+    /// * `capacity` - the capacity of new state channel.
+    /// * `func` - how to merge states of tags of the same tag type.
+    async fn merge_same<T, S, F>(
+        &self,
+        capacity: usize,
+        func: F,
+    ) -> Result<Reader<S>, MergeSameError<Self::K>>
+    where
+        Self::K: KeyIsTag<T>,
+        T: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<Self::K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<Self::K, Error = &'static str>,
+        T::Value: AsState,
+        S: AsState,
+        F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send;
+
     watch_decl!(2);
     watch_decl!(3);
     watch_decl!(4);
@@ -677,6 +752,16 @@ pub trait UseStateMachine: HasStateMachine {
     split_reader_decl!(8);
     split_reader_decl!(9);
     split_reader_decl!(10);
+
+    merge_same_decl!(2);
+    merge_same_decl!(3);
+    merge_same_decl!(4);
+    merge_same_decl!(5);
+    merge_same_decl!(6);
+    merge_same_decl!(7);
+    merge_same_decl!(8);
+    merge_same_decl!(9);
+    merge_same_decl!(10);
 }
 
 #[async_trait]
@@ -887,6 +972,31 @@ where
         self.state_machine().watch(tag, func).await
     }
 
+    async fn merge_same<T, S, F>(
+        &self,
+        capacity: usize,
+        func: F,
+    ) -> Result<Reader<S>, MergeSameError<Self::K>>
+    where
+        Self::K: KeyIsTag<T>,
+        T: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<Self::K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<Self::K, Error = &'static str>,
+        T::Value: AsState,
+        S: AsState,
+        F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send,
+    {
+        self.state_machine().merge_same(capacity, func).await
+    }
+
     watch_impl!(2);
     watch_impl!(3);
     watch_impl!(4);
@@ -916,6 +1026,16 @@ where
     split_reader_impl!(8);
     split_reader_impl!(9);
     split_reader_impl!(10);
+
+    merge_same_impl!(2);
+    merge_same_impl!(3);
+    merge_same_impl!(4);
+    merge_same_impl!(5);
+    merge_same_impl!(6);
+    merge_same_impl!(7);
+    merge_same_impl!(8);
+    merge_same_impl!(9);
+    merge_same_impl!(10);
 }
 
 /// StateChangeError
@@ -972,6 +1092,8 @@ pub enum MergeSameError<K>
 where
     K: AsKey,
 {
+    #[error("Should not use duplicate tag types.")]
+    DuplicatedTagTyps,
     #[error("There is no tag of type '{_0}'")]
     NoTagOfTyp(String),
     #[error(transparent)]
