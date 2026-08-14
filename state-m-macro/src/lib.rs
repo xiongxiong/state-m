@@ -286,7 +286,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             ..*fields
                         };
                         let q = quote! {
-                            #[derive(Clone)]
+                            #[derive(Clone, Eq, Hash, PartialEq)]
                             #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_where #fields_named_new
                         };
                         (q, q_t_g_args, q_t_where)
@@ -309,14 +309,14 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             ..*fields
                         };
                         let q = quote! {
-                            #[derive(Clone)]
+                            #[derive(Clone, Eq, Hash, PartialEq)]
                             #q_attrs #i_vis struct #t_name #q_t_g_args #fields_unnamed_new #q_t_where;
                         };
                         (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unit => {
                         let q = quote! {
-                            #[derive(Clone, Default)]
+                            #[derive(Clone, Default, Eq, Hash, PartialEq)]
                             #q_attrs #i_vis struct #t_name;
                         };
                         (q, quote! {}, quote! {})
@@ -1441,7 +1441,7 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
             }
         });
         quote! {
-            let get_all_states = || {
+            let get_all_states = move || {
                 #(#decl_states)*
                 (#(#states_names)*)
             };
@@ -1489,13 +1489,15 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
             let id = self.0.clone();
             let (tx, _) = tokio::sync::broadcast::channel(capacity);
             let tx_c = tx.clone();
-            tracing::info!("{id} | {} -- start", #method_name_str);
-            loop {
-                tokio::select! {
-                    #(#sel_branchs)*
+            tokio::spawn(async move {
+                tracing::info!("{id} | {} -- start", #method_name_str);
+                loop {
+                    tokio::select! {
+                        #(#sel_branchs)*
+                    }
                 }
-            }
-            tracing::info!("{id} | {} -- close", #method_name_str);
+                tracing::info!("{id} | {} -- close", #method_name_str);
+            });
             Ok(Reader::new(capacity, tx))
         }
     }

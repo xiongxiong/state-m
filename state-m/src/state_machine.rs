@@ -379,7 +379,7 @@ where
         for (i, h) in handles.iter().enumerate() {
             stream_map.insert(i, BroadcastStream::new(h.fanout().0));
         }
-        let get_all_states = || {
+        let get_all_states = move || {
             let states = tags
                 .iter()
                 .zip(handles.iter())
@@ -390,32 +390,34 @@ where
         let id = self.0.clone();
         let (tx, _) = tokio::sync::broadcast::channel(capacity);
         let tx_c = tx.clone();
-        tracing::info!("{id} | merge_same -- start");
-        loop {
-            tokio::select! {
-                r = stream_map.next() => {
-                    match r {
-                        Some((_, Ok(_))) => {
-                            let states = get_all_states();
-                            let value = func(states);
-                            let event = StateEvent {
-                                state: State {
-                                    value,
-                                    timestamp: chrono::Utc::now(),
-                                },
-                                is_touch: false,
-                                close_handle: None,
-                            };
-                            if tx_c.send(event).is_err() {
-                                break;
+        tokio::spawn(async move {
+            tracing::info!("{id} | merge_same -- start");
+            loop {
+                tokio::select! {
+                    r = stream_map.next() => {
+                        match r {
+                            Some((_, Ok(_))) => {
+                                let states = get_all_states();
+                                let value = func(states);
+                                let event = StateEvent {
+                                    state: State {
+                                        value,
+                                        timestamp: chrono::Utc::now(),
+                                    },
+                                    is_touch: false,
+                                    close_handle: None,
+                                };
+                                if tx_c.send(event).is_err() {
+                                    break;
+                                }
                             }
+                            _ => break
                         }
-                        _ => break
                     }
                 }
             }
-        }
-        tracing::info!("{id} | merge_same -- close");
+            tracing::info!("{id} | merge_same -- close");
+        });
         Ok(Reader::new(capacity, tx))
     }
 

@@ -270,6 +270,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_merge_same() -> Result<()> {
+        init_tracing();
+        let unit_a = Unit::<MyId, MyId>::new("A");
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
+        let reader = unit_a
+            .merge_same::<TagInner, _, _>(10, |states| {
+                states
+                    .iter()
+                    .fold("".into(), |init, item| format!("{init}, {}", item.1))
+            })
+            .await?;
+        unit_a.add_reader(TagOuter(0, 0), reader).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_stw_by_door() -> Result<()> {
         init_tracing();
         const COUNT: usize = 1000;
