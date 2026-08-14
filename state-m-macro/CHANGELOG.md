@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.15 - 2026-08-14
+#### Bug Fixes
+- added tests for merge_same - (573d6bf) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.14 - 2026-08-14
 #### Bug Fixes
 - added method merge_same - (0001b11) - wangjirong
