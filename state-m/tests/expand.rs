@@ -10,6 +10,8 @@
 //     A: AsKey + KvAssoc,
 //     B: AsKey + KvAssoc,
 // {
+//     #[state_tag(generics = <A, B>, assoc = A::Value, label = format!("papa"))]
+//     PaPa,
 //     #[state_tag(assoc = A::Value, label = format!("hello_{:?}", self.0))]
 //     Hello(A),
 //     #[state_tag(assoc = B::Value, label = format!("world_{:?}", self.0))]

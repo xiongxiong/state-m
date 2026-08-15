@@ -26,6 +26,10 @@ where
     RouteI(IdI),
     #[state_tag(assoc = IdO::Value, label = format!("route_o_{:?}", self.0))]
     RouteO(IdO),
+    #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_i"))]
+    UniRouteI,
+    #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_o"))]
+    UniRouteO,
 }
 
 #[derive(Clone, Debug, Default)]

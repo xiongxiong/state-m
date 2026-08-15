@@ -6,18 +6,20 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, DeriveInput, Expr, Field, FieldsNamed, FieldsUnnamed, Ident, Index, LitInt, Type,
-    Visibility,
+    Attribute, DeriveInput, Expr, Field, FieldsNamed, FieldsUnnamed, Generics, Ident, Index,
+    LitInt, Type, Visibility,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
     token::Comma,
 };
 
-const STATE_TAG_ARGS: &str = "#[state_tag(assoc = AssocType, label = \"AssocLabel\")]";
+const STATE_TAG_ARGS: &str =
+    "#[state_tag(generics = <A>, assoc = AssocType, label = \"AssocLabel\")]";
 
 #[derive(Clone, Debug)]
 struct StateTagArgs {
+    pub generics: AttributePropertyGenerics,
     pub assoc: AttributePropertyAssoc,
     pub label: AttributePropertyLabel,
 }
@@ -41,8 +43,9 @@ impl Parse for StateTagArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let error = |ident: &syn::Ident| -> syn::Error {
             let known = format!(
-                "Known entries of attribute {} are: {}, {}[optional].",
+                "Known entries of attribute {} are: {}[optional], {}, {}[optional].",
                 StateTagArgs::KEYWORD,
+                AttributePropertyGenericsMarker::KEYWORD,
                 AttributePropertyAssocMarker::KEYWORD,
                 AttributePropertyLabelMarker::KEYWORD,
             );
@@ -55,6 +58,7 @@ impl Parse for StateTagArgs {
                 qt! { #ident }
             )
         };
+        let mut opt_generics: Option<AttributePropertyGenerics> = None;
         let mut opt_assoc: Option<AttributePropertyAssoc> = None;
         let mut opt_label: Option<AttributePropertyLabel> = None;
         while !input.is_empty() {
@@ -62,6 +66,9 @@ impl Parse for StateTagArgs {
             if lookahead.peek(syn::Ident) {
                 let ident: syn::Ident = input.parse()?;
                 match ident.to_string().as_str() {
+                    AttributePropertyGenerics::KEYWORD => {
+                        opt_generics = Some(AttributePropertyGenerics::parse(input)?);
+                    }
                     AttributePropertyAssoc::KEYWORD => {
                         opt_assoc = Some(AttributePropertyAssoc::parse(input)?);
                     }
@@ -78,16 +85,27 @@ impl Parse for StateTagArgs {
                 input.parse::<syn::Token![,]>()?;
             }
         }
-        match opt_assoc {
-            Some(assoc) => Ok(Self {
-                assoc,
-                label: opt_label.unwrap_or_default(),
-            }),
-            None => Err(syn_err!(
+        if opt_assoc.is_none() {
+            return Err(syn_err!(
                 "Attribute property '{}' is necessary.",
                 AttributePropertyAssocMarker::KEYWORD
-            )),
+            ));
         }
+        Ok(Self {
+            generics: opt_generics.unwrap_or_default(),
+            assoc: opt_assoc.unwrap(),
+            label: opt_label.unwrap_or_default(),
+        })
+    }
+}
+
+impl<IntoT> Assign<AttributePropertyGenerics, IntoT> for StateTagArgs
+where
+    IntoT: Into<AttributePropertyGenerics>,
+{
+    #[inline(always)]
+    fn assign(&mut self, component: IntoT) {
+        self.generics = component.into()
     }
 }
 
@@ -109,6 +127,16 @@ where
     fn assign(&mut self, component: IntoT) {
         self.label = component.into()
     }
+}
+
+type AttributePropertyGenerics =
+    AttributePropertyOptionalSyn<Generics, AttributePropertyGenericsMarker>;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct AttributePropertyGenericsMarker;
+
+impl AttributePropertyComponent for AttributePropertyGenericsMarker {
+    const KEYWORD: &'static str = "generics";
 }
 
 type AttributePropertyAssoc = AttributePropertySyn<Type, AttributePropertyAssocMarker>;
@@ -204,9 +232,9 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             .map(|v| v.unwrap())
             .collect::<Vec<_>>()
     };
-    let get_q_t_g_args = |fields: &Punctuated<Field, Comma>| {
+    let get_q_t_g_args = |idents: &Vec<Ident>| {
         let q_idents = itertools::intersperse(
-            get_t_g_idents(fields)
+            idents
                 .iter()
                 .filter(|v| i_g_idents.contains(v))
                 .map(|v| quote! {#v})
@@ -220,48 +248,46 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             quote! {}
         }
     };
-    let get_q_t_where = |items: &Punctuated<Field, Comma>| {
-        let t_g_idents = get_t_g_idents(items);
-        match &i_gene.where_clause {
-            Some(clause) => {
-                let q_pres = itertools::intersperse(
-                    clause
-                        .predicates
-                        .iter()
-                        .filter(|v| match v {
-                            syn::WherePredicate::Type(predicate_type) => {
-                                match &predicate_type.bounded_ty {
-                                    Type::Path(type_path) => type_path
-                                        .path
-                                        .segments
-                                        .last()
-                                        .map(|s| t_g_idents.contains(&s.ident))
-                                        .unwrap_or_default(),
-                                    _ => false,
-                                }
+    let get_q_t_where = |idents: &Vec<Ident>| match &i_gene.where_clause {
+        Some(clause) => {
+            let q_pres = itertools::intersperse(
+                clause
+                    .predicates
+                    .iter()
+                    .filter(|v| match v {
+                        syn::WherePredicate::Type(predicate_type) => {
+                            match &predicate_type.bounded_ty {
+                                Type::Path(type_path) => type_path
+                                    .path
+                                    .segments
+                                    .last()
+                                    .map(|s| idents.contains(&s.ident))
+                                    .unwrap_or_default(),
+                                _ => false,
                             }
-                            _ => false,
-                        })
-                        .cloned()
-                        .map(|v| quote! { #v }),
-                    quote! {,},
-                )
-                .collect::<Vec<_>>();
-                if q_pres.len() > 0 {
-                    quote! {
-                        where #(#q_pres)*
-                    }
-                } else {
-                    quote! {}
+                        }
+                        _ => false,
+                    })
+                    .cloned()
+                    .map(|v| quote! { #v }),
+                quote! {,},
+            )
+            .collect::<Vec<_>>();
+            if q_pres.len() > 0 {
+                quote! {
+                    where #(#q_pres)*
                 }
+            } else {
+                quote! {}
             }
-            None => quote! {},
         }
+        None => quote! {},
     };
     let mut quotes: Vec<_> = Vec::new();
     match input.data {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
+                let args = state_tag_args(&item.attrs);
                 let q_attrs = q_attrs_except(&item.attrs, vec![StateTagArgs::KEYWORD]);
                 let v_ident = &item.ident;
                 let v_fields = &item.fields;
@@ -269,8 +295,12 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let t_name_str = format!("{}{}", i_ident, v_ident);
                 let (q, q_t_g_args, q_t_where) = match v_fields {
                     syn::Fields::Named(fields) => {
-                        let q_t_g_args = get_q_t_g_args(&fields.named);
-                        let q_t_where = get_q_t_where(&fields.named);
+                        if args.generics.is_some() {
+                            panic!("attribute [generics] can only be used on unit enum.")
+                        }
+                        let t_g_idents = get_t_g_idents(&fields.named);
+                        let q_t_g_args = get_q_t_g_args(&t_g_idents);
+                        let q_t_where = get_q_t_where(&t_g_idents);
                         let fields_named_new = FieldsNamed {
                             named: fields
                                 .named
@@ -292,8 +322,12 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unnamed(fields) => {
-                        let q_t_g_args = get_q_t_g_args(&fields.unnamed);
-                        let q_t_where = get_q_t_where(&fields.unnamed);
+                        if args.generics.is_some() {
+                            panic!("attribute [generics] can only be used on unit enum.")
+                        }
+                        let t_g_idents = get_t_g_idents(&fields.unnamed);
+                        let q_t_g_args = get_q_t_g_args(&t_g_idents);
+                        let q_t_where = get_q_t_where(&t_g_idents);
                         let fields_unnamed_new = FieldsUnnamed {
                             unnamed: fields
                                 .unnamed
@@ -315,11 +349,66 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unit => {
-                        let q = quote! {
-                            #[derive(Clone, Default, Eq, Hash, PartialEq)]
-                            #q_attrs #i_vis struct #t_name;
+                        let (t_g_idents, q_t_g_args, q_t_where, q_t_fields) = {
+                            match args.generics.clone().internal() {
+                                Some(g) => {
+                                    let t_g_idents: Vec<_> = g
+                                        .params
+                                        .iter()
+                                        .map(|p| match p {
+                                            syn::GenericParam::Type(type_param) => {
+                                                Some(type_param.ident.clone())
+                                            }
+                                            _ => None,
+                                        })
+                                        .filter(|v| v.is_some())
+                                        .map(|v| v.unwrap())
+                                        .collect();
+                                    let g_args = itertools::intersperse(
+                                        t_g_idents.iter().map(|v| quote! { #v }),
+                                        quote! {,},
+                                    );
+                                    let fields = itertools::intersperse(
+                                        t_g_idents
+                                            .iter()
+                                            .map(|v| quote! { std::marker::PhantomData<#v> }),
+                                        quote! {,},
+                                    );
+                                    (
+                                        t_g_idents.clone(),
+                                        quote! { <#(#g_args)*> },
+                                        get_q_t_where(&t_g_idents),
+                                        quote! { (#(#fields)*) },
+                                    )
+                                }
+                                None => (vec![], quote! {}, quote! {}, quote! {}),
+                            }
                         };
-                        (q, quote! {}, quote! {})
+                        let q = {
+                            if t_g_idents.is_empty() {
+                                quote! {
+                                    #[derive(Clone, Default, Eq, Hash, PartialEq)]
+                                    #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_fields #q_t_where;
+                                }
+                            } else {
+                                let fields = itertools::intersperse(
+                                    t_g_idents.iter().map(|_| quote! { Default::default() }),
+                                    quote! {,},
+                                )
+                                .collect::<Vec<_>>();
+                                quote! {
+                                    #[derive(Clone, Eq, Hash, PartialEq)]
+                                    #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_fields #q_t_where;
+
+                                    impl #q_t_g_args std::default::Default for #t_name #q_t_g_args #q_t_where {
+                                        fn default() -> Self {
+                                            Self(#(#fields)*)
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                        (q, q_t_g_args, q_t_where)
                     }
                 };
                 quotes.push(q);
@@ -331,7 +420,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             fields.named.iter().map(|field| {
                                 let ident = match field.ident {
                                     Some(ref ident) => ident.clone(),
-                                    None => panic!("field should be named"),
+                                    None => panic!("fields should be named"),
                                 };
                                 quote! {#ident: value.#ident}
                             }),
@@ -436,9 +525,17 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             #t_name(#(#q_params)*)
                         }
                     }
-                    syn::Fields::Unit => quote! {
-                        #t_name
-                    },
+                    syn::Fields::Unit => {
+                        if q_t_g_args.is_empty() {
+                            quote! {
+                                #t_name
+                            }
+                        } else {
+                            quote! {
+                                #t_name::default()
+                            }
+                        }
+                    }
                 };
                 let q_try_from = quote! {
                     impl #q_i_g_args std::convert::TryFrom<#i_ident #q_i_g_args> for #t_name #q_t_g_args #i_where {
@@ -455,7 +552,6 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 quotes.push(q_try_from);
 
                 // KvAssoc
-                let args = state_tag_args(&item.attrs);
                 let typ = args.clone().assoc.internal();
                 quotes.push(quote! {
                     impl #q_t_g_args KvAssoc for #t_name #q_t_g_args #q_t_where {
@@ -531,6 +627,9 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 None => quote! {},
             };
             let args = state_tag_args(&input.attrs);
+            if args.generics.is_some() {
+                panic!("attribute [generics] can only be used on unit enum.")
+            }
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
                 #q_attrs #i_vis struct #i_ident #q_i_g_args #fields #semi_colon
