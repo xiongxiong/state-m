@@ -17,31 +17,34 @@ The library implements convenient state distribution and management mechanisms, 
 - Define 'Tag' enum to distinguish different state handles(sources and readers), all handles must use different tag values.
 - Derive traits necessary: Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord.
 - Derive 'StateTag' trait.
-- Add 'state_tag' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine.
+- Add 'state_tag' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine, use 'generics' (optional) to associate generic types with unit enums.
 - To be state, a type should implements these traits: Clone, Debug, Default, PartialEq.
 
 ```rust
-use state_m::StateTag;
+use state_m::*;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
-pub enum Tag {
-    #[state_tag(assoc = String, label = format!("Layer_{}", self.0))]
+pub enum Tag<IdI, IdO>
+where
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
+{
+    #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
-    #[state_tag(assoc = String, label = "from outer")]
-    Outer,
-    #[state_tag(assoc = CustomType)]
+    #[state_tag(assoc = String, label = format!("outer_{}_{}", self.0, self.1))]
+    Outer(usize, usize),
+    #[state_tag(assoc = MyCusTyp)]
     OuterEx1,
     #[state_tag(assoc = usize)]
-    OuterEx2,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct CustomType(usize);
-
-impl From<String> for CustomType {
-    fn from(value: String) -> Self {
-        Self(value.len())
-    }
+    OuterEx2(OuterEx2),
+    #[state_tag(assoc = IdI::Value, label = format!("route_i_{:?}", self.0))]
+    RouteI(IdI),
+    #[state_tag(assoc = IdO::Value, label = format!("route_o_{:?}", self.0))]
+    RouteO(IdO),
+    #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_i"))]
+    UniRouteI,
+    #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_o"))]
+    UniRouteO,
 }
 ```
 
@@ -50,14 +53,22 @@ impl From<String> for CustomType {
 
 ```rust
 #[derive(Clone, Debug, Default)]
-pub struct Unit {
-    state_machine: StateMachine<Tag>,
+pub struct Unit<IdI, IdO>
+where
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
+{
+    state_machine: StateMachine<Tag<IdI, IdO>>,
 }
 
-impl Unit {
+impl<IdI, IdO> Unit<IdI, IdO>
+where
+    IdI: AsKey + KvAssoc,
+    IdO: AsKey + KvAssoc,
+{
     pub fn new(id: &str) -> Self {
         Self {
-            state_machine: StateMachine::<Tag>::new(id),
+            state_machine: StateMachine::<Tag<IdI, IdO>>::new(id),
         }
     }
 }
@@ -75,7 +86,7 @@ impl HasStateMachine for Unit {
 - Add door or barriers to support stopping the world.
 
 ```rust
-let unit = Unit::default();
+let unit = Unit::<IdI, IdO>::new("name_of_unit");
 
 // Not support stw.
 unit.add_source(TagInner(0), 10, None).await?;
@@ -106,7 +117,7 @@ let _barrier_2 = barriers.add_barrier();
 - The state type must implements these traits: Clone, Debug, Default, PartialEq.
 
 ```rust
-let unit_b = Unit::default();
+let unit_b = Unit::<IdI, IdO>::new("name_of_unit");
 unit_b.add_reader(TagOuter, unit_a.reader(TagInner(0))?).await?;
 unit_b
     .add_reader(
@@ -174,6 +185,19 @@ let reader_2 = unit_b
         timestamp: Utc::now(),
     })
     .await?;
+```
+
+- Merge group of readers into one.
+
+```rust
+let reader = unit_a
+    .merge_same::<TagInner, _, _>(10, |states| {
+        states
+            .iter()
+            .fold("".into(), |init, item| format!("{init}, {}", item.1))
+    })
+    .await?;
+unit_a.add_reader(TagOuter(0, 0), reader).await?;
 ```
 
 - Split one reader into several readers.

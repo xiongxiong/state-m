@@ -32,6 +32,21 @@ where
     UniRouteO,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MyCusTyp(usize);
+
+impl From<String> for MyCusTyp {
+    fn from(value: String) -> Self {
+        Self(value.len())
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct OuterEx2 {
+    pub name: String,
+    pub age: u8,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Unit<IdI, IdO>
 where
@@ -63,21 +78,6 @@ where
     fn state_machine(&self) -> &StateMachine<Self::K> {
         &self.state_machine
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct MyCusTyp(usize);
-
-impl From<String> for MyCusTyp {
-    fn from(value: String) -> Self {
-        Self(value.len())
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
-pub struct OuterEx2 {
-    pub name: String,
-    pub age: u8,
 }
 
 #[cfg(test)]
@@ -243,6 +243,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_merge_same() -> Result<()> {
+        init_tracing();
+        let unit_a = Unit::<MyId, MyId>::new("A");
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
+        let reader = unit_a
+            .merge_same::<TagInner, _, _>(10, |states| {
+                states
+                    .iter()
+                    .fold("".into(), |init, item| format!("{init}, {}", item.1))
+            })
+            .await?;
+        unit_a.add_reader(TagOuter(0, 0), reader).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_split() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<MyId, MyId>::new("A");
@@ -269,29 +292,6 @@ mod tests {
         }
         tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
         tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
-        unit_a.wait_alter(TagInner(0), "C".into()).await?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_merge_same() -> Result<()> {
-        init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
-        unit_a.add_source(TagInner(0), 10, None).await?;
-        unit_a.add_source(TagInner(1), 10, None).await?;
-        let reader = unit_a
-            .merge_same::<TagInner, _, _>(10, |states| {
-                states
-                    .iter()
-                    .fold("".into(), |init, item| format!("{init}, {}", item.1))
-            })
-            .await?;
-        unit_a.add_reader(TagOuter(0, 0), reader).await?;
-        for i in 0..10 {
-            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
-            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
-        }
-        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
         unit_a.wait_alter(TagInner(0), "C".into()).await?;
         Ok(())
     }
