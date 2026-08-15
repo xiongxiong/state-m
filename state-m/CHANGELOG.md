@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.22 - 2026-08-15
+#### Bug Fixes
+- added generics for unit enum - (4fc4401) - 王继荣
+
+- - -
+
 ## state-m-0.8.21 - 2026-08-14
 #### Bug Fixes
 - added tests for merge_same - (573d6bf) - wangjirong
