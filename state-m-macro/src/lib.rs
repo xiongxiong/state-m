@@ -685,7 +685,7 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ::Value>,
+                (#typ, StateChange<#typ::Value>),
             }
         })
         .collect();
@@ -724,14 +724,15 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
     let calc_all_states = |idx: usize| {
         itertools::intersperse(
             (0..n).map(|i| {
+                let tag_name = format_ident!("tag_{}", i);
                 if i != idx {
                     let handle_name = format_ident!("handle_{}", i);
                     quote! {
-                        StateChange::UnChange(#handle_name.state())
+                        (#tag_name.clone(), StateChange::UnChange(#handle_name.state()))
                     }
                 } else {
                     quote! {
-                        StateChange::Change(s_cur, s_old)
+                        (#tag_name.clone(), StateChange::Change(s_cur, s_old))
                     }
                 }
             }),
@@ -758,7 +759,7 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
                         Ok((s_cur, s_old)) => {
                             let mut states = (#(#all_states)*);
                             let (#(#all_state_names)*) = states;
-                            if let Err(e) = func(#(#all_state_names)*, #tag_name.clone().into()).await {
+                            if let Err(e) = func(#(#all_state_names)*).await {
                                 tracing::error!("{id} | {:?} | watch error -- {e:?}", #tag_name);
                             }
                         }
@@ -775,7 +776,7 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
                 #(#tag_typ_cons)*
                 F: 'static
                     + Fn(
-                        #(#fn_params_typ)* K
+                        #(#fn_params_typ)*
                     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                     + Send,
             {
@@ -849,7 +850,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ::Value>,
+                (#typ, StateChange<#typ::Value>),
             }
         })
         .collect();
@@ -860,7 +861,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
                 #(#tag_typ_cons)*
                 F: 'static
                     + Fn(
-                        #(#fn_params_typ)* Self::K
+                        #(#fn_params_typ)*
                     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                     + Send;
         }
@@ -912,7 +913,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ::Value>,
+                (#typ, StateChange<#typ::Value>),
             }
         })
         .collect();
@@ -933,7 +934,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
                 #(#tag_typ_cons)*
                 F: 'static
                     + Fn(
-                        #(#fn_params_typ)* Self::K
+                        #(#fn_params_typ)*
                     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                     + Send
             {
@@ -1575,7 +1576,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
                                 (t_i.clone(), c_i.clone())
                             }
                         }).collect::<Vec<_>>();
-                        if let Err(e) = func(#(#states_names)*, t.clone().into()).await {
+                        if let Err(e) = func(#(#states_names)*).await {
                             tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
                         }
                     }
@@ -1592,7 +1593,6 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
             F: 'static
                 + Fn(
                     #(#func_arg_typs)*,
-                    K,
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                 + Send,
         {
@@ -1676,7 +1676,6 @@ pub fn watch_group_decl(input: TokenStream) -> TokenStream {
             F: 'static
                 + Fn(
                     #(#func_arg_typs)*,
-                    Self::K,
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                 + Send;
     }
@@ -1735,7 +1734,6 @@ pub fn watch_group_impl(input: TokenStream) -> TokenStream {
             F: 'static
                 + Fn(
                     #(#func_arg_typs)*,
-                    Self::K,
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
                 + Send
         {

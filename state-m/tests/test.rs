@@ -193,9 +193,9 @@ mod tests {
             .add_reader(TagOuter(0, 1), unit_a.reader(TagInner(1))?)
             .await?;
         unit_b
-            .watch_2(TagOuter(0, 0), TagOuter(0, 1), |sc_0, sc_1, tag| {
+            .watch_2(TagOuter(0, 0), TagOuter(0, 1), |sc_0, sc_1| {
                 Box::pin(async move {
-                    tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}, tag -- {tag:?}");
+                    tracing::info!("sc_0 -- {sc_0:?}, sc_1 -- {sc_1:?}");
                     return Err(anyhow::anyhow!("error happened"));
                 })
             })
@@ -312,7 +312,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch(TagOuter(0, 0), move |_, _| {
+            .watch(TagOuter(0, 0), move |_| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);
@@ -365,7 +365,7 @@ mod tests {
         let counter = Arc::new(AtomicUsize::new(0));
         let counter_c = counter.clone();
         unit_b
-            .watch(TagOuter(0, 0), move |_, _| {
+            .watch(TagOuter(0, 0), move |_| {
                 let counter_cc = counter_c.clone();
                 Box::pin(async move {
                     counter_cc.fetch_add(1, Ordering::AcqRel);

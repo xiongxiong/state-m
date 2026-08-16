@@ -325,7 +325,9 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState,
         F: 'static
-            + Fn(StateChange<T::Value>, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                (T, StateChange<T::Value>),
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         let id = self.0.clone();
@@ -342,7 +344,7 @@ where
                     _ = token.cancelled() => break,
                     r = rx.recv() => match r {
                         Ok((s_cur, s_old)) => {
-                            if let Err(e) = func(StateChange::Change(s_cur, s_old), tag.clone().into()).await {
+                            if let Err(e) = func((tag.clone(), StateChange::Change(s_cur, s_old))).await {
                                 tracing::error!("{id} | {:?} | watch error -- {e:?}", tag);
                             }
                         }
@@ -377,7 +379,6 @@ where
         F: 'static
             + Fn(
                 Vec<(T, StateChange<T::Value>)>,
-                K,
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
@@ -427,7 +428,7 @@ where
                                         (t_i.clone(), c_i.clone())
                                     }
                                 }).collect::<Vec<_>>();
-                                if let Err(e) = func(states, t.clone().into()).await {
+                                if let Err(e) = func(states).await {
                                     tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
                                 }
                             }
@@ -818,8 +819,7 @@ pub trait UseStateMachine: HasStateMachine {
         T::Value: AsState,
         F: 'static
             + Fn(
-                StateChange<T::Value>,
-                Self::K,
+                (T, StateChange<T::Value>),
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
@@ -847,7 +847,6 @@ pub trait UseStateMachine: HasStateMachine {
         F: 'static
             + Fn(
                 Vec<(T, StateChange<T::Value>)>,
-                Self::K,
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
@@ -1143,8 +1142,7 @@ where
         T::Value: AsState,
         F: 'static
             + Fn(
-                StateChange<T::Value>,
-                Self::K,
+                (T, StateChange<T::Value>),
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
@@ -1173,7 +1171,6 @@ where
         F: 'static
             + Fn(
                 Vec<(T, StateChange<T::Value>)>,
-                Self::K,
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
