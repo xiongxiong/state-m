@@ -2,6 +2,17 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.23 - 2026-08-16
+#### Bug Fixes
+- added watch_group series - (0352441) - wangjirong
+- added watch_group - (bd5e67b) - wangjirong
+- added tags method - (dbbdb2f) - wangjirong
+- update watch - (61f6438) - wangjirong
+#### Miscellaneous Chores
+- update README - (8b558fb) - 王继荣
+
+- - -
+
 ## state-m-0.8.22 - 2026-08-15
 #### Bug Fixes
 - added generics for unit enum - (4fc4401) - 王继荣
