@@ -125,6 +125,18 @@ where
         self.1.iter().map(|v| v.key().clone()).sorted().collect()
     }
 
+    pub fn tags<T>(&self) -> Vec<T>
+    where
+        K: KeyIsTag<T>,
+        T: Into<K> + TryFrom<K, Error = &'static str>,
+    {
+        self.1
+            .iter()
+            .filter(|v| KeyIsTag::<T>::predicate(v.key()))
+            .map(|v| T::try_from(v.key().clone()).unwrap())
+            .collect::<Vec<_>>()
+    }
+
     pub fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
@@ -313,7 +325,7 @@ where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState,
         F: 'static
-            + Fn(StateChange<T>, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(StateChange<T::Value>, K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         let id = self.0.clone();
@@ -343,11 +355,90 @@ where
         Ok(cancel_token)
     }
 
-    pub async fn merge_same<T, S, F>(
+    pub async fn watch_group<T, S, F>(
+        &self,
+        func: F,
+    ) -> Result<CancellationToken, TagGroupUsageError<K>>
+    where
+        K: KeyIsTag<T>,
+        T: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<K, Error = &'static str>,
+        T::Value: AsState,
+        S: AsState,
+        F: 'static
+            + Fn(
+                Vec<StateChange<T::Value>>,
+                K,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
+    {
+        let tags = self
+            .1
+            .iter()
+            .filter(|v| KeyIsTag::<T>::predicate(v.key()))
+            .map(|v| T::try_from(v.key().clone()).unwrap())
+            .collect::<Vec<_>>();
+        if tags.is_empty() {
+            return Err(TagGroupUsageError::NoTagOfTyp(
+                std::any::type_name::<T>().into(),
+            ));
+        }
+        let handles: Vec<_> = tags
+            .iter()
+            .map(|t| self.get_handle(t.clone()).unwrap())
+            .collect();
+        let mut stream_map: StreamMap<usize, _> = StreamMap::new();
+        for (i, h) in handles.iter().enumerate() {
+            stream_map.insert(i, BroadcastStream::new(h.fanout().0));
+        }
+        let get_all_states = move || {
+            let states = tags
+                .iter()
+                .zip(handles.iter())
+                .map(|(t, h)| (t.clone(), h.value()))
+                .collect::<Vec<_>>();
+            states
+        };
+        let id = self.0.clone();
+        let cancel_token = CancellationToken::new();
+        let cancel_token_c = cancel_token.clone();
+        tokio::spawn(async move {
+            tracing::info!("{id} | merge_group -- start");
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = cancel_token_c.cancelled() => break,
+                    r = stream_map.next() => {
+                        match r {
+                            Some((_, Ok(_))) => {
+                                let states = get_all_states();
+                                // let value = func(states);
+
+                            }
+                            _ => break
+                        }
+                    }
+                }
+            }
+            tracing::info!("{id} | merge_group -- close");
+        });
+        Ok(cancel_token)
+    }
+
+    pub async fn merge_group<T, S, F>(
         &self,
         capacity: usize,
         func: F,
-    ) -> Result<Reader<S>, MergeSameError<K>>
+    ) -> Result<Reader<S>, TagGroupUsageError<K>>
     where
         K: KeyIsTag<T>,
         T: 'static
@@ -372,7 +463,7 @@ where
             .map(|v| T::try_from(v.key().clone()).unwrap())
             .collect::<Vec<_>>();
         if tags.is_empty() {
-            return Err(MergeSameError::NoTagOfTyp(
+            return Err(TagGroupUsageError::NoTagOfTyp(
                 std::any::type_name::<T>().into(),
             ));
         }
@@ -396,7 +487,7 @@ where
         let (tx, _) = tokio::sync::broadcast::channel(capacity);
         let tx_c = tx.clone();
         tokio::spawn(async move {
-            tracing::info!("{id} | merge_same -- start");
+            tracing::info!("{id} | merge_group -- start");
             loop {
                 tokio::select! {
                     r = stream_map.next() => {
@@ -421,7 +512,7 @@ where
                     }
                 }
             }
-            tracing::info!("{id} | merge_same -- close");
+            tracing::info!("{id} | merge_group -- close");
         });
         Ok(Reader::new(capacity, tx))
     }
@@ -456,46 +547,44 @@ where
     sm_split_reader!(9);
     sm_split_reader!(10);
 
-    sm_merge_same!(2);
-    sm_merge_same!(3);
-    sm_merge_same!(4);
-    sm_merge_same!(5);
-    sm_merge_same!(6);
-    sm_merge_same!(7);
-    sm_merge_same!(8);
-    sm_merge_same!(9);
-    sm_merge_same!(10);
+    sm_merge_group!(2);
+    sm_merge_group!(3);
+    sm_merge_group!(4);
+    sm_merge_group!(5);
+    sm_merge_group!(6);
+    sm_merge_group!(7);
+    sm_merge_group!(8);
+    sm_merge_group!(9);
+    sm_merge_group!(10);
 }
 
 /// State change result.
 #[derive(Clone, Debug)]
 pub enum StateChange<T>
 where
-    T: KvAssoc,
-    T::Value: AsState,
+    T: AsState,
 {
     /// State changed.
     /// * `0` - cur state.
     /// * `1` - old state.
-    Change(State<T::Value>, State<T::Value>),
+    Change(State<T>, State<T>),
     /// State unchange.
     /// * `0` - cur state.
-    UnChange(State<T::Value>),
+    UnChange(State<T>),
 }
 
 impl<T> StateChange<T>
 where
-    T: KvAssoc,
-    T::Value: AsState,
+    T: AsState,
 {
-    pub fn cur(&self) -> State<T::Value> {
+    pub fn cur(&self) -> State<T> {
         match self {
             StateChange::Change(v, _) => v.clone(),
             StateChange::UnChange(v) => v.clone(),
         }
     }
 
-    pub fn old(&self) -> State<T::Value> {
+    pub fn old(&self) -> State<T> {
         match self {
             StateChange::Change(_, v) => v.clone(),
             StateChange::UnChange(v) => v.clone(),
@@ -566,6 +655,12 @@ pub trait UseStateMachine: HasStateMachine {
 
     /// Get all keys of state machine.
     fn keys(&self) -> Vec<Self::K>;
+
+    /// Get all tags of type T.
+    fn tags<T>(&self) -> Vec<T>
+    where
+        Self::K: KeyIsTag<T>,
+        T: Into<Self::K> + TryFrom<Self::K, Error = &'static str>;
 
     /// Get current state value of a tag in state machine.
     /// * `tag` - the `Tag` of the handle which you want to get state value from it.
@@ -697,22 +792,29 @@ pub trait UseStateMachine: HasStateMachine {
     /// Watch a state handle, responding to state change events.
     /// * `tag` - the 'Tag' of the state handle.
     /// * `func` - the function used to handle state change events.
-    async fn watch<T, F>(&self, tag: T, func: F) -> Result<CancellationToken, GetHandleError<Self::K>>
+    async fn watch<T, F>(
+        &self,
+        tag: T,
+        func: F,
+    ) -> Result<CancellationToken, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState,
         F: 'static
-            + Fn(StateChange<T>, Self::K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                StateChange<T::Value>,
+                Self::K,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
     /// Merge states of tags in the dimension of tag type.
     /// * `capacity` - the capacity of new state channel.
     /// * `func` - how to merge states of tags of the same tag type.
-    async fn merge_same<T, S, F>(
+    async fn merge_group<T, S, F>(
         &self,
         capacity: usize,
         func: F,
-    ) -> Result<Reader<S>, MergeSameError<Self::K>>
+    ) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
     where
         Self::K: KeyIsTag<T>,
         T: 'static
@@ -760,15 +862,15 @@ pub trait UseStateMachine: HasStateMachine {
     split_reader_decl!(9);
     split_reader_decl!(10);
 
-    merge_same_decl!(2);
-    merge_same_decl!(3);
-    merge_same_decl!(4);
-    merge_same_decl!(5);
-    merge_same_decl!(6);
-    merge_same_decl!(7);
-    merge_same_decl!(8);
-    merge_same_decl!(9);
-    merge_same_decl!(10);
+    merge_group_decl!(2);
+    merge_group_decl!(3);
+    merge_group_decl!(4);
+    merge_group_decl!(5);
+    merge_group_decl!(6);
+    merge_group_decl!(7);
+    merge_group_decl!(8);
+    merge_group_decl!(9);
+    merge_group_decl!(10);
 }
 
 #[async_trait]
@@ -838,6 +940,14 @@ where
 
     fn keys(&self) -> Vec<Self::K> {
         self.state_machine().keys()
+    }
+
+    fn tags<T>(&self) -> Vec<T>
+    where
+        Self::K: KeyIsTag<T>,
+        T: Into<Self::K> + TryFrom<Self::K, Error = &'static str>,
+    {
+        self.state_machine().tags::<T>()
     }
 
     fn value<T>(&self, tag: T) -> Result<T::Value, GetHandleError<Self::K>>
@@ -977,17 +1087,20 @@ where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState,
         F: 'static
-            + Fn(StateChange<T>, Self::K) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Fn(
+                StateChange<T::Value>,
+                Self::K,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
     {
         self.state_machine().watch(tag, func).await
     }
 
-    async fn merge_same<T, S, F>(
+    async fn merge_group<T, S, F>(
         &self,
         capacity: usize,
         func: F,
-    ) -> Result<Reader<S>, MergeSameError<Self::K>>
+    ) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
     where
         Self::K: KeyIsTag<T>,
         T: 'static
@@ -1005,7 +1118,7 @@ where
         S: AsState,
         F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send,
     {
-        self.state_machine().merge_same(capacity, func).await
+        self.state_machine().merge_group(capacity, func).await
     }
 
     watch_impl!(2);
@@ -1038,15 +1151,15 @@ where
     split_reader_impl!(9);
     split_reader_impl!(10);
 
-    merge_same_impl!(2);
-    merge_same_impl!(3);
-    merge_same_impl!(4);
-    merge_same_impl!(5);
-    merge_same_impl!(6);
-    merge_same_impl!(7);
-    merge_same_impl!(8);
-    merge_same_impl!(9);
-    merge_same_impl!(10);
+    merge_group_impl!(2);
+    merge_group_impl!(3);
+    merge_group_impl!(4);
+    merge_group_impl!(5);
+    merge_group_impl!(6);
+    merge_group_impl!(7);
+    merge_group_impl!(8);
+    merge_group_impl!(9);
+    merge_group_impl!(10);
 }
 
 /// StateChangeError
@@ -1099,7 +1212,7 @@ where
 }
 
 #[derive(Debug, Error)]
-pub enum MergeSameError<K>
+pub enum TagGroupUsageError<K>
 where
     K: AsKey,
 {

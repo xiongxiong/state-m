@@ -249,7 +249,7 @@ mod tests {
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
         let reader = unit_a
-            .merge_same::<TagInner, _, _>(10, |states| {
+            .merge_group::<TagInner, _, _>(10, |states| {
                 states
                     .iter()
                     .fold("".into(), |init, item| format!("{init}, {}", item.1))

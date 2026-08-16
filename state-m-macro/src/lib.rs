@@ -685,7 +685,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ>,
+                StateChange<#typ::Value>,
             }
         })
         .collect();
@@ -849,7 +849,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ>,
+                StateChange<#typ::Value>,
             }
         })
         .collect();
@@ -912,7 +912,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                StateChange<#typ>,
+                StateChange<#typ::Value>,
             }
         })
         .collect();
@@ -1438,15 +1438,15 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_merge_same(input: TokenStream) -> TokenStream {
+pub fn sm_merge_group(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
     let method_name_str = if n > 1 {
-        format!("merge_same_{n}")
+        format!("merge_group_{n}")
     } else {
-        format!("merge_same")
+        format!("merge_group")
     };
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1507,7 +1507,7 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
                 .map(|v| #typ::try_from(v.key().clone()).unwrap())
                 .collect::<Vec<_>>();
             if #tags.is_empty() {
-                return Err(MergeSameError::NoTagOfTyp(
+                return Err(TagGroupUsageError::NoTagOfTyp(
                     std::any::type_name::<T0>().into(),
                 ));
             }
@@ -1575,7 +1575,7 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
         }
     });
     quote! {
-        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<K>>
+        pub async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<K>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
@@ -1584,7 +1584,7 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
         {
             let all_tag_typ_names: Vec<String> = vec![#(#all_tag_typ_names)*];
             if !all_tag_typ_names.iter().duplicates().collect::<Vec<_>>().is_empty() {
-                return Err(MergeSameError::DuplicatedTagTyps.into());
+                return Err(TagGroupUsageError::DuplicatedTagTyps.into());
             }
             #(#decl_vars)*
             #decl_get_all_states
@@ -1607,15 +1607,15 @@ pub fn sm_merge_same(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn merge_same_decl(input: TokenStream) -> TokenStream {
+pub fn merge_group_decl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
     let method_name_str = if n > 1 {
-        format!("merge_same_{n}")
+        format!("merge_group_{n}")
     } else {
-        format!("merge_same")
+        format!("merge_group")
     };
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1654,7 +1654,7 @@ pub fn merge_same_decl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
@@ -1665,15 +1665,15 @@ pub fn merge_same_decl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn merge_same_impl(input: TokenStream) -> TokenStream {
+pub fn merge_group_impl(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
     let method_name_str = if n > 1 {
-        format!("merge_same_{n}")
+        format!("merge_group_{n}")
     } else {
-        format!("merge_same")
+        format!("merge_group")
     };
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
@@ -1712,7 +1712,7 @@ pub fn merge_same_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, MergeSameError<Self::K>>
+        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
