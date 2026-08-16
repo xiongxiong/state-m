@@ -355,7 +355,7 @@ where
         Ok(cancel_token)
     }
 
-    pub async fn watch_group<T, S, F>(
+    pub async fn watch_group<T, F>(
         &self,
         func: F,
     ) -> Result<CancellationToken, TagGroupUsageError<K>>
@@ -371,12 +371,12 @@ where
             + PartialEq
             + Send
             + Sync
-            + TryFrom<K, Error = &'static str>,
+            + TryFrom<K, Error = &'static str>
+            + Unpin,
         T::Value: AsState,
-        S: AsState,
         F: 'static
             + Fn(
-                Vec<StateChange<T::Value>>,
+                Vec<(T, StateChange<T::Value>)>,
                 K,
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send,
@@ -396,15 +396,15 @@ where
             .iter()
             .map(|t| self.get_handle(t.clone()).unwrap())
             .collect();
-        let mut stream_map: StreamMap<usize, _> = StreamMap::new();
-        for (i, h) in handles.iter().enumerate() {
-            stream_map.insert(i, BroadcastStream::new(h.fanout().0));
+        let mut stream_map: StreamMap<T, _> = StreamMap::new();
+        for (t, h) in tags.iter().zip(handles.iter()) {
+            stream_map.insert((*t).clone(), BroadcastStream::new(h.fanout().0));
         }
         let get_all_states = move || {
             let states = tags
                 .iter()
                 .zip(handles.iter())
-                .map(|(t, h)| (t.clone(), h.value()))
+                .map(|(t, h)| (t.clone(), StateChange::UnChange(h.state())))
                 .collect::<Vec<_>>();
             states
         };
@@ -419,10 +419,17 @@ where
                     _ = cancel_token_c.cancelled() => break,
                     r = stream_map.next() => {
                         match r {
-                            Some((_, Ok(_))) => {
-                                let states = get_all_states();
-                                // let value = func(states);
-
+                            Some((t, Ok((s_cur, s_old)))) => {
+                                let states = get_all_states().iter().map(|(t_i, c_i)| {
+                                    if *t_i == t {
+                                        (t.clone(), StateChange::Change(s_cur.clone(), s_old.clone()))
+                                    } else {
+                                        (t_i.clone(), c_i.clone())
+                                    }
+                                }).collect::<Vec<_>>();
+                                if let Err(e) = func(states, t.into()).await {
+                                    tracing::error!("{id} | {:?} | watch_group error -- {e:?}", std::any::type_name::<T>());
+                                }
                             }
                             _ => break
                         }
@@ -451,7 +458,8 @@ where
             + PartialEq
             + Send
             + Sync
-            + TryFrom<K, Error = &'static str>,
+            + TryFrom<K, Error = &'static str>
+            + Unpin,
         T::Value: AsState,
         S: AsState,
         F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send,
@@ -471,17 +479,15 @@ where
             .iter()
             .map(|t| self.get_handle(t.clone()).unwrap())
             .collect();
-        let mut stream_map: StreamMap<usize, _> = StreamMap::new();
-        for (i, h) in handles.iter().enumerate() {
-            stream_map.insert(i, BroadcastStream::new(h.fanout().0));
+        let mut stream_map: StreamMap<T, _> = StreamMap::new();
+        for (t, h) in tags.iter().zip(handles.iter()) {
+            stream_map.insert((*t).clone(), BroadcastStream::new(h.fanout().0));
         }
         let get_all_states = move || {
-            let states = tags
-                .iter()
+            tags.iter()
                 .zip(handles.iter())
-                .map(|(t, h)| (t.clone(), h.value()))
-                .collect::<Vec<_>>();
-            states
+                .map(|(t, h)| ((*t).clone(), h.value()))
+                .collect::<Vec<_>>()
         };
         let id = self.0.clone();
         let (tx, _) = tokio::sync::broadcast::channel(capacity);
@@ -808,6 +814,34 @@ pub trait UseStateMachine: HasStateMachine {
             + Send;
 
     /// Merge states of tags in the dimension of tag type.
+    /// * `func` - how to state change events of tags of the same tag type.
+    async fn watch_group<T, F>(
+        &self,
+        func: F,
+    ) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+    where
+        Self::K: KeyIsTag<T>,
+        T: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<Self::K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<Self::K, Error = &'static str>
+            + Unpin,
+        T::Value: AsState,
+        F: 'static
+            + Fn(
+                Vec<(T, StateChange<T::Value>)>,
+                Self::K,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send;
+
+    /// Merge states of tags in the dimension of tag type.
     /// * `capacity` - the capacity of new state channel.
     /// * `func` - how to merge states of tags of the same tag type.
     async fn merge_group<T, S, F>(
@@ -827,7 +861,8 @@ pub trait UseStateMachine: HasStateMachine {
             + PartialEq
             + Send
             + Sync
-            + TryFrom<Self::K, Error = &'static str>,
+            + TryFrom<Self::K, Error = &'static str>
+            + Unpin,
         T::Value: AsState,
         S: AsState,
         F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send;
@@ -1096,6 +1131,35 @@ where
         self.state_machine().watch(tag, func).await
     }
 
+    async fn watch_group<T, F>(
+        &self,
+        func: F,
+    ) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+    where
+        Self::K: KeyIsTag<T>,
+        T: 'static
+            + Clone
+            + Debug
+            + Eq
+            + std::hash::Hash
+            + Into<Self::K>
+            + KvAssoc
+            + PartialEq
+            + Send
+            + Sync
+            + TryFrom<Self::K, Error = &'static str>
+            + Unpin,
+        T::Value: AsState,
+        F: 'static
+            + Fn(
+                Vec<(T, StateChange<T::Value>)>,
+                Self::K,
+            ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+            + Send,
+    {
+        self.state_machine().watch_group::<T, _>(func).await
+    }
+
     async fn merge_group<T, S, F>(
         &self,
         capacity: usize,
@@ -1113,7 +1177,8 @@ where
             + PartialEq
             + Send
             + Sync
-            + TryFrom<Self::K, Error = &'static str>,
+            + TryFrom<Self::K, Error = &'static str>
+            + Unpin,
         T::Value: AsState,
         S: AsState,
         F: 'static + Fn(Vec<(T, T::Value)>) -> S + Send,

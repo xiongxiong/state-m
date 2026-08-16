@@ -1469,7 +1469,7 @@ pub fn sm_merge_group(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str>,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1508,16 +1508,16 @@ pub fn sm_merge_group(input: TokenStream) -> TokenStream {
                 .collect::<Vec<_>>();
             if #tags.is_empty() {
                 return Err(TagGroupUsageError::NoTagOfTyp(
-                    std::any::type_name::<T0>().into(),
+                    std::any::type_name::<#typ>().into(),
                 ));
             }
             let #handles: Vec<_> = #tags
                 .iter()
                 .map(|t| self.get_handle(t.clone()).unwrap())
                 .collect();
-            let mut #stream_map: StreamMap<usize, _> = StreamMap::new();
-            for (j, h) in #handles.iter().enumerate() {
-                #stream_map.insert(j, BroadcastStream::new(h.fanout().0));
+            let mut #stream_map: StreamMap<#typ, _> = StreamMap::new();
+            for (t, h) in #tags.iter().zip(#handles.iter()) {
+                #stream_map.insert((*t).clone(), BroadcastStream::new(h.fanout().0));
             }
         }
     });
@@ -1535,10 +1535,9 @@ pub fn sm_merge_group(input: TokenStream) -> TokenStream {
             let tags = format_ident!("tags_{i}");
             let handles = format_ident!("handles_{i}");
             quote! {
-                let #states = #tags
-                    .iter()
+                let #states = #tags.iter()
                     .zip(#handles.iter())
-                    .map(|(t, h)| (t.clone(), h.value()))
+                    .map(|(t, h)| ((*t).clone(), h.value()))
                     .collect::<Vec<_>>();
             }
         });
@@ -1638,7 +1637,7 @@ pub fn merge_group_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str>,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1696,7 +1695,7 @@ pub fn merge_group_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str>,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
