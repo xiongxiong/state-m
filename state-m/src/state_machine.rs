@@ -16,6 +16,7 @@ use std::{
 };
 use thiserror::Error;
 use tokio_stream::{StreamExt, StreamMap, wrappers::BroadcastStream};
+use tokio_util::sync::CancellationToken;
 
 /// StateMachine: data structure to store handles.
 /// * `K` - the `Tag` type to distinguish different handles.
@@ -307,7 +308,7 @@ where
         Ok(self.get_handle(tag)?.wait_cmp_amend(f, s_cmp).await?)
     }
 
-    pub async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<K>>
+    pub async fn watch<T, F>(&self, tag: T, func: F) -> Result<CancellationToken, GetHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
         T::Value: AsState,
@@ -316,12 +317,16 @@ where
             + Send,
     {
         let id = self.0.clone();
+        let cancel_token = CancellationToken::new();
+        let cancel_token_c = cancel_token.clone();
         let handle = self.get_handle(tag.clone())?;
         let (mut rx, token) = handle.fanout();
         tokio::spawn(async move {
             tracing::info!("{id} | {tag:?} -- start");
             loop {
                 tokio::select! {
+                    biased;
+                    _ = cancel_token_c.cancelled() => break,
                     _ = token.cancelled() => break,
                     r = rx.recv() => match r {
                         Ok((s_cur, s_old)) => {
@@ -335,7 +340,7 @@ where
             }
             tracing::info!("{id} | {tag:?} -- close");
         });
-        Ok(())
+        Ok(cancel_token)
     }
 
     pub async fn merge_same<T, S, F>(
@@ -692,7 +697,7 @@ pub trait UseStateMachine: HasStateMachine {
     /// Watch a state handle, responding to state change events.
     /// * `tag` - the 'Tag' of the state handle.
     /// * `func` - the function used to handle state change events.
-    async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<Self::K>>
+    async fn watch<T, F>(&self, tag: T, func: F) -> Result<CancellationToken, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState,
@@ -963,7 +968,11 @@ where
         self.state_machine().debug_state()
     }
 
-    async fn watch<T, F>(&self, tag: T, func: F) -> Result<(), GetHandleError<Self::K>>
+    async fn watch<T, F>(
+        &self,
+        tag: T,
+        func: F,
+    ) -> Result<CancellationToken, GetHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
         T::Value: AsState,

@@ -770,7 +770,7 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            pub async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<K>>
+            pub async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<CancellationToken, TagUsageError<K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -784,19 +784,22 @@ pub fn sm_watch(input: TokenStream) -> TokenStream {
                     return Err(TagUsageError::DuplicatedTags);
                 }
                 let id = self.0.clone();
+                let cancel_token = CancellationToken::new();
+                let cancel_token_c = cancel_token.clone();
                 #(#decl_vars)*
                 tokio::spawn(async move {
                     tracing::info!("{id} | watch_{} | {tags:?} -- start", #n);
                     loop {
                         tokio::select! {
                             biased;
+                            _ = cancel_token_c.cancelled() => break,
                             #(#sel_tokens)*
                             #(#sel_recvs)*
                         }
                     }
                     tracing::info!("{id} | watch_{} | {tags:?} -- close", #n);
                 });
-                Ok(())
+                Ok(cancel_token)
             }
         }
     };
@@ -852,7 +855,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<Self::K>>
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<CancellationToken, TagUsageError<Self::K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -925,7 +928,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<(), TagUsageError<Self::K>>
+            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<CancellationToken, TagUsageError<Self::K>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
