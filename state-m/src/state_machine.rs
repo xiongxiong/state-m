@@ -412,7 +412,7 @@ where
         let cancel_token = CancellationToken::new();
         let cancel_token_c = cancel_token.clone();
         tokio::spawn(async move {
-            tracing::info!("{id} | merge_group -- start");
+            tracing::info!("{id} | watch_group -- start");
             loop {
                 tokio::select! {
                     biased;
@@ -427,8 +427,8 @@ where
                                         (t_i.clone(), c_i.clone())
                                     }
                                 }).collect::<Vec<_>>();
-                                if let Err(e) = func(states, t.into()).await {
-                                    tracing::error!("{id} | {:?} | watch_group error -- {e:?}", std::any::type_name::<T>());
+                                if let Err(e) = func(states, t.clone().into()).await {
+                                    tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
                                 }
                             }
                             _ => break
@@ -436,7 +436,7 @@ where
                     }
                 }
             }
-            tracing::info!("{id} | merge_group -- close");
+            tracing::info!("{id} | watch_group -- close");
         });
         Ok(cancel_token)
     }
@@ -523,45 +523,55 @@ where
         Ok(Reader::new(capacity, tx))
     }
 
-    sm_watch!(2);
-    sm_watch!(3);
-    sm_watch!(4);
-    sm_watch!(5);
-    sm_watch!(6);
-    sm_watch!(7);
-    sm_watch!(8);
-    sm_watch!(9);
-    sm_watch!(10);
+    watch_sm!(2);
+    watch_sm!(3);
+    watch_sm!(4);
+    watch_sm!(5);
+    watch_sm!(6);
+    watch_sm!(7);
+    watch_sm!(8);
+    watch_sm!(9);
+    watch_sm!(10);
 
-    sm_merge_reader!(2);
-    sm_merge_reader!(3);
-    sm_merge_reader!(4);
-    sm_merge_reader!(5);
-    sm_merge_reader!(6);
-    sm_merge_reader!(7);
-    sm_merge_reader!(8);
-    sm_merge_reader!(9);
-    sm_merge_reader!(10);
+    merge_reader_sm!(2);
+    merge_reader_sm!(3);
+    merge_reader_sm!(4);
+    merge_reader_sm!(5);
+    merge_reader_sm!(6);
+    merge_reader_sm!(7);
+    merge_reader_sm!(8);
+    merge_reader_sm!(9);
+    merge_reader_sm!(10);
 
-    sm_split_reader!(2);
-    sm_split_reader!(3);
-    sm_split_reader!(4);
-    sm_split_reader!(5);
-    sm_split_reader!(6);
-    sm_split_reader!(7);
-    sm_split_reader!(8);
-    sm_split_reader!(9);
-    sm_split_reader!(10);
+    split_reader_sm!(2);
+    split_reader_sm!(3);
+    split_reader_sm!(4);
+    split_reader_sm!(5);
+    split_reader_sm!(6);
+    split_reader_sm!(7);
+    split_reader_sm!(8);
+    split_reader_sm!(9);
+    split_reader_sm!(10);
 
-    sm_merge_group!(2);
-    sm_merge_group!(3);
-    sm_merge_group!(4);
-    sm_merge_group!(5);
-    sm_merge_group!(6);
-    sm_merge_group!(7);
-    sm_merge_group!(8);
-    sm_merge_group!(9);
-    sm_merge_group!(10);
+    watch_group_sm!(2);
+    watch_group_sm!(3);
+    watch_group_sm!(4);
+    watch_group_sm!(5);
+    watch_group_sm!(6);
+    watch_group_sm!(7);
+    watch_group_sm!(8);
+    watch_group_sm!(9);
+    watch_group_sm!(10);
+
+    merge_group_sm!(2);
+    merge_group_sm!(3);
+    merge_group_sm!(4);
+    merge_group_sm!(5);
+    merge_group_sm!(6);
+    merge_group_sm!(7);
+    merge_group_sm!(8);
+    merge_group_sm!(9);
+    merge_group_sm!(10);
 }
 
 /// State change result.
@@ -813,8 +823,8 @@ pub trait UseStateMachine: HasStateMachine {
             ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
             + Send;
 
-    /// Merge states of tags in the dimension of tag type.
-    /// * `func` - how to state change events of tags of the same tag type.
+    /// Watch states of tags in the dimension of tag type.
+    /// * `func` - how to respond to state change events of tags of the same tag type.
     async fn watch_group<T, F>(
         &self,
         func: F,
@@ -896,6 +906,16 @@ pub trait UseStateMachine: HasStateMachine {
     split_reader_decl!(8);
     split_reader_decl!(9);
     split_reader_decl!(10);
+
+    watch_group_decl!(2);
+    watch_group_decl!(3);
+    watch_group_decl!(4);
+    watch_group_decl!(5);
+    watch_group_decl!(6);
+    watch_group_decl!(7);
+    watch_group_decl!(8);
+    watch_group_decl!(9);
+    watch_group_decl!(10);
 
     merge_group_decl!(2);
     merge_group_decl!(3);
@@ -1215,6 +1235,16 @@ where
     split_reader_impl!(8);
     split_reader_impl!(9);
     split_reader_impl!(10);
+
+    watch_group_impl!(2);
+    watch_group_impl!(3);
+    watch_group_impl!(4);
+    watch_group_impl!(5);
+    watch_group_impl!(6);
+    watch_group_impl!(7);
+    watch_group_impl!(8);
+    watch_group_impl!(9);
+    watch_group_impl!(10);
 
     merge_group_impl!(2);
     merge_group_impl!(3);

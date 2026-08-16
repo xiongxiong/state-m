@@ -647,12 +647,12 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_watch(input: TokenStream) -> TokenStream {
+pub fn watch_sm(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 0, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -816,7 +816,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 0, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -879,7 +879,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 0, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let typ = format_ident!("T{}", i);
@@ -949,12 +949,12 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_merge_reader(input: TokenStream) -> TokenStream {
+pub fn merge_reader_sm(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than one.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1119,7 +1119,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1173,7 +1173,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than zero.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("merge_reader_{n}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1233,12 +1233,12 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_split_reader(input: TokenStream) -> TokenStream {
+pub fn split_reader_sm(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than one.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1356,7 +1356,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than one.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1399,7 +1399,7 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    assert!(n > 1, "Input number should larger than one.");
+    assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("split_reader_{n}");
     let state_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1438,16 +1438,320 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn sm_merge_group(input: TokenStream) -> TokenStream {
+pub fn watch_group_sm(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    let method_name_str = if n > 1 {
-        format!("merge_group_{n}")
-    } else {
-        format!("merge_group")
+    assert!(n > 1, "Input number should be greater than 1.");
+    let method_name_str = format!("watch_group_{n}");
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, StateChange<#typ::Value>)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let all_tag_typ_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{i}");
+            quote! {
+                std::any::type_name::<#typ>().into()
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    let decl_vars = (0..n).map(|i| {
+        let typ = format_ident!("T{i}");
+        let tags = format_ident!("tags_{i}");
+        let handles = format_ident!("handles_{i}");
+        let stream_map = format_ident!("stream_map_{i}");
+        quote! {
+            let #tags = self
+                .1
+                .iter()
+                .filter(|v| KeyIsTag::<#typ>::predicate(v.key()))
+                .map(|v| #typ::try_from(v.key().clone()).unwrap())
+                .collect::<Vec<_>>();
+            if #tags.is_empty() {
+                return Err(TagGroupUsageError::NoTagOfTyp(
+                    std::any::type_name::<#typ>().into(),
+                ));
+            }
+            let #handles: Vec<_> = #tags
+                .iter()
+                .map(|t| self.get_handle(t.clone()).unwrap())
+                .collect();
+            let mut #stream_map: StreamMap<#typ, _> = StreamMap::new();
+            for (t, h) in #tags.iter().zip(#handles.iter()) {
+                #stream_map.insert((*t).clone(), BroadcastStream::new(h.fanout().0));
+            }
+        }
+    });
+    let states_names = itertools::intersperse(
+        (0..n).map(|i| {
+            let states = format_ident!("states_{i}");
+            quote! {#states}
+        }),
+        quote! {,},
+    )
+    .collect::<Vec<_>>();
+    let states_names_mut = |j: usize| {
+        itertools::intersperse(
+            (0..n).map(|i| {
+                let states = format_ident!("states_{i}");
+                if i == j {
+                    quote! {mut #states}
+                } else {
+                    quote! {#states}
+                }
+            }),
+            quote! {,},
+        )
+        .collect::<Vec<_>>()
     };
+    let decl_get_all_states = {
+        let decl_states = (0..n).map(|i| {
+            let states = format_ident!("states_{i}");
+            let tags = format_ident!("tags_{i}");
+            let handles = format_ident!("handles_{i}");
+            quote! {
+                let #states = #tags.iter()
+                    .zip(#handles.iter())
+                    .map(|(t, h)| ((*t).clone(), StateChange::UnChange(h.state())))
+                    .collect::<Vec<_>>();
+            }
+        });
+        quote! {
+            let get_all_states = move || {
+                #(#decl_states)*
+                (#(#states_names)*)
+            };
+        }
+    };
+    let sel_branchs = (0..n).map(|i| {
+        let stream_map = format_ident!("stream_map_{i}");
+        let states = format_ident!("states_{i}");
+        let states_names_mut = states_names_mut(i);
+        quote! {
+            r = #stream_map.next() => {
+                match r {
+                    Some((t, Ok((s_cur, s_old)))) => {
+                        let (#(#states_names_mut)*) = get_all_states();
+                        #states = #states.iter().map(|(t_i, c_i)| {
+                            if *t_i == t {
+                                (t.clone(), StateChange::Change(s_cur.clone(), s_old.clone()))
+                            } else {
+                                (t_i.clone(), c_i.clone())
+                            }
+                        }).collect::<Vec<_>>();
+                        if let Err(e) = func(#(#states_names)*, t.clone().into()).await {
+                            tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
+                        }
+                    }
+                    _ => break
+                }
+            }
+        }
+    });
+    quote! {
+        pub async fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Result<CancellationToken, TagGroupUsageError<K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            F: 'static
+                + Fn(
+                    #(#func_arg_typs)*,
+                    K,
+                ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                + Send,
+        {
+            let all_tag_typ_names: Vec<String> = vec![#(#all_tag_typ_names)*];
+            if !all_tag_typ_names.iter().duplicates().collect::<Vec<_>>().is_empty() {
+                return Err(TagGroupUsageError::DuplicatedTagTyps.into());
+            }
+            #(#decl_vars)*
+            #decl_get_all_states
+            let id = self.0.clone();
+            let cancel_token = CancellationToken::new();
+            let cancel_token_c = cancel_token.clone();
+            tokio::spawn(async move {
+                tracing::info!("{id} | {} -- start", #method_name_str);
+                loop {
+                    tokio::select! {
+                        biased;
+                        _ = cancel_token_c.cancelled() => break,
+                        #(#sel_branchs)*
+                    }
+                }
+                tracing::info!("{id} | {} -- close", #method_name_str);
+            });
+            Ok(cancel_token)
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn watch_group_decl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    assert!(n > 1, "Input number should be greater than 1.");
+    let method_name_str = format!("watch_group_{n}");
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Self::K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, StateChange<#typ::Value>)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        /// Watch states of tags in the dimension of tag type.
+        /// * `func` - how to respond to state change events of tags of the same tag type.
+        async fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            F: 'static
+                + Fn(
+                    #(#func_arg_typs)*,
+                    Self::K,
+                ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                + Send;
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn watch_group_impl(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    assert!(n > 1, "Input number should be greater than 1.");
+    let method_name_str = format!("watch_group_{n}");
+    let method_name = format_ident!("{method_name_str}");
+    let tag_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {#typ}
+        }),
+        quote! {,},
+    )
+    .collect();
+    let key_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Self::K: KeyIsTag<#typ>,
+            }
+        })
+        .collect();
+    let tag_typ_cons: Vec<_> = (0..n)
+        .map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ::Value: AsState,
+            }
+        })
+        .collect();
+    let func_arg_typs: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! {
+                Vec<(#typ, StateChange<#typ::Value>)>
+            }
+        }),
+        quote! {,},
+    )
+    .collect();
+    quote! {
+        async fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+        where
+            #(#key_typ_cons)*
+            #(#tag_typ_cons)*
+            F: 'static
+                + Fn(
+                    #(#func_arg_typs)*,
+                    Self::K,
+                ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+                + Send
+        {
+            self.state_machine().#method_name::<#(#tag_typs)*, _>(func).await
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn merge_group_sm(input: TokenStream) -> TokenStream {
+    let lit_n = parse_macro_input!(input as LitInt);
+    let n = lit_n
+        .base10_parse::<usize>()
+        .expect("Input can only be a number of type [usize].");
+    let method_name_str = format!("merge_group_{n}");
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1611,11 +1915,8 @@ pub fn merge_group_decl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    let method_name_str = if n > 1 {
-        format!("merge_group_{n}")
-    } else {
-        format!("merge_group")
-    };
+    assert!(n > 1, "Input number should be greater than 1.");
+    let method_name_str = format!("merge_group_{n}");
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
@@ -1653,6 +1954,9 @@ pub fn merge_group_decl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
+        /// Merge states of tags in the dimension of tag type.
+        /// * `capacity` - the capacity of new state channel.
+        /// * `func` - how to merge states of tags of the same tag type.
         async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
         where
             #(#key_typ_cons)*
@@ -1669,11 +1973,8 @@ pub fn merge_group_impl(input: TokenStream) -> TokenStream {
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
-    let method_name_str = if n > 1 {
-        format!("merge_group_{n}")
-    } else {
-        format!("merge_group")
-    };
+    assert!(n > 1, "Input number should be greater than 1.");
+    let method_name_str = format!("merge_group_{n}");
     let method_name = format_ident!("{method_name_str}");
     let tag_typs: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
