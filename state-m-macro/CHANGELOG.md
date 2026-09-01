@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.19 - 2026-09-01
+#### Bug Fixes
+- added hidden attribute for tag - (ef4c65c) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.18 - 2026-08-16
 #### Bug Fixes
 - update watch - (0d40bcd) - wangjirong

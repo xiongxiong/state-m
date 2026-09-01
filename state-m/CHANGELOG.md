@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.25 - 2026-09-01
+#### Bug Fixes
+- added hidden attribute for tag - (ef4c65c) - wangjirong
+
+- - -
+
 ## state-m-0.8.24 - 2026-08-16
 #### Bug Fixes
 - update watch - (0d40bcd) - wangjirong
