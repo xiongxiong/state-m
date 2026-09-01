@@ -17,7 +17,7 @@ The library implements convenient state distribution and management mechanisms, 
 - Define 'Tag' enum to distinguish different state handles(sources and readers), all handles must use different tag values.
 - Derive traits necessary: Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord.
 - Derive 'StateTag' trait.
-- Add 'state_tag' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine, use 'generics' (optional) to associate generic types with unit enums.
+- Add 'state_tag' attribute to all variants of the 'Tag' enum, use 'assoc' (mandatory) to associate corresponding state type, use 'label' (optional) if you want human readable labels when debuging the state machine, use 'hidden' (optional) if you do not want the tag present in the debug_state of your state machine, use 'generics' (optional) to associate generic types with unit enums.
 - To be state, a type should implements these traits: Clone, Debug, Default, PartialEq.
 
 ```rust
@@ -33,7 +33,7 @@ where
     Inner(usize),
     #[state_tag(assoc = String, label = format!("outer_{}_{}", self.0, self.1))]
     Outer(usize, usize),
-    #[state_tag(assoc = MyCusTyp)]
+    #[state_tag(assoc = MyCusTyp), hidden = true]
     OuterEx1,
     #[state_tag(assoc = usize)]
     OuterEx2(OuterEx2),
