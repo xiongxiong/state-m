@@ -192,7 +192,7 @@ where
         )));
         h.init().await;
         self.1
-            .insert(k, T::HIDDEN, (format!("{tag:?}"), Box::new(h)));
+            .insert(k, (format!("{tag:?}"), T::HIDDEN, Box::new(h)));
         Ok(())
     }
 
@@ -219,7 +219,7 @@ where
         )));
         h.init().await;
         self.1
-            .insert(k, T::HIDDEN, (format!("{tag:?}"), Box::new(h)));
+            .insert(k, (format!("{tag:?}"), T::HIDDEN, Box::new(h)));
         Ok(())
     }
 
@@ -850,6 +850,7 @@ pub trait UseStateMachine: HasStateMachine {
             + Eq
             + std::hash::Hash
             + Into<Self::K>
+            + IsHidden
             + KvAssoc
             + PartialEq
             + Send
@@ -879,6 +880,7 @@ pub trait UseStateMachine: HasStateMachine {
             + Eq
             + std::hash::Hash
             + Into<Self::K>
+            + IsHidden
             + KvAssoc
             + PartialEq
             + Send
@@ -1174,6 +1176,7 @@ where
             + Eq
             + std::hash::Hash
             + Into<Self::K>
+            + IsHidden
             + KvAssoc
             + PartialEq
             + Send
@@ -1203,6 +1206,7 @@ where
             + Eq
             + std::hash::Hash
             + Into<Self::K>
+            + IsHidden
             + KvAssoc
             + PartialEq
             + Send

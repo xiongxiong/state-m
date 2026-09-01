@@ -2,6 +2,10 @@
 // use state_m_macro::*;
 // use std::{fmt::Debug, hash::Hash};
 
+// #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, StateTag)]
+// #[state_tag(assoc = String, label = format!("my_id_{}", self.0))]
+// pub struct MyId(u8);
+
 // sm_merge_same!(2);
 
 // #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]

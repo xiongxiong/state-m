@@ -1,14 +1,24 @@
 use state_m::*;
 use std::fmt::Debug;
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MyId(u8);
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, StateTag)]
+#[state_tag(assoc = String, label = format!("my_id_{}", self.0))]
+pub struct TagS(u8);
 
-impl KvAssoc for MyId {
-    type Value = u8;
+#[derive(Clone, Debug, Default)]
+pub struct UnitS {
+    state_machine: StateMachine<TagS>,
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
+impl HasStateMachine for UnitS {
+    type K = TagS;
+
+    fn state_machine(&self) -> &StateMachine<Self::K> {
+        &self.state_machine
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, StateTag)]
 pub enum Tag<IdI, IdO>
 where
     IdI: AsKey + KvAssoc,
@@ -18,7 +28,7 @@ where
     Inner(usize),
     #[state_tag(assoc = String, label = format!("outer_{}_{}", self.0, self.1))]
     Outer(usize, usize),
-    #[state_tag(assoc = MyCusTyp)]
+    #[state_tag(assoc = MyCusTyp, hidden = true)]
     OuterEx1,
     #[state_tag(assoc = usize)]
     OuterEx2(OuterEx2),
@@ -102,15 +112,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_debug_state() -> Result<()> {
-        let sm: Arc<StateMachine<Tag<MyId, MyId>>> = Default::default();
+        let sm: Arc<StateMachine<Tag<TagS, TagS>>> = Default::default();
         assert_eq!("", &format!("{sm:?}"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_struct_tag() -> Result<()> {
+        init_tracing();
+        let unit = UnitS::default();
+        unit.add_source(TagS(0), 10, None).await?;
+        for i in 0..10 {
+            unit.alter(TagS(0), format!("{i}")).await?;
+        }
+        for i in 0..10 {
+            unit.amend(TagS(0), |v| format!("{v}_{}", i)).await?;
+        }
+        unit.wait_touch(TagS(0)).await?;
         Ok(())
     }
 
     #[tokio::test]
     async fn test_normal() -> Result<()> {
         init_tracing();
-        let unit = Unit::<MyId, MyId>::new("X");
+        let unit = Unit::<TagS, TagS>::new("X");
         unit.add_source(TagInner(0), 10, None).await?;
         for i in 0..10 {
             unit.alter(TagInner(0), format!("{i}")).await?;
@@ -125,9 +150,9 @@ mod tests {
     #[tokio::test]
     async fn test_wait() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -140,9 +165,9 @@ mod tests {
     #[tokio::test]
     async fn test_extend() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuterEx1, unit_a.reader(TagInner(0))?.derive())
             .await?;
@@ -164,9 +189,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -182,10 +207,10 @@ mod tests {
     #[tokio::test]
     async fn test_watch() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -216,10 +241,10 @@ mod tests {
     #[tokio::test]
     async fn test_merge() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -245,7 +270,7 @@ mod tests {
     #[tokio::test]
     async fn test_merge_same() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
         unit_a.add_source(TagInner(1), 10, None).await?;
         let reader = unit_a
@@ -268,9 +293,9 @@ mod tests {
     #[tokio::test]
     async fn test_split() -> Result<()> {
         init_tracing();
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -301,11 +326,11 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let door = Arc::new(Door::new());
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(door.clone())]))
             .await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;
@@ -354,11 +379,11 @@ mod tests {
         init_tracing();
         const COUNT: usize = 1000;
         let barriers = Arc::new(Barriers::new());
-        let unit_a = Unit::<MyId, MyId>::new("A");
+        let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a
             .add_source(TagInner(0), 10, Some(vec![Box::new(barriers.clone())]))
             .await?;
-        let unit_b = Unit::<MyId, MyId>::new("B");
+        let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
             .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
             .await?;

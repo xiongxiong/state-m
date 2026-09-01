@@ -220,7 +220,6 @@ fn q_attrs_except(attrs: &Vec<Attribute>, excepts: Vec<&str>) -> TokenStream2 {
 #[proc_macro_derive(StateTag, attributes(state_tag))]
 pub fn state_tag(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
-    let i_attrs = &input.attrs;
     let i_ident = &input.ident;
     let i_vis = &input.vis;
     let i_gene = &input.generics;
@@ -591,16 +590,14 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         let hidden = lit.value;
                         quote! {
                             impl #q_t_g_args IsHidden for #t_name #q_t_g_args #q_t_where {
-                                const HIDDEN = #hidden;
+                                const HIDDEN: bool = #hidden;
                             }
                         }
                     }
                     None => {
                         quote! {
                             impl #q_t_g_args IsHidden for #t_name #q_t_g_args #q_t_where {
-                                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                                    const HIDDEN = false;
-                                }
+                                const HIDDEN: bool = false;
                             }
                         }
                     }
@@ -630,7 +627,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 };
                 quotes.push(q_debug);
 
-                // IsTag
+                // KeyIsTag
                 let q_is_tag_pat = match v_fields {
                     syn::Fields::Named(_) => {
                         quote! {
@@ -667,26 +664,25 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 quotes.push(q_is_tag);
             }
         }
-        syn::Data::Struct(data_struct) => {
-            let q_attrs = q_attrs_except(i_attrs, vec![StateTagArgs::KEYWORD]);
-            let fields = data_struct.fields;
-            let semi_colon = match data_struct.semi_token {
-                Some(_) => quote! {;},
-                None => quote! {},
-            };
+        syn::Data::Struct(_) => {
             let args = state_tag_args(&input.attrs);
             if args.generics.is_some() {
                 panic!("attribute [generics] can only be used on unit enum.")
             }
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
-                #q_attrs #i_vis struct #i_ident #q_i_g_args #fields #semi_colon
                 impl #q_i_g_args KvAssoc for #i_ident #q_i_g_args #i_where {
                     type Value = #typ;
                 }
 
                 impl #q_i_g_args IsHidden for #i_ident #q_i_g_args #i_where {
-                    const HIDDEN = false;
+                    const HIDDEN: bool = false;
+                }
+
+                impl #q_i_g_args KeyIsTag<#i_ident> for #i_ident #q_i_g_args #i_where {
+                    fn predicate(&self) -> bool {
+                        true
+                    }
                 }
             });
         }
