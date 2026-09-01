@@ -17,6 +17,11 @@ pub trait KvAssoc {
     type Value;
 }
 
+/// If hidden the tag in debug_state or not
+pub trait IsHidden {
+    const HIDDEN: bool;
+}
+
 /// Judge if a key associated with a tag or not.
 pub trait KeyIsTag<T> {
     fn predicate(&self) -> bool;

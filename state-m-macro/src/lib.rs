@@ -7,7 +7,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
     Attribute, DeriveInput, Expr, Field, FieldsNamed, FieldsUnnamed, Generics, Ident, Index,
-    LitInt, Type, Visibility,
+    LitBool, LitInt, Type, Visibility,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -15,12 +15,13 @@ use syn::{
 };
 
 const STATE_TAG_ARGS: &str =
-    "#[state_tag(generics = <A>, assoc = AssocType, label = \"AssocLabel\")]";
+    "#[state_tag(generics = <A>, assoc = AssocType, hidden = false, label = \"AssocLabel\")]";
 
 #[derive(Clone, Debug)]
 struct StateTagArgs {
     pub generics: AttributePropertyGenerics,
     pub assoc: AttributePropertyAssoc,
+    pub hidden: AttributePropertyHidden,
     pub label: AttributePropertyLabel,
 }
 
@@ -43,10 +44,11 @@ impl Parse for StateTagArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let error = |ident: &syn::Ident| -> syn::Error {
             let known = format!(
-                "Known entries of attribute {} are: {}[optional], {}, {}[optional].",
+                "Known entries of attribute {} are: {}[optional], {}, {}[optional], {}[optional].",
                 StateTagArgs::KEYWORD,
                 AttributePropertyGenericsMarker::KEYWORD,
                 AttributePropertyAssocMarker::KEYWORD,
+                AttributePropertyHiddenMarker::KEYWORD,
                 AttributePropertyLabelMarker::KEYWORD,
             );
             syn_err!(
@@ -60,6 +62,7 @@ impl Parse for StateTagArgs {
         };
         let mut opt_generics: Option<AttributePropertyGenerics> = None;
         let mut opt_assoc: Option<AttributePropertyAssoc> = None;
+        let mut opt_hidden: Option<AttributePropertyHidden> = None;
         let mut opt_label: Option<AttributePropertyLabel> = None;
         while !input.is_empty() {
             let lookahead = input.lookahead1();
@@ -71,6 +74,9 @@ impl Parse for StateTagArgs {
                     }
                     AttributePropertyAssoc::KEYWORD => {
                         opt_assoc = Some(AttributePropertyAssoc::parse(input)?);
+                    }
+                    AttributePropertyHidden::KEYWORD => {
+                        opt_hidden = Some(AttributePropertyHidden::parse(input)?);
                     }
                     AttributePropertyLabel::KEYWORD => {
                         opt_label = Some(AttributePropertyLabel::parse(input)?);
@@ -94,6 +100,7 @@ impl Parse for StateTagArgs {
         Ok(Self {
             generics: opt_generics.unwrap_or_default(),
             assoc: opt_assoc.unwrap(),
+            hidden: opt_hidden.unwrap_or_default(),
             label: opt_label.unwrap_or_default(),
         })
     }
@@ -116,6 +123,16 @@ where
     #[inline(always)]
     fn assign(&mut self, component: IntoT) {
         self.assoc = component.into()
+    }
+}
+
+impl<IntoT> Assign<AttributePropertyHidden, IntoT> for StateTagArgs
+where
+    IntoT: Into<AttributePropertyHidden>,
+{
+    #[inline(always)]
+    fn assign(&mut self, component: IntoT) {
+        self.hidden = component.into()
     }
 }
 
@@ -146,6 +163,15 @@ struct AttributePropertyAssocMarker;
 
 impl AttributePropertyComponent for AttributePropertyAssocMarker {
     const KEYWORD: &'static str = "assoc";
+}
+
+type AttributePropertyHidden = AttributePropertyOptionalSyn<LitBool, AttributePropertyHiddenMarker>;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct AttributePropertyHiddenMarker;
+
+impl AttributePropertyComponent for AttributePropertyHiddenMarker {
+    const KEYWORD: &'static str = "hidden";
 }
 
 type AttributePropertyLabel = AttributePropertyOptionalSyn<Expr, AttributePropertyLabelMarker>;
@@ -559,6 +585,28 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                     }
                 });
 
+                // IsHidden
+                let q_is_hidden = match args.hidden.internal() {
+                    Some(lit) => {
+                        let hidden = lit.value;
+                        quote! {
+                            impl #q_t_g_args IsHidden for #t_name #q_t_g_args #q_t_where {
+                                const HIDDEN = #hidden;
+                            }
+                        }
+                    }
+                    None => {
+                        quote! {
+                            impl #q_t_g_args IsHidden for #t_name #q_t_g_args #q_t_where {
+                                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                                    const HIDDEN = false;
+                                }
+                            }
+                        }
+                    }
+                };
+                quotes.push(q_is_hidden);
+
                 // Debug
                 let q_debug = match args.label.internal() {
                     Some(expr) => {
@@ -636,6 +684,10 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 impl #q_i_g_args KvAssoc for #i_ident #q_i_g_args #i_where {
                     type Value = #typ;
                 }
+
+                impl #q_i_g_args IsHidden for #i_ident #q_i_g_args #i_where {
+                    const HIDDEN = false;
+                }
             });
         }
         _ => panic!("Not supported."),
@@ -676,7 +728,7 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -841,7 +893,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -904,7 +956,7 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -980,7 +1032,7 @@ pub fn merge_reader_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -1145,7 +1197,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -1199,7 +1251,7 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+                #typ: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
                 #typ::Value: AsState,
             }
         })
@@ -1316,7 +1368,7 @@ pub fn split_reader_sm(input: TokenStream) -> TokenStream {
     quote!{
         pub async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<K>>
         where
-            T: 'static + Clone + Debug + Into<K> + KvAssoc + Send + Sync,
+            T: 'static + Clone + Debug + Into<K> + IsHidden + KvAssoc + Send + Sync,
             T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)*
@@ -1387,7 +1439,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
         /// Split a state reader into multiple state readers.
         async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
         where
-            T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+            T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
             T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)*;
@@ -1429,7 +1481,7 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
     quote!{
         async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
         where
-            T: 'static + Clone + Debug + Into<Self::K> + KvAssoc + Send + Sync,
+            T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
             T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
             #(#state_typ_cons)* {
@@ -1467,7 +1519,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1651,7 +1703,7 @@ pub fn watch_group_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1711,7 +1763,7 @@ pub fn watch_group_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1771,7 +1823,7 @@ pub fn merge_group_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1936,7 +1988,7 @@ pub fn merge_group_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1994,7 +2046,7 @@ pub fn merge_group_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
