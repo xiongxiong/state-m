@@ -126,7 +126,7 @@ where
             HandleI::Source(ref source, ref cache) => {
                 for check in source.pass_checks.iter() {
                     if !check.is_open() {
-                        tracing::trace!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
+                        tracing::debug!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
                         check.notified().await;
                     }
                 }
@@ -166,7 +166,7 @@ where
                         let state = event.state.clone();
                         let recver_count = source.sender.send(event)?;
                         *guard = state.clone();
-                        tracing::trace!("{sm_id} | {tag:?} | {recver_count} | send -- {state:?}");
+                        tracing::debug!("{sm_id} | {tag:?} | {recver_count} | send -- {state:?}");
                         (state, wait_rx)
                     } else {
                         return Ok(());
@@ -174,7 +174,7 @@ where
                 };
                 if let (state, Some(mut rx)) = res {
                     _ = rx.recv().await;
-                    tracing::trace!("{sm_id} | {tag:?} | done -- {state:?}");
+                    tracing::debug!("{sm_id} | {tag:?} | done -- {state:?}");
                 } else {
                     tokio::task::yield_now().await;
                 }
@@ -358,11 +358,11 @@ where
                                 if e.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
                                         if !check.is_open() {
-                                            tracing::trace!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
+                                            tracing::debug!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
                                             check.notified().await;
                                         }
                                     }
-                                    tracing::trace!("{sm_id} | {tag:?} | recv -- {s_new:?}");
+                                    tracing::debug!("{sm_id} | {tag:?} | recv -- {s_new:?}");
                                     {
                                         cache.store(Arc::new(s_new.clone()));
                                     }
