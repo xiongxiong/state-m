@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.26 - 2026-09-02
+#### Bug Fixes
+- changed tracing level - (6a145e7) - wangjirong
+#### Miscellaneous Chores
+- update - (a217bff) - 王继荣
+- update - (d1f783d) - wangjirong
+
+- - -
+
 ## state-m-0.8.25 - 2026-09-01
 #### Bug Fixes
 - added hidden attribute for tag - (ef4c65c) - wangjirong
