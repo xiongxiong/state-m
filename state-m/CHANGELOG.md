@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.27 - 2026-09-06
+#### Bug Fixes
+- added merge_reader & merge_group for readers - (c89240a) - wangjirong
+
+- - -
+
 ## state-m-0.8.26 - 2026-09-02
 #### Bug Fixes
 - changed tracing level - (6a145e7) - wangjirong

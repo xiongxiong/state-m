@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.20 - 2026-09-06
+#### Bug Fixes
+- added merge_reader & merge_group for readers - (c89240a) - wangjirong
+#### Miscellaneous Chores
+- update - (d1f783d) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.19 - 2026-09-01
 #### Bug Fixes
 - added hidden attribute for tag - (ef4c65c) - wangjirong
