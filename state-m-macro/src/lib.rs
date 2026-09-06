@@ -702,36 +702,10 @@ pub fn merge_reader(input: TokenStream) -> TokenStream {
         .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should be greater than 1.");
     let method_name = format_ident!("merge_reader_{n}");
-    let generic_typs: Vec<_> = itertools::intersperse(
+    let readers: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
-            let typ = format_ident!("T{}", i);
-            quote! {#typ}
-        }),
-        quote! {,},
-    )
-    .collect();
-    let reader_params: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let typ = format_ident!("T{}", i);
             let name = format_ident!("reader_{}", i);
-            quote! {#name: Reader<#typ>}
-        }),
-        quote! {,},
-    )
-    .collect();
-    let func_params: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let typ = format_ident!("T{}", i);
-            let name = format_ident!("func_{}", i);
-            quote! {#name: impl Fn(#typ) -> T + Send + 'static}
-        }),
-        quote! {,},
-    )
-    .collect();
-    let generic_typ_cons: Vec<_> = itertools::intersperse(
-        (0..n).map(|i| {
-            let typ = format_ident!("T{}", i);
-            quote! {#typ: AsState}
+            quote! {#name: Reader<T>}
         }),
         quote! {,},
     )
@@ -747,9 +721,9 @@ pub fn merge_reader(input: TokenStream) -> TokenStream {
         .collect();
     let pc_params: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
-            let reader_name = format_ident!("reader_{}", i);
+            let reader = format_ident!("reader_{}", i);
             quote! {
-                #reader_name
+                #reader
                     .pass_checks
                     .as_ref()
                     .iter()
@@ -763,21 +737,11 @@ pub fn merge_reader(input: TokenStream) -> TokenStream {
     let sel_branches: Vec<_> = (0..n)
         .map(|i| {
             let rx_name = format_ident!("rx_{}", i);
-            let func_name = format_ident!("func_{}", i);
             quote! {
                 res = #rx_name.recv() => {
                     match res {
                         Ok(s) => {
-                            tracing::trace!("rx_{} | recv -- {:?}", #i, s.state);
-                            let s_new = StateEvent {
-                                state: State {
-                                    value: #func_name(s.state.value),
-                                    timestamp: s.state.timestamp,
-                                },
-                                is_touch: s.is_touch,
-                                close_handle: s.close_handle,
-                            };
-                            if tx_c.send(s_new).is_err() {
+                            if tx_c.send(s).is_err() {
                                 break;
                             }
                         },
@@ -795,11 +759,11 @@ pub fn merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
-        pub fn #method_name<#(#generic_typs)*, T>(
-            #(#reader_params)*, #(#func_params)*, capacity: usize,
+        pub fn #method_name<T>(
+            #(#readers)*, capacity: usize,
         ) -> Reader<T>
         where
-            #(#generic_typ_cons)*, T: AsState,
+            T: AsState,
         {
             let (tx, _) = channel(capacity);
             let tx_c = tx.clone();

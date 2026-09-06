@@ -171,42 +171,24 @@ where
     }
 }
 
-pub fn merge_group<I, T, S>(
-    readers: Vec<(I, Reader<T>)>,
-    func: impl Fn(I, T) -> S + Send + 'static,
-    capacity: usize,
-) -> Reader<S>
+pub fn merge_group<T>(readers: Vec<Reader<T>>, capacity: usize) -> Reader<T>
 where
-    I: 'static + Clone + Debug + Send + Sync,
     T: AsState,
-    S: AsState,
 {
     let (tx, _) = channel(capacity);
     let tx_c = tx.clone();
     let mut stream_map: StreamMap<usize, _> = StreamMap::new();
     for (i, item) in readers.iter().enumerate() {
-        stream_map.insert(i, BroadcastStream::new(item.1.sender.subscribe()));
+        stream_map.insert(i, BroadcastStream::new(item.sender.subscribe()));
     }
-    let ids = readers.iter().map(|r| r.0.clone()).collect::<Vec<_>>();
     tokio::spawn(async move {
         loop {
             select! {
                 res = stream_map.next() => {
                     match res {
                         Some((i, Ok(s))) => {
-                            if let Some(id) = ids.get(i) {
-                                tracing::trace!("rx_{} | {:?} | recv -- {:?}", i, id, s.state);
-                                let s_new = StateEvent {
-                                    state: State {
-                                        value: func(id.clone(), s.state.value),
-                                        timestamp: s.state.timestamp,
-                                    },
-                                    is_touch: s.is_touch,
-                                    close_handle: s.close_handle,
-                                };
-                                if tx_c.send(s_new).is_err() {
-                                    break;
-                                }
+                            if tx_c.send(s).is_err() {
+                                break;
                             }
                         },
                         _ => break,
@@ -216,8 +198,7 @@ where
         }
     });
     let pass_checks: Vec<_> = itertools::concat(readers.iter().map(|item| {
-        item.1
-            .pass_checks
+        item.pass_checks
             .as_ref()
             .iter()
             .map(|v| v.clone())
