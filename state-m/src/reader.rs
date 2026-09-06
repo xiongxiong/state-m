@@ -186,7 +186,7 @@ where
             select! {
                 res = stream_map.next() => {
                     match res {
-                        Some((i, Ok(s))) => {
+                        Some((_, Ok(s))) => {
                             if tx_c.send(s).is_err() {
                                 break;
                             }
