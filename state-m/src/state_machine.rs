@@ -175,7 +175,7 @@ where
         &self,
         tag: T,
         capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+        pass_checks: Option<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + IsHidden + KvAssoc + Send + Sync,
@@ -645,7 +645,7 @@ pub trait UseStateMachine: HasStateMachine {
         &self,
         tag: T,
         capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+        pass_checks: Option<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
@@ -959,7 +959,7 @@ where
         &self,
         tag: T,
         capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+        pass_checks: Option<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
     ) -> Result<(), AddHandleError<Self::K>>
     where
         T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,

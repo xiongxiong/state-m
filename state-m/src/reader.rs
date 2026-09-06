@@ -3,11 +3,13 @@ use crate::{
     source::Inner,
     state::{State, StateEvent},
 };
-use std::{fmt::Debug, ops::Deref};
+use state_m_macro::merge_reader;
+use std::{fmt::Debug, ops::Deref, sync::Arc};
 use tokio::{
     select,
     sync::broadcast::{Sender, channel, error::RecvError},
 };
+use tokio_stream::{StreamExt as _, StreamMap, wrappers::BroadcastStream};
 
 /// Reader of state, to receive state change events.
 #[derive(Clone, Debug)]
@@ -168,3 +170,72 @@ where
         })
     }
 }
+
+pub fn merge_group<I, T, S>(
+    readers: Vec<(I, Reader<T>)>,
+    func: impl Fn(I, T) -> S + Send + 'static,
+    capacity: usize,
+) -> Reader<S>
+where
+    I: 'static + Clone + Debug + Send + Sync,
+    T: AsState,
+    S: AsState,
+{
+    let (tx, _) = channel(capacity);
+    let tx_c = tx.clone();
+    let mut stream_map: StreamMap<usize, _> = StreamMap::new();
+    for (i, item) in readers.iter().enumerate() {
+        stream_map.insert(i, BroadcastStream::new(item.1.sender.subscribe()));
+    }
+    let ids = readers.iter().map(|r| r.0.clone()).collect::<Vec<_>>();
+    tokio::spawn(async move {
+        loop {
+            select! {
+                res = stream_map.next() => {
+                    match res {
+                        Some((i, Ok(s))) => {
+                            if let Some(id) = ids.get(i) {
+                                tracing::trace!("rx_{} | {:?} | recv -- {:?}", i, id, s.state);
+                                let s_new = StateEvent {
+                                    state: State {
+                                        value: func(id.clone(), s.state.value),
+                                        timestamp: s.state.timestamp,
+                                    },
+                                    is_touch: s.is_touch,
+                                    close_handle: s.close_handle,
+                                };
+                                if tx_c.send(s_new).is_err() {
+                                    break;
+                                }
+                            }
+                        },
+                        _ => break,
+                    }
+                }
+            }
+        }
+    });
+    let pass_checks: Vec<_> = itertools::concat(readers.iter().map(|item| {
+        item.1
+            .pass_checks
+            .as_ref()
+            .iter()
+            .map(|v| v.clone())
+            .collect::<Vec<_>>()
+    }));
+    Reader(Inner {
+        capacity,
+        sender: tx,
+        pass_checks: Arc::new(pass_checks),
+    })
+}
+
+merge_reader!(2);
+merge_reader!(3);
+merge_reader!(4);
+merge_reader!(5);
+merge_reader!(6);
+merge_reader!(7);
+merge_reader!(8);
+merge_reader!(9);
+merge_reader!(10);

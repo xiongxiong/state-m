@@ -9,7 +9,7 @@ where
 {
     pub(crate) capacity: usize,
     pub(crate) sender: Sender<StateEvent<S>>,
-    pub(crate) pass_checks: Arc<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+    pub(crate) pass_checks: Arc<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
 }
 
 impl<S> Inner<S>
@@ -18,7 +18,7 @@ where
 {
     pub fn new(
         capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+        pass_checks: Option<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
     ) -> Self {
         let (tx, _) = channel(capacity);
         Self {
@@ -54,7 +54,7 @@ where
 {
     pub fn new(
         capacity: usize,
-        pass_checks: Option<Vec<Box<dyn AsPassCheck + Send + Sync>>>,
+        pass_checks: Option<Vec<Arc<dyn AsPassCheck + Send + Sync>>>,
     ) -> Self {
         Self(Inner::new(capacity, pass_checks))
     }

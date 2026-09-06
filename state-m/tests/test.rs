@@ -239,7 +239,59 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge() -> Result<()> {
+    async fn test_merge_reader() -> Result<()> {
+        init_tracing();
+        let unit_a = Unit::<TagS, TagS>::new("A");
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
+        let unit_b = Unit::<TagS, TagS>::new("B");
+        let reader_0 = unit_a.reader(TagInner(0))?;
+        let reader_1 = unit_a.reader(TagInner(1))?;
+        let reader_m = merge_reader_2(
+            reader_0,
+            reader_1,
+            |s| format!("from_0 | {s}"),
+            |s| format!("from_1 | {s}"),
+            10,
+        );
+        unit_b.add_reader(TagOuter(0, 0), reader_m).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_merge_group() -> Result<()> {
+        init_tracing();
+        let unit_a = Unit::<TagS, TagS>::new("A");
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.add_source(TagInner(1), 10, None).await?;
+        let unit_b = Unit::<TagS, TagS>::new("B");
+        let reader_0 = unit_a.reader(TagInner(0))?;
+        let reader_1 = unit_a.reader(TagInner(1))?;
+        let reader_m = merge_group(
+            vec![("X", reader_0), ("Y", reader_1)],
+            |i, s| format!("from_{i} | {s}"),
+            10,
+        );
+        unit_b.add_reader(TagOuter(0, 0), reader_m).await?;
+        for i in 0..10 {
+            unit_a.alter(TagInner(0), format!("A_{i}")).await?;
+            unit_a.alter(TagInner(1), format!("B_{i}")).await?;
+        }
+        tracing::info!("state_machine: unit_a\n{:?}", unit_a.state_machine);
+        tracing::info!("state_machine: unit_b\n{:?}", unit_b.state_machine);
+        unit_a.wait_alter(TagInner(0), "C".into()).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_merge_sm() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
@@ -268,7 +320,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge_same() -> Result<()> {
+    async fn test_merge_group_sm() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
@@ -328,7 +380,7 @@ mod tests {
         let door = Arc::new(Door::new());
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a
-            .add_source(TagInner(0), 10, Some(vec![Box::new(door.clone())]))
+            .add_source(TagInner(0), 10, Some(vec![Arc::new(door.clone())]))
             .await?;
         let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b
@@ -381,7 +433,7 @@ mod tests {
         let barriers = Arc::new(Barriers::new());
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a
-            .add_source(TagInner(0), 10, Some(vec![Box::new(barriers.clone())]))
+            .add_source(TagInner(0), 10, Some(vec![Arc::new(barriers.clone())]))
             .await?;
         let unit_b = Unit::<TagS, TagS>::new("B");
         unit_b

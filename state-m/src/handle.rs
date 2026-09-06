@@ -106,7 +106,7 @@ where
         }
     }
 
-    fn pass_checks(&self) -> Arc<Vec<Box<dyn AsPassCheck + Send + Sync>>> {
+    fn pass_checks(&self) -> Arc<Vec<Arc<dyn AsPassCheck + Send + Sync>>> {
         match self.inner {
             HandleI::Source(ref source, _) => source.pass_checks.clone(),
             HandleI::Reader(ref reader) => reader.pass_checks.clone(),

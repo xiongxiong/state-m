@@ -6,7 +6,7 @@ mod state;
 mod state_machine;
 
 pub use barrier::*;
-pub use reader::Reader;
+pub use reader::*;
 pub use state::*;
 pub use state_m_macro::StateTag;
 pub use state_machine::*;
