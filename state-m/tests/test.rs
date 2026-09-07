@@ -247,7 +247,7 @@ mod tests {
         let unit_b = Unit::<TagS, TagS>::new("B");
         let reader_0 = unit_a.reader(TagInner(0))?;
         let reader_1 = unit_a.reader(TagInner(1))?;
-        let reader_m = merge_reader_2(
+        let reader_m = influx_reader_2(
             reader_0.derive_by(|s| format!("from_0 | {s}")),
             reader_1.derive_by(|s| format!("from_1 | {s}")),
             10,
@@ -272,7 +272,7 @@ mod tests {
         let unit_b = Unit::<TagS, TagS>::new("B");
         let reader_0 = unit_a.reader(TagInner(0))?;
         let reader_1 = unit_a.reader(TagInner(1))?;
-        let reader_m = merge_group(
+        let reader_m = influx_group(
             vec![
                 reader_0.derive_by(|s| format!("from_0 | {s}")),
                 reader_1.derive_by(|s| format!("from_1 | {s}")),

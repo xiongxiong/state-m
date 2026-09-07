@@ -695,13 +695,13 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn merge_reader(input: TokenStream) -> TokenStream {
+pub fn influx_reader(input: TokenStream) -> TokenStream {
     let lit_n = parse_macro_input!(input as LitInt);
     let n = lit_n
         .base10_parse::<usize>()
         .expect("Input can only be a number of type [usize].");
     assert!(n > 1, "Input number should be greater than 1.");
-    let method_name = format_ident!("merge_reader_{n}");
+    let method_name = format_ident!("influx_reader_{n}");
     let readers: Vec<_> = itertools::intersperse(
         (0..n).map(|i| {
             let name = format_ident!("reader_{}", i);
@@ -759,6 +759,7 @@ pub fn merge_reader(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote! {
+        /// Influx of several readers.
         pub fn #method_name<T>(
             #(#readers)*, capacity: usize,
         ) -> Reader<T>

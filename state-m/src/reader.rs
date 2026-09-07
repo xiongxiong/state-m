@@ -3,7 +3,7 @@ use crate::{
     source::Inner,
     state::{State, StateEvent},
 };
-use state_m_macro::merge_reader;
+use state_m_macro::influx_reader;
 use std::{fmt::Debug, ops::Deref, sync::Arc};
 use tokio::{
     select,
@@ -171,7 +171,8 @@ where
     }
 }
 
-pub fn merge_group<T>(readers: Vec<Reader<T>>, capacity: usize) -> Reader<T>
+/// Influx of a group of readers.
+pub fn influx_group<T>(readers: Vec<Reader<T>>, capacity: usize) -> Reader<T>
 where
     T: AsState,
 {
@@ -211,12 +212,12 @@ where
     })
 }
 
-merge_reader!(2);
-merge_reader!(3);
-merge_reader!(4);
-merge_reader!(5);
-merge_reader!(6);
-merge_reader!(7);
-merge_reader!(8);
-merge_reader!(9);
-merge_reader!(10);
+influx_reader!(2);
+influx_reader!(3);
+influx_reader!(4);
+influx_reader!(5);
+influx_reader!(6);
+influx_reader!(7);
+influx_reader!(8);
+influx_reader!(9);
+influx_reader!(10);
