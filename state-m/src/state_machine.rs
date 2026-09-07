@@ -620,6 +620,13 @@ where
             StateChange::UnChange(v) => v.clone(),
         }
     }
+
+    pub fn is_change(&self) -> bool {
+        match self {
+            StateChange::Change(_, _) => true,
+            StateChange::UnChange(_) => false,
+        }
+    }
 }
 
 pub trait HasStateMachine {
