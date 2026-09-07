@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.30 - 2026-09-07
+#### Bug Fixes
+- rename merge_reader to influx_reader - (b179d8c) - wangjirong
+
+- - -
+
 ## state-m-0.8.29 - 2026-09-07
 #### Bug Fixes
 - added is_change method - (f98a31a) - wangjirong
