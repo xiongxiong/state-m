@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.29 - 2026-09-07
+#### Bug Fixes
+- added is_change method - (f98a31a) - wangjirong
+#### Miscellaneous Chores
+- update - (41b338c) - 王继荣
+
+- - -
+
 ## state-m-0.8.28 - 2026-09-06
 #### Bug Fixes
 - update merge_reader & merge_group - (22b0752) - wangjirong
