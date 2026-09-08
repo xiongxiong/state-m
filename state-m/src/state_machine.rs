@@ -120,6 +120,22 @@ where
         self.1.contains_key(&tag.clone().into())
     }
 
+    /// Count handles of tag type T.
+    pub fn count_handles<T>(&self) -> usize
+    where
+        K: KeyIsTag<T>,
+        T: Clone + TryFrom<K>,
+        <T as TryFrom<K>>::Error: Debug,
+    {
+        let tags = self
+            .1
+            .iter()
+            .filter(|v| KeyIsTag::<T>::predicate(v.key()))
+            .map(|v| T::try_from(v.key().clone()).unwrap())
+            .collect::<Vec<_>>();
+        tags.len()
+    }
+
     pub fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<K>>
     where
         T: 'static + Clone + Debug + Into<K> + IsHidden + KvAssoc + Send + Sync,
@@ -683,6 +699,13 @@ pub trait UseStateMachine: HasStateMachine {
     where
         T: Clone + Into<Self::K>;
 
+    /// Count handles of tag type T.
+    fn count_handles<T>(&self) -> usize
+    where
+        Self::K: KeyIsTag<T>,
+        T: Clone + TryFrom<Self::K>,
+        <T as TryFrom<Self::K>>::Error: Debug;
+
     /// Get a new reader from state machine, which will receive state change events individually.
     /// * `tag` - the `Tag` of the handle which you want to get a reader from it.
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
@@ -991,6 +1014,15 @@ where
         T: Clone + Into<Self::K>,
     {
         self.state_machine().has_handle(tag)
+    }
+
+    fn count_handles<T>(&self) -> usize
+    where
+        Self::K: KeyIsTag<T>,
+        T: Clone + TryFrom<Self::K>,
+        <T as TryFrom<Self::K>>::Error: Debug,
+    {
+        self.state_machine().count_handles()
     }
 
     fn reader<T>(&self, tag: T) -> Result<Reader<T::Value>, GetHandleError<Self::K>>
