@@ -166,7 +166,7 @@ where
                         let state = event.state.clone();
                         let recver_count = source.sender.send(event)?;
                         *guard = state.clone();
-                        tracing::debug!("{sm_id} | {tag:?} | {recver_count} | send -- {state:?}");
+                        tracing::debug!("{sm_id} | {tag:?} | send | {recver_count} -- {state:?}");
                         (state, wait_rx)
                     } else {
                         return Ok(());
