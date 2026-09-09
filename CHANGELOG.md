@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.5.34 - 2026-09-09
+### Package updates
+- state-m bumped to state-m-0.8.33
+### Global changes
+#### Miscellaneous Chores
+- update - (aa3dfcf) - wangjirong
+
+- - -
+
 ## 0.5.33 - 1970-01-01
 ### Package updates
 - state-m bumped to state-m-0.8.32
