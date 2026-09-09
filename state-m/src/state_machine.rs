@@ -1315,7 +1315,7 @@ where
 pub enum StateChangeError<T, K>
 where
     T: Debug + Into<K> + KvAssoc,
-    T::Value: Default,
+    T::Value: Debug + Default,
     K: AsKey,
 {
     #[error(transparent)]
