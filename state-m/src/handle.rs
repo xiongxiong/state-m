@@ -136,7 +136,10 @@ where
                     if let Some(s_cmp) = pre_cmp
                         && s_cmp != s_old
                     {
-                        return Err(StateChangeError::CompareFailure);
+                        return Err(StateChangeError::CompareFailure(
+                            s_old.clone(),
+                            s_cmp.clone(),
+                        ));
                     }
                     let s = f(s_old.clone());
                     if is_touch || s_old != s {
@@ -384,12 +387,12 @@ where
 #[derive(Debug, Error)]
 pub enum StateChangeError<S>
 where
-    S: Default,
+    S: Debug + Default,
 {
     #[error("This state is read only.")]
     StateReadOnly,
-    #[error("This state used to compare is out of date.")]
-    CompareFailure,
+    #[error("This state used to compare is out of date, cur -- {_0:?}, cmp -- {_1:?}")]
+    CompareFailure(S, S),
     #[error(transparent)]
     SendError(#[from] SendError<StateEvent<S>>),
     #[error(transparent)]
