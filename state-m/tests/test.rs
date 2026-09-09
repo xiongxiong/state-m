@@ -1,5 +1,5 @@
 use state_m::*;
-use std::fmt::Debug;
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, StateTag)]
 #[state_tag(assoc = String, label = format!("my_id_{}", self.0))]
@@ -71,10 +71,10 @@ where
     IdI: AsKey + KvAssoc,
     IdO: AsKey + KvAssoc,
 {
-    pub fn new(id: &str) -> Self {
-        Self {
+    pub fn new(id: &str) -> Arc<Self> {
+        Arc::new(Self {
             state_machine: StateMachine::<Tag<IdI, IdO>>::new(id),
-        }
+        })
     }
 }
 

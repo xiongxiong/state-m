@@ -999,7 +999,7 @@ pub fn watch_decl(input: TokenStream) -> TokenStream {
         .collect();
     let get_q_method = |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<CancellationToken, TagUsageError<Self::K>>
+            fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Pin<Box<dyn Future<Output = Result<CancellationToken, TagUsageError<Self::K>>> + Send>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
@@ -1072,16 +1072,19 @@ pub fn watch_impl(input: TokenStream) -> TokenStream {
     .collect();
     let get_q_method = move |m_name: Ident| {
         quote! {
-            async fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Result<CancellationToken, TagUsageError<Self::K>>
+            fn #m_name<#(#tag_typs)*, F>(&self, #(#tag_params)*, func: F) -> Pin<Box<dyn Future<Output = Result<CancellationToken, TagUsageError<Self::K>>> + Send>>
             where
                 #(#tag_typ_cons)*
                 F: 'static
                     + Fn(
                         #(#fn_params_typ)*
                     ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-                    + Send
+                    + Send,
             {
-                self.state_machine().#m_name(#(#params)*, func).await
+                let sm = self.state_machine().clone();
+                Box::pin(async move {
+                    sm.#m_name(#(#params)*, func).await
+                })
             }
         }
     };
@@ -1303,7 +1306,7 @@ pub fn merge_reader_decl(input: TokenStream) -> TokenStream {
         .collect();
     quote! {
         /// Merge multiple state readers into one.
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Result<Reader<S>, TagUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Pin<Box<dyn Future<Output = Result<Reader<S>, TagUsageError<Self::K>>> + Send>>
         where
             #(#tag_typ_cons)*
             S: AsState,
@@ -1366,12 +1369,16 @@ pub fn merge_reader_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Result<Reader<S>, TagUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, S, F>(&self, #(#tag_params)*, capacity: usize, func: F) -> Pin<Box<dyn Future<Output = Result<Reader<S>, TagUsageError<Self::K>>> + Send>>
         where
             #(#tag_typ_cons)*
             S: AsState,
-            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send {
-                self.state_machine().#method_name(#(#tag_names)*, capacity, func).await
+            F: 'static + Fn(#(#fn_params_typ)*) -> S + Send,
+            {
+                let sm = self.state_machine().clone();
+                Box::pin(async move {
+                    sm.#method_name(#(#tag_names)*, capacity, func).await
+                })
             }
     }.into()
 }
@@ -1528,7 +1535,7 @@ pub fn split_reader_decl(input: TokenStream) -> TokenStream {
         .collect();
     quote!{
         /// Split a state reader into multiple state readers.
-        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
+        fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Pin<Box<dyn Future<Output = Result<(#(#reader_typs)*), GetHandleError<Self::K>>> + Send>>
         where
             T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
             T::Value: AsState,
@@ -1570,14 +1577,18 @@ pub fn split_reader_impl(input: TokenStream) -> TokenStream {
         })
         .collect();
     quote!{
-        async fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Result<(#(#reader_typs)*), GetHandleError<Self::K>>
+        fn #method_name<T, F, #(#state_typs)*>(&self, tag: T, func: F) -> Pin<Box<dyn Future<Output = Result<(#(#reader_typs)*), GetHandleError<Self::K>>> + Send>>
         where
             T: 'static + Clone + Debug + Into<Self::K> + IsHidden + KvAssoc + Send + Sync,
             T::Value: AsState,
             F: 'static + Fn(T::Value) -> (#(#state_typs)*) + Send,
-            #(#state_typ_cons)* {
-                self.state_machine().#method_name(tag, func).await
-            }
+            #(#state_typ_cons)*
+        {
+            let sm = self.state_machine().clone();
+            Box::pin(async move {
+                sm.#method_name(tag, func).await
+            })
+        }
     }.into()
 }
 
@@ -1812,7 +1823,7 @@ pub fn watch_group_decl(input: TokenStream) -> TokenStream {
     quote! {
         /// Watch states of tags in the dimension of tag type.
         /// * `func` - how to respond to state change events of tags of the same tag type.
-        async fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Pin<Box<dyn Future<Output = Result<CancellationToken, TagGroupUsageError<Self::K>>> + Send>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
@@ -1870,7 +1881,7 @@ pub fn watch_group_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Result<CancellationToken, TagGroupUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, F>(&self, func: F) -> Pin<Box<dyn Future<Output = Result<CancellationToken, TagGroupUsageError<Self::K>>> + Send>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
@@ -1878,9 +1889,12 @@ pub fn watch_group_impl(input: TokenStream) -> TokenStream {
                 + Fn(
                     #(#func_arg_typs)*,
                 ) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-                + Send
+                + Send,
         {
-            self.state_machine().#method_name::<#(#tag_typs)*, _>(func).await
+            let sm = self.state_machine().clone();
+            Box::pin(async move {
+                sm.#method_name::<#(#tag_typs)*, _>(func).await
+            })
         }
     }
     .into()
@@ -2098,7 +2112,7 @@ pub fn merge_group_decl(input: TokenStream) -> TokenStream {
         /// Merge states of tags in the dimension of tag type.
         /// * `capacity` - the capacity of new state channel.
         /// * `func` - how to merge states of tags of the same tag type.
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Pin<Box<dyn Future<Output = Result<Reader<S>, TagGroupUsageError<Self::K>>> + Send>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
@@ -2153,14 +2167,17 @@ pub fn merge_group_impl(input: TokenStream) -> TokenStream {
     )
     .collect();
     quote! {
-        async fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Result<Reader<S>, TagGroupUsageError<Self::K>>
+        fn #method_name<#(#tag_typs)*, S, F>(&self, capacity: usize, func: F) -> Pin<Box<dyn Future<Output = Result<Reader<S>, TagGroupUsageError<Self::K>>> + Send>>
         where
             #(#key_typ_cons)*
             #(#tag_typ_cons)*
             S: AsState,
             F: 'static + Fn(#(#func_arg_typs)*) -> S + Send
         {
-            self.state_machine().#method_name(capacity, func).await
+            let sm = self.state_machine().clone();
+            Box::pin(async move {
+                sm.#method_name(capacity, func).await
+            })
         }
     }
     .into()
