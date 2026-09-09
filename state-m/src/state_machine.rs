@@ -646,7 +646,7 @@ where
 }
 
 pub trait HasStateMachine {
-    type K: 'static + AsKey;
+    type K: AsKey;
 
     fn state_machine(&self) -> &StateMachine<Self::K>;
 }
