@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file. See [conven
 #### Bug Fixes
 - log change - (d5103ce) - wangjirong
 #### Miscellaneous Chores
+- (**version**) 0.5.34 - (7d4185d) - wangjirong
+- update - (aa3dfcf) - wangjirong
+- update - (a6abe19) - wangjirong
+
+- - -
+
+## state-m-0.8.33 - 2026-09-09
+#### Bug Fixes
+- log change - (d5103ce) - wangjirong
+#### Miscellaneous Chores
 - update - (aa3dfcf) - wangjirong
 - update - (a6abe19) - wangjirong
 
