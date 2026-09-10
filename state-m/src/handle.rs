@@ -5,13 +5,12 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
-use arc_swap::ArcSwap;
 use chrono::Utc;
 use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
     ops::Deref,
-    sync::{Arc, OnceLock},
+    sync::{Arc, OnceLock, RwLock},
 };
 use thiserror::Error;
 use tokio::sync::{
@@ -66,8 +65,8 @@ enum HandleI<S>
 where
     S: AsState,
 {
-    Source(Source<S>, Arc<ArcSwap<S>>, Arc<ArcSwap<State<S>>>),
-    Reader(Reader<S>, Arc<ArcSwap<State<S>>>),
+    Source(Source<S>, Arc<RwLock<S>>, Arc<RwLock<State<S>>>),
+    Reader(Reader<S>, Arc<RwLock<State<S>>>),
 }
 
 #[derive(Debug)]
@@ -112,7 +111,7 @@ where
         }
     }
 
-    pub fn cache_r(&self) -> Arc<ArcSwap<State<T::Value>>> {
+    pub fn cache_r(&self) -> Arc<RwLock<State<T::Value>>> {
         match self.inner {
             HandleI::Source(_, _, ref cache_r) => cache_r.clone(),
             HandleI::Reader(_, ref cache_r) => cache_r.clone(),
@@ -137,7 +136,7 @@ where
                     }
                 }
                 let res = {
-                    let v_old = cache_w.load().as_ref().clone();
+                    let v_old = { cache_w.read().unwrap().clone() };
                     let v = f(v_old.clone());
                     if let Some(v_cmp) = to_cmp
                         && v_cmp != v_old
@@ -173,7 +172,9 @@ where
                             }
                         };
                         let state = event.state.clone();
-                        cache_w.store(Arc::new(v));
+                        {
+                            *cache_w.write().unwrap() = v;
+                        }
                         match source.sender.send(event) {
                             Ok(recver_count) => {
                                 tracing::debug!(
@@ -182,7 +183,9 @@ where
                                 (state, wait_rx)
                             }
                             Err(e) => {
-                                cache_w.store(Arc::new(v_old));
+                                {
+                                    *cache_w.write().unwrap() = v_old;
+                                }
                                 return Err(e.into());
                             }
                         }
@@ -254,11 +257,11 @@ where
     }
 
     pub fn value(&self) -> T::Value {
-        self.cache_r().load().value.clone()
+        self.cache_r().read().unwrap().value.clone()
     }
 
     pub fn state(&self) -> State<T::Value> {
-        self.cache_r().load().as_ref().clone()
+        self.cache_r().read().unwrap().clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<T::Value>> {
@@ -369,7 +372,7 @@ where
                     r = recver.recv() => {
                         match r {
                             Ok(e) => {
-                                let s_old = cache_r.load().as_ref().clone();
+                                let s_old = { cache_r.read().unwrap().clone() };
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
@@ -379,7 +382,9 @@ where
                                         }
                                     }
                                     tracing::debug!("{sm_id} | {tag:?} | recv -- {s_new:?}");
-                                    cache_r.store(Arc::new(s_new.clone()));
+                                    {
+                                        *cache_r.write().unwrap() = s_new.clone();
+                                    }
                                     if fanout_tx.send((s_new, s_old)).is_err() {
                                         break;
                                     }
