@@ -8,6 +8,24 @@ All notable changes to this project will be documented in this file. See [conven
 - state-m bumped to state-m-0.8.33
 ### Global changes
 #### Miscellaneous Chores
+- (**version**) 0.5.34 - (d408487) - wangjirong
+- (**version**) 0.5.34 - (aa1f8dd) - wangjirong
+- (**version**) 0.5.34 - (e0506ac) - wangjirong
+- (**version**) 0.5.34 - (d1b3a5b) - wangjirong
+- (**version**) 0.5.34 - (935f949) - 王继荣
+- (**version**) 0.5.34 - (c9d2bbf) - wangjirong
+- (**version**) 0.5.34 - (d8ad0e6) - wangjirong
+- (**version**) 0.5.34 - (7d4185d) - wangjirong
+- update - (aa3dfcf) - wangjirong
+
+- - -
+
+## 0.5.34 - 2026-09-10
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.23
+- state-m bumped to state-m-0.8.33
+### Global changes
+#### Miscellaneous Chores
 - (**version**) 0.5.34 - (aa1f8dd) - wangjirong
 - (**version**) 0.5.34 - (e0506ac) - wangjirong
 - (**version**) 0.5.34 - (d1b3a5b) - wangjirong
