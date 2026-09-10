@@ -13,11 +13,11 @@ Macros for state-m. The only exported macro is 'state_tag'.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[state_tag]
 pub enum Tag {
-    #[state_tag(assoc = String, label = format!("Layer_{}", self.0))]
+    #[state_tag(assoc = String, label = format!("layer_{}", self.0))]
     Inner(usize),
     #[state_tag(assoc = String, label = "from outer")]
     Outer,
-    #[state_tag(assoc = CustomType, label = "custom_type")]
+    #[state_tag(assoc = CusType, hidden = true, label = "custom_type")]
     OuterEx1,
     #[state_tag(assoc = usize)]
     OuterEx2,

@@ -66,10 +66,10 @@ where
     IdI: AsKey + KvAssoc,
     IdO: AsKey + KvAssoc,
 {
-    pub fn new(id: &str) -> Self {
-        Self {
+    pub fn new(id: &str) -> Arc<Self> {
+        Arc::new(Self {
             state_machine: StateMachine::<Tag<IdI, IdO>>::new(id),
-        }
+        })
     }
 }
 
