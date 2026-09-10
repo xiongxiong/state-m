@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-macro-0.2.23 - 2026-09-10
+#### Bug Fixes
+- added sort for watch_group - (bf9eea6) - wangjirong
+#### Miscellaneous Chores
+- update - (aa3dfcf) - wangjirong
+
+- - -
+
 ## state-m-macro-0.2.22 - 2026-09-07
 #### Bug Fixes
 - rename merge_reader to influx_reader - (b179d8c) - wangjirong
