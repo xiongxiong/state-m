@@ -66,7 +66,7 @@ enum HandleI<S>
 where
     S: AsState,
 {
-    Source(Source<S>, Arc<ArcSwap<State<S>>>, Arc<ArcSwap<State<S>>>),
+    Source(Source<S>, Arc<ArcSwap<S>>, Arc<ArcSwap<State<S>>>),
     Reader(Reader<S>, Arc<ArcSwap<State<S>>>),
 }
 
@@ -124,7 +124,7 @@ where
         f: impl FnOnce(T::Value) -> T::Value,
         is_touch: bool,
         wait_arrival: bool,
-        pre_cmp: Option<T::Value>,
+        to_cmp: Option<T::Value>,
     ) -> Result<(), StateChangeError<T::Value>> {
         match self.inner {
             HandleI::Source(ref source, ref cache_w, _) => {
@@ -137,21 +137,21 @@ where
                     }
                 }
                 let res = {
-                    let s_old = cache_w.load().value.clone();
-                    let s = f(s_old.clone());
-                    if let Some(s_cmp) = pre_cmp
-                        && s_cmp != s_old
+                    let v_old = cache_w.load().as_ref().clone();
+                    let v = f(v_old.clone());
+                    if let Some(v_cmp) = to_cmp
+                        && v_cmp != v_old
                     {
                         return Err(StateChangeError::CompareFailure(
-                            s_cmp.clone(),
-                            s.clone(),
-                            s_old.clone(),
+                            v_cmp.clone(),
+                            v.clone(),
+                            v_old.clone(),
                         ));
                     }
-                    if is_touch || s_old != s {
+                    if is_touch || v_old != v {
                         let (event, wait_rx) = {
                             let state = State {
-                                value: s,
+                                value: v.clone(),
                                 timestamp: Utc::now(),
                             };
                             if wait_arrival {
@@ -173,10 +173,19 @@ where
                             }
                         };
                         let state = event.state.clone();
-                        let recver_count = source.sender.send(event)?;
-                        cache_w.store(Arc::new(state.clone()));
-                        tracing::debug!("{sm_id} | {tag:?} | send | {recver_count} -- {state:?}");
-                        (state, wait_rx)
+                        cache_w.store(Arc::new(v));
+                        match source.sender.send(event) {
+                            Ok(recver_count) => {
+                                tracing::debug!(
+                                    "{sm_id} | {tag:?} | send | {recver_count} -- {state:?}"
+                                );
+                                (state, wait_rx)
+                            }
+                            Err(e) => {
+                                cache_w.store(Arc::new(v_old));
+                                return Err(e.into());
+                            }
+                        }
                     } else {
                         return Ok(());
                     }
