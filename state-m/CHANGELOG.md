@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.34 - 2026-09-10
+#### Bug Fixes
+- update - (a38a9fc) - wangjirong
+
+- - -
+
 ## state-m-0.8.33 - 2026-09-10
 #### Bug Fixes
 - added sort for watch_group - (bf9eea6) - wangjirong
