@@ -133,15 +133,16 @@ where
                 let res = {
                     let mut guard = cache.write().unwrap();
                     let s_old = (*guard).value.clone();
+                    let s = f(s_old.clone());
                     if let Some(s_cmp) = pre_cmp
                         && s_cmp != s_old
                     {
                         return Err(StateChangeError::CompareFailure(
-                            s_old.clone(),
                             s_cmp.clone(),
+                            s.clone(),
+                            s_old.clone(),
                         ));
                     }
-                    let s = f(s_old.clone());
                     if is_touch || s_old != s {
                         let (event, wait_rx) = {
                             let state = State {
@@ -391,8 +392,8 @@ where
 {
     #[error("This state is read only.")]
     StateReadOnly,
-    #[error("This state used to compare is out of date, cur -- {_0:?}, cmp -- {_1:?}")]
-    CompareFailure(S, S),
+    #[error("Compare failure, change from {_0:?} to {_1:?}, but current value is {_2:?}")]
+    CompareFailure(S, S, S),
     #[error(transparent)]
     SendError(#[from] SendError<StateEvent<S>>),
     #[error(transparent)]
