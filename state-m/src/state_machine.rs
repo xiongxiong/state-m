@@ -398,7 +398,9 @@ where
             + Into<K>
             + IsHidden
             + KvAssoc
+            + Ord
             + PartialEq
+            + PartialOrd
             + Send
             + Sync
             + TryFrom<K, Error = &'static str>
@@ -415,6 +417,7 @@ where
             .iter()
             .filter(|v| KeyIsTag::<T>::predicate(v.key()))
             .map(|v| T::try_from(v.key().clone()).unwrap())
+            .sorted()
             .collect::<Vec<_>>();
         if tags.is_empty() {
             return Err(TagGroupUsageError::NoTagOfTyp(
@@ -882,7 +885,9 @@ pub trait UseStateMachine: HasStateMachine {
             + Into<Self::K>
             + IsHidden
             + KvAssoc
+            + Ord
             + PartialEq
+            + PartialOrd
             + Send
             + Sync
             + TryFrom<Self::K, Error = &'static str>
@@ -1217,7 +1222,9 @@ where
             + Into<Self::K>
             + IsHidden
             + KvAssoc
+            + Ord
             + PartialEq
+            + PartialOrd
             + Send
             + Sync
             + TryFrom<Self::K, Error = &'static str>

@@ -341,7 +341,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             ..*fields
                         };
                         let q = quote! {
-                            #[derive(Clone, Eq, Hash, PartialEq)]
+                            #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
                             #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_where #fields_named_new
                         };
                         (q, q_t_g_args, q_t_where)
@@ -368,7 +368,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                             ..*fields
                         };
                         let q = quote! {
-                            #[derive(Clone, Eq, Hash, PartialEq)]
+                            #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
                             #q_attrs #i_vis struct #t_name #q_t_g_args #fields_unnamed_new #q_t_where;
                         };
                         (q, q_t_g_args, q_t_where)
@@ -412,7 +412,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         let q = {
                             if t_g_idents.is_empty() {
                                 quote! {
-                                    #[derive(Clone, Default, Eq, Hash, PartialEq)]
+                                    #[derive(Clone, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
                                     #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_fields #q_t_where;
                                 }
                             } else {
@@ -422,7 +422,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                                 )
                                 .collect::<Vec<_>>();
                                 quote! {
-                                    #[derive(Clone, Eq, Hash, PartialEq)]
+                                    #[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
                                     #q_attrs #i_vis struct #t_name #q_t_g_args #q_t_fields #q_t_where;
 
                                     impl #q_t_g_args std::default::Default for #t_name #q_t_g_args #q_t_where {
@@ -1621,7 +1621,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<K> + IsHidden + KvAssoc + Ord + PartialEq + PartialOrd + Send + Sync + TryFrom<K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1657,6 +1657,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
                 .iter()
                 .filter(|v| KeyIsTag::<#typ>::predicate(v.key()))
                 .map(|v| #typ::try_from(v.key().clone()).unwrap())
+                .sorted()
                 .collect::<Vec<_>>();
             if #tags.is_empty() {
                 return Err(TagGroupUsageError::NoTagOfTyp(
@@ -1805,7 +1806,7 @@ pub fn watch_group_decl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + Ord + PartialEq + PartialOrd + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
@@ -1865,7 +1866,7 @@ pub fn watch_group_impl(input: TokenStream) -> TokenStream {
         .map(|i| {
             let typ = format_ident!("T{}", i);
             quote! {
-                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + PartialEq + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
+                #typ: 'static + Clone + Debug + Eq + std::hash::Hash + Into<Self::K> + IsHidden + KvAssoc + Ord + PartialEq + PartialOrd + Send + Sync + TryFrom<Self::K, Error = &'static str> + Unpin,
                 #typ::Value: AsState,
             }
         })
