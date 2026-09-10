@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file. See [conven
 #### Bug Fixes
 - added sort for watch_group - (bf9eea6) - wangjirong
 #### Miscellaneous Chores
+- (**version**) 0.5.34 - (aa1f8dd) - wangjirong
+- (**version**) 0.5.34 - (e0506ac) - wangjirong
+- (**version**) 0.5.34 - (d1b3a5b) - wangjirong
+- update - (aa3dfcf) - wangjirong
+
+- - -
+
+## state-m-macro-0.2.23 - 2026-09-10
+#### Bug Fixes
+- added sort for watch_group - (bf9eea6) - wangjirong
+#### Miscellaneous Chores
 - (**version**) 0.5.34 - (e0506ac) - wangjirong
 - (**version**) 0.5.34 - (d1b3a5b) - wangjirong
 - update - (aa3dfcf) - wangjirong
