@@ -11,7 +11,7 @@ use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
     ops::Deref,
-    sync::{Arc, OnceLock, RwLock},
+    sync::{Arc, OnceLock},
 };
 use thiserror::Error;
 use tokio::sync::{
@@ -66,8 +66,8 @@ enum HandleI<S>
 where
     S: AsState,
 {
-    Source(Source<S>, Arc<RwLock<State<S>>>),
-    Reader(Reader<S>),
+    Source(Source<S>, Arc<ArcSwap<State<S>>>, Arc<ArcSwap<State<S>>>),
+    Reader(Reader<S>, Arc<ArcSwap<State<S>>>),
 }
 
 #[derive(Debug)]
@@ -79,7 +79,6 @@ where
     sm_id: String,
     tag: T,
     inner: HandleI<T::Value>,
-    cache: Arc<ArcSwap<State<T::Value>>>,
     cancel_token: CancellationToken,
     fanout_tx: OnceLock<Sender<(State<T::Value>, State<T::Value>)>>,
 }
@@ -101,15 +100,22 @@ where
 {
     fn recver(&self) -> Receiver<StateEvent<T::Value>> {
         match self.inner {
-            HandleI::Source(ref source, _) => source.sender.subscribe(),
-            HandleI::Reader(ref reader) => reader.sender.subscribe(),
+            HandleI::Source(ref source, _, _) => source.sender.subscribe(),
+            HandleI::Reader(ref reader, _) => reader.sender.subscribe(),
         }
     }
 
     fn pass_checks(&self) -> Arc<Vec<Arc<dyn AsPassCheck + Send + Sync>>> {
         match self.inner {
-            HandleI::Source(ref source, _) => source.pass_checks.clone(),
-            HandleI::Reader(ref reader) => reader.pass_checks.clone(),
+            HandleI::Source(ref source, _, _) => source.pass_checks.clone(),
+            HandleI::Reader(ref reader, _) => reader.pass_checks.clone(),
+        }
+    }
+
+    pub fn cache_r(&self) -> Arc<ArcSwap<State<T::Value>>> {
+        match self.inner {
+            HandleI::Source(_, _, ref cache_r) => cache_r.clone(),
+            HandleI::Reader(_, ref cache_r) => cache_r.clone(),
         }
     }
 
@@ -120,10 +126,10 @@ where
         wait_arrival: bool,
         pre_cmp: Option<T::Value>,
     ) -> Result<(), StateChangeError<T::Value>> {
-        let sm_id = &self.sm_id;
-        let tag = &self.tag;
         match self.inner {
-            HandleI::Source(ref source, ref cache) => {
+            HandleI::Source(ref source, ref cache_w, _) => {
+                let sm_id = &self.sm_id;
+                let tag = &self.tag;
                 for check in source.pass_checks.iter() {
                     if !check.is_open() {
                         tracing::debug!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
@@ -131,8 +137,7 @@ where
                     }
                 }
                 let res = {
-                    let mut guard = cache.write().unwrap();
-                    let s_old = (*guard).value.clone();
+                    let s_old = cache_w.load().value.clone();
                     let s = f(s_old.clone());
                     if let Some(s_cmp) = pre_cmp
                         && s_cmp != s_old
@@ -169,7 +174,7 @@ where
                         };
                         let state = event.state.clone();
                         let recver_count = source.sender.send(event)?;
-                        *guard = state.clone();
+                        cache_w.store(Arc::new(state.clone()));
                         tracing::debug!("{sm_id} | {tag:?} | send | {recver_count} -- {state:?}");
                         (state, wait_rx)
                     } else {
@@ -183,7 +188,7 @@ where
                     tokio::task::yield_now().await;
                 }
             }
-            HandleI::Reader(_) => return Err(StateChangeError::StateReadOnly),
+            HandleI::Reader(_, _) => return Err(StateChangeError::StateReadOnly),
         }
         Ok(())
     }
@@ -196,15 +201,15 @@ where
 {
     pub fn is_source(&self) -> bool {
         match self.inner {
-            HandleI::Source(_, _) => true,
-            HandleI::Reader(_) => false,
+            HandleI::Source(_, _, _) => true,
+            HandleI::Reader(_, _) => false,
         }
     }
 
     pub fn capacity(&self) -> usize {
         match self.inner {
-            HandleI::Source(ref source, _) => source.capacity,
-            HandleI::Reader(ref reader) => reader.capacity,
+            HandleI::Source(ref source, _, _) => source.capacity,
+            HandleI::Reader(ref reader, _) => reader.capacity,
         }
     }
 
@@ -212,8 +217,7 @@ where
         Self {
             sm_id,
             tag,
-            inner: HandleI::Source(source, Default::default()),
-            cache: Default::default(),
+            inner: HandleI::Source(source, Default::default(), Default::default()),
             cancel_token: Default::default(),
             fanout_tx: OnceLock::new(),
         }
@@ -223,8 +227,7 @@ where
         Self {
             sm_id,
             tag,
-            inner: HandleI::Reader(reader),
-            cache: Default::default(),
+            inner: HandleI::Reader(reader, Default::default()),
             cancel_token: Default::default(),
             fanout_tx: OnceLock::new(),
         }
@@ -232,8 +235,8 @@ where
 
     pub fn reader(&self) -> Reader<T::Value> {
         match self.inner {
-            HandleI::Source(ref source, _) => source.reader(),
-            HandleI::Reader(ref reader) => reader.clone(),
+            HandleI::Source(ref source, _, _) => source.reader(),
+            HandleI::Reader(ref reader, _) => reader.clone(),
         }
     }
 
@@ -242,11 +245,11 @@ where
     }
 
     pub fn value(&self) -> T::Value {
-        self.cache.load().value.clone()
+        self.cache_r().load().value.clone()
     }
 
     pub fn state(&self) -> State<T::Value> {
-        self.cache.load().as_ref().clone()
+        self.cache_r().load().as_ref().clone()
     }
 
     pub async fn touch(&self) -> Result<(), StateChangeError<T::Value>> {
@@ -335,7 +338,7 @@ where
     pub async fn init(&self) {
         let sm_id = self.sm_id.clone();
         let tag = self.tag.clone();
-        let cache = self.cache.clone();
+        let cache_r = self.cache_r();
         let cancel_token = self.cancel_token.clone();
         let pass_checks = self.pass_checks();
         let mut recver = self.recver();
@@ -357,7 +360,7 @@ where
                     r = recver.recv() => {
                         match r {
                             Ok(e) => {
-                                let s_old = { cache.load().as_ref().clone() };
+                                let s_old = cache_r.load().as_ref().clone();
                                 let s_new = e.state.clone();
                                 if e.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
@@ -367,9 +370,7 @@ where
                                         }
                                     }
                                     tracing::debug!("{sm_id} | {tag:?} | recv -- {s_new:?}");
-                                    {
-                                        cache.store(Arc::new(s_new.clone()));
-                                    }
+                                    cache_r.store(Arc::new(s_new.clone()));
                                     if fanout_tx.send((s_new, s_old)).is_err() {
                                         break;
                                     }
