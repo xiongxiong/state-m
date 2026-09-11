@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. See [conven
 - - -
 ## 0.5.37 - 2026-09-10
 ### Package updates
+- state-m bumped to state-m-0.8.39
+### Global changes
+#### Bug Fixes
+- update cache - (60a741d) - wangjirong
+#### Miscellaneous Chores
+- (**version**) 0.5.37 - (9555dba) - wangjirong
+- (**version**) 0.5.37 - (47443b5) - wangjirong
+
+- - -
+
+## 0.5.37 - 2026-09-10
+### Package updates
 - state-m bumped to state-m-0.8.38
 ### Global changes
 #### Bug Fixes

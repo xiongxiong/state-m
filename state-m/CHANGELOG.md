@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.39 - 2026-09-11
+#### Bug Fixes
+- update log - (0f3ba20) - wangjirong
+
+- - -
+
 ## state-m-0.8.38 - 2026-09-10
 #### Bug Fixes
 - update cache - (60a741d) - wangjirong
