@@ -350,6 +350,7 @@ where
     pub async fn init(&self) {
         let sm_id = self.sm_id.clone();
         let tag = self.tag.clone();
+        let is_source = self.is_source();
         let cache_r = self.cache_r();
         let cancel_token = self.cancel_token.clone();
         let pass_checks = self.pass_checks();
@@ -381,7 +382,9 @@ where
                                             check.notified().await;
                                         }
                                     }
-                                    tracing::debug!("{sm_id} | {tag:?} | recv -- {s_new:?}");
+                                    if !is_source {
+                                        tracing::debug!("{sm_id} | {tag:?} | recv -- {s_new:?}");
+                                    }
                                     {
                                         *cache_r.write().unwrap() = s_new.clone();
                                     }
