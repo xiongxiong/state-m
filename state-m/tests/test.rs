@@ -32,6 +32,8 @@ where
     OuterEx1,
     #[state_tag(assoc = usize)]
     OuterEx2(OuterEx2),
+    #[state_tag(assoc = OuterEx3)]
+    OuterEx3,
     #[state_tag(assoc = IdI::Value, label = format!("route_i_{:?}", self.0))]
     RouteI(IdI),
     #[state_tag(assoc = IdO::Value, label = format!("route_o_{:?}", self.0))]
@@ -54,7 +56,14 @@ impl From<String> for MyCusTyp {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
 pub struct OuterEx2 {
     pub name: String,
-    pub age: u8,
+    pub age: usize,
+}
+
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd, Ord)]
+pub struct OuterEx3 {
+    pub name: String,
+    pub age: usize,
+    pub weight: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -133,7 +142,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_normal() -> Result<()> {
+    async fn test_alter() -> Result<()> {
         init_tracing();
         let unit = Unit::<TagS, TagS>::new("X");
         unit.add_source(TagInner(0), 10, None).await?;
@@ -144,6 +153,42 @@ mod tests {
             unit.amend(TagInner(0), |v| format!("{v}_{}", i)).await?;
         }
         unit.wait_touch(TagInner(0)).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_amend() -> Result<()> {
+        init_tracing();
+        let unit = Unit::<TagS, TagS>::new("X");
+        unit.add_source(TagOuterEx3, 10, None).await?;
+        let unit_c = unit.clone();
+        let h_1 = tokio::spawn(async move {
+            for _ in 0..1000 {
+                unit_c
+                    .amend(TagOuterEx3, |v| OuterEx3 {
+                        age: v.age + 1,
+                        ..v
+                    })
+                    .await?;
+            }
+            anyhow::Ok(())
+        });
+        let unit_c = unit.clone();
+        let h_2 = tokio::spawn(async move {
+            for _ in 0..1000 {
+                unit_c
+                    .amend(TagOuterEx3, |v| OuterEx3 {
+                        weight: v.weight + 1,
+                        ..v
+                    })
+                    .await?;
+            }
+            anyhow::Ok(())
+        });
+        _ = h_1.await?;
+        _ = h_2.await?;
+        assert_eq!(1000, unit.value(TagOuterEx3)?.age);
+        assert_eq!(1000, unit.value(TagOuterEx3)?.weight);
         Ok(())
     }
 

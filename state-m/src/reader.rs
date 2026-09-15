@@ -101,7 +101,7 @@ where
                                 match e {
                                     RecvError::Closed => break,
                                     RecvError::Lagged(n) => {
-                                        tracing::warn!("lagged | skipped {n} messages.")
+                                        tracing::warn!("Lagged, skipped {n} messages.")
                                     },
                                 }
                             },
@@ -154,7 +154,7 @@ where
                                 match e {
                                     RecvError::Closed => break,
                                     RecvError::Lagged(n) => {
-                                        tracing::warn!("lagged | skipped {n} messages.")
+                                        tracing::warn!("Lagged | skipped {n} messages.")
                                     },
                                 }
                             },

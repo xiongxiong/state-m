@@ -372,10 +372,10 @@ where
                     },
                     r = recver.recv() => {
                         match r {
-                            Ok(e) => {
+                            Ok(event) => {
                                 let s_old = { cache_r.read().unwrap().clone() };
-                                let s_new = e.state.clone();
-                                if e.is_touch || s_new.value != s_old.value {
+                                let s_new = event.state.clone();
+                                if event.is_touch || s_new.value != s_old.value {
                                     for check in pass_checks.iter() {
                                         if !check.is_open() {
                                             tracing::debug!("{sm_id} | {tag:?} | wait pass_check -- {check:?}");
@@ -393,7 +393,12 @@ where
                                     }
                                 }
                             }
-                            Err(_) => break,
+                            Err(e) => match e {
+                                RecvError::Closed => break,
+                                RecvError::Lagged(n) => {
+                                    tracing::warn!("{sm_id} | {tag:?} | Lagged, skipped {n} messages.")
+                                },
+                            },
                         }
                     }
                 }

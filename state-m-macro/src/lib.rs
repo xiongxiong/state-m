@@ -749,7 +749,7 @@ pub fn influx_reader(input: TokenStream) -> TokenStream {
                             match e {
                                 RecvError::Closed => break,
                                 RecvError::Lagged(n) => {
-                                    tracing::warn!("lagged | rx_{} | skipped {n} messages.", #i)
+                                    tracing::warn!("rx_{} | Lagged, skipped {n} messages.", #i)
                                 },
                             }
                         },
