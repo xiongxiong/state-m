@@ -2,6 +2,20 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## 0.5.37 - 2026-09-11
+### Package updates
+- state-m-macro bumped to state-m-macro-0.2.25
+- state-m bumped to state-m-0.8.40
+### Global changes
+#### Bug Fixes
+- update cache - (60a741d) - wangjirong
+#### Miscellaneous Chores
+- (**version**) 0.5.37 - (aa906d6) - wangjirong
+- (**version**) 0.5.37 - (9555dba) - wangjirong
+- (**version**) 0.5.37 - (47443b5) - wangjirong
+
+- - -
+
 ## 0.5.37 - 2026-09-10
 ### Package updates
 - state-m bumped to state-m-0.8.39
