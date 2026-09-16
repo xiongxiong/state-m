@@ -136,7 +136,8 @@ where
                     }
                 }
                 let res = {
-                    let v_old = { cache_w.read().unwrap().clone() };
+                    let mut guard = cache_w.write().unwrap();
+                    let v_old = guard.clone();
                     let v = f(v_old.clone());
                     if let Some(v_cmp) = to_cmp
                         && v_cmp != v_old
@@ -172,9 +173,7 @@ where
                             }
                         };
                         let state = event.state.clone();
-                        {
-                            *cache_w.write().unwrap() = v;
-                        }
+                        *guard = v;
                         match source.sender.send(event) {
                             Ok(recver_count) => {
                                 tracing::debug!(
@@ -183,9 +182,7 @@ where
                                 (state, wait_rx)
                             }
                             Err(e) => {
-                                {
-                                    *cache_w.write().unwrap() = v_old;
-                                }
+                                *guard = v_old;
                                 return Err(e.into());
                             }
                         }
