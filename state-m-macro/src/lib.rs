@@ -265,8 +265,8 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
     } else {
         quote! {}
     };
-    let get_t_g_idents = |fields: &Punctuated<Field, Comma>| {
-        fields
+    let get_t_g_idents = |fields: &Punctuated<Field, Comma>, genes: AttributePropertyGenerics| {
+        let mut idents = fields
             .iter()
             .map(|v| match &v.ty {
                 Type::Path(type_path) => type_path.path.segments.last().map(|s| s.ident.clone()),
@@ -274,7 +274,21 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
             })
             .filter(|v| v.is_some())
             .map(|v| v.unwrap())
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        if let Some(g) = genes.internal() {
+            let mut g_idents = g
+                .params
+                .iter()
+                .map(|p| match p {
+                    syn::GenericParam::Type(type_param) => Some(type_param.ident.clone()),
+                    _ => None,
+                })
+                .filter(|v| v.is_some())
+                .map(|v| v.unwrap())
+                .collect::<Vec<_>>();
+            idents.append(&mut g_idents);
+        }
+        idents
     };
     let get_q_t_g_args = |idents: &Vec<Ident>| {
         let q_idents = itertools::intersperse(
@@ -343,7 +357,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let t_name_str = format!("{}{}", i_ident, v_ident);
                 let (q, q_t_g_args, q_t_where) = match v_fields {
                     syn::Fields::Named(fields) => {
-                        let t_g_idents = get_t_g_idents(&fields.named);
+                        let t_g_idents = get_t_g_idents(&fields.named, args.generics.clone());
                         let q_t_g_args = get_q_t_g_args(&t_g_idents);
                         let q_t_where = get_q_t_where(&t_g_idents);
                         let fields_named_new = FieldsNamed {
@@ -367,7 +381,7 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unnamed(fields) => {
-                        let t_g_idents = get_t_g_idents(&fields.unnamed);
+                        let t_g_idents = get_t_g_idents(&fields.unnamed, args.generics.clone());
                         let q_t_g_args = get_q_t_g_args(&t_g_idents);
                         let q_t_where = get_q_t_where(&t_g_idents);
                         let fields_unnamed_new = FieldsUnnamed {
