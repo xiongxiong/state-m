@@ -1,5 +1,5 @@
 use state_m::*;
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, marker::PhantomData, sync::Arc};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, StateTag)]
 #[state_tag(assoc = String, label = format!("my_id_{}", self.0))]
@@ -43,6 +43,8 @@ where
     UniRouteI,
     #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_o"))]
     UniRouteO,
+    #[state_tag(generics = <IdX>, assoc = Option<IdX>, label = "phan")]
+    Phan(PhantomData<IdX>),
     #[state_tag(phantom = true)]
     Phantom(IdX),
 }
