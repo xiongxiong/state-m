@@ -343,9 +343,6 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 let t_name_str = format!("{}{}", i_ident, v_ident);
                 let (q, q_t_g_args, q_t_where) = match v_fields {
                     syn::Fields::Named(fields) => {
-                        if args.generics.is_some() {
-                            panic!("attribute [generics] can only be used on unit enum.")
-                        }
                         let t_g_idents = get_t_g_idents(&fields.named);
                         let q_t_g_args = get_q_t_g_args(&t_g_idents);
                         let q_t_where = get_q_t_where(&t_g_idents);
@@ -370,9 +367,6 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                         (q, q_t_g_args, q_t_where)
                     }
                     syn::Fields::Unnamed(fields) => {
-                        if args.generics.is_some() {
-                            panic!("attribute [generics] can only be used on unit enum.")
-                        }
                         let t_g_idents = get_t_g_idents(&fields.unnamed);
                         let q_t_g_args = get_q_t_g_args(&t_g_idents);
                         let q_t_where = get_q_t_where(&t_g_idents);
@@ -696,10 +690,10 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
         syn::Data::Struct(_) => {
             let args = state_tag_args(&input.attrs);
             if args.phantom.is_some() {
-                panic!("attribute [phantom] can only be used on unit enum.")
+                panic!("attribute [phantom] can only be used on enum variants.")
             }
             if args.generics.is_some() {
-                panic!("attribute [generics] can only be used on unit enum.")
+                panic!("attribute [generics] can only be used on enum variants.")
             }
             let typ = args.clone().assoc.internal();
             quotes.push(quote! {
