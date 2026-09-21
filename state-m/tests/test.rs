@@ -19,10 +19,11 @@ impl HasStateMachine for UnitS {
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, StateTag)]
-pub enum Tag<IdI, IdO>
+pub enum Tag<IdI, IdO, IdX>
 where
     IdI: AsKey + KvAssoc,
     IdO: AsKey + KvAssoc,
+    IdX: AsState,
 {
     #[state_tag(assoc = String, label = format!("inner_{}", self.0))]
     Inner(usize),
@@ -42,6 +43,8 @@ where
     UniRouteI,
     #[state_tag(generics = <IdI, IdO>, assoc = (IdI::Value, IdO::Value) label = format!("uni_route_o"))]
     UniRouteO,
+    #[state_tag(phantom = true)]
+    Phantom(IdX),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -72,7 +75,7 @@ where
     IdI: AsKey + KvAssoc,
     IdO: AsKey + KvAssoc,
 {
-    state_machine: StateMachine<Tag<IdI, IdO>>,
+    state_machine: StateMachine<Tag<IdI, IdO, ()>>,
 }
 
 impl<IdI, IdO> Unit<IdI, IdO>
@@ -82,7 +85,7 @@ where
 {
     pub fn new(id: &str) -> Arc<Self> {
         Arc::new(Self {
-            state_machine: StateMachine::<Tag<IdI, IdO>>::new(id),
+            state_machine: StateMachine::<Tag<IdI, IdO, ()>>::new(id),
         })
     }
 }
@@ -92,7 +95,7 @@ where
     IdI: AsKey + KvAssoc,
     IdO: AsKey + KvAssoc,
 {
-    type K = Tag<IdI, IdO>;
+    type K = Tag<IdI, IdO, ()>;
 
     fn state_machine(&self) -> &StateMachine<Self::K> {
         &self.state_machine
@@ -121,7 +124,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_debug_state() -> Result<()> {
-        let sm: Arc<StateMachine<Tag<TagS, TagS>>> = Default::default();
+        let sm: Arc<StateMachine<Tag<TagS, TagS, ()>>> = Default::default();
         assert_eq!("", &format!("{sm:?}"));
         Ok(())
     }

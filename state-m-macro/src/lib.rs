@@ -1,6 +1,6 @@
 use macro_tools::{
-    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn,
-    AttributePropertySyn, qt, return_syn_err, syn_err,
+    Assign, AttributeComponent, AttributePropertyComponent, AttributePropertyOptionalSyn, qt,
+    return_syn_err, syn_err,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -14,11 +14,11 @@ use syn::{
     token::Comma,
 };
 
-const STATE_TAG_ARGS: &str =
-    "#[state_tag(generics = <A>, assoc = AssocType, hidden = false, label = \"AssocLabel\")]";
+const STATE_TAG_ARGS: &str = "#[state_tag(phantom = false, generics = <A>, assoc = AssocType, hidden = false, label = \"AssocLabel\")]";
 
 #[derive(Clone, Debug)]
 struct StateTagArgs {
+    pub phantom: AttributePropertyPhantom,
     pub generics: AttributePropertyGenerics,
     pub assoc: AttributePropertyAssoc,
     pub hidden: AttributePropertyHidden,
@@ -60,6 +60,7 @@ impl Parse for StateTagArgs {
                 qt! { #ident }
             )
         };
+        let mut opt_phantom: Option<AttributePropertyPhantom> = None;
         let mut opt_generics: Option<AttributePropertyGenerics> = None;
         let mut opt_assoc: Option<AttributePropertyAssoc> = None;
         let mut opt_hidden: Option<AttributePropertyHidden> = None;
@@ -69,6 +70,9 @@ impl Parse for StateTagArgs {
             if lookahead.peek(syn::Ident) {
                 let ident: syn::Ident = input.parse()?;
                 match ident.to_string().as_str() {
+                    AttributePropertyPhantom::KEYWORD => {
+                        opt_phantom = Some(AttributePropertyPhantom::parse(input)?);
+                    }
                     AttributePropertyGenerics::KEYWORD => {
                         opt_generics = Some(AttributePropertyGenerics::parse(input)?);
                     }
@@ -91,18 +95,23 @@ impl Parse for StateTagArgs {
                 input.parse::<syn::Token![,]>()?;
             }
         }
-        if opt_assoc.is_none() {
-            return Err(syn_err!(
-                "Attribute property '{}' is necessary.",
-                AttributePropertyAssocMarker::KEYWORD
-            ));
-        }
         Ok(Self {
+            phantom: opt_phantom.unwrap_or_default(),
             generics: opt_generics.unwrap_or_default(),
-            assoc: opt_assoc.unwrap(),
+            assoc: opt_assoc.unwrap_or_default(),
             hidden: opt_hidden.unwrap_or_default(),
             label: opt_label.unwrap_or_default(),
         })
+    }
+}
+
+impl<IntoT> Assign<AttributePropertyPhantom, IntoT> for StateTagArgs
+where
+    IntoT: Into<AttributePropertyPhantom>,
+{
+    #[inline(always)]
+    fn assign(&mut self, component: IntoT) {
+        self.phantom = component.into()
     }
 }
 
@@ -146,6 +155,16 @@ where
     }
 }
 
+type AttributePropertyPhantom =
+    AttributePropertyOptionalSyn<LitBool, AttributePropertyPhantomMarker>;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct AttributePropertyPhantomMarker;
+
+impl AttributePropertyComponent for AttributePropertyPhantomMarker {
+    const KEYWORD: &'static str = "phantom";
+}
+
 type AttributePropertyGenerics =
     AttributePropertyOptionalSyn<Generics, AttributePropertyGenericsMarker>;
 
@@ -156,7 +175,7 @@ impl AttributePropertyComponent for AttributePropertyGenericsMarker {
     const KEYWORD: &'static str = "generics";
 }
 
-type AttributePropertyAssoc = AttributePropertySyn<Type, AttributePropertyAssocMarker>;
+type AttributePropertyAssoc = AttributePropertyOptionalSyn<Type, AttributePropertyAssocMarker>;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct AttributePropertyAssocMarker;
@@ -313,6 +332,10 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
         syn::Data::Enum(data_enum) => {
             for item in &data_enum.variants {
                 let args = state_tag_args(&item.attrs);
+                if args.phantom.is_some() {
+                    continue;
+                }
+
                 let q_attrs = q_attrs_except(&item.attrs, vec![StateTagArgs::KEYWORD]);
                 let v_ident = &item.ident;
                 let v_fields = &item.fields;
@@ -577,12 +600,18 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
                 quotes.push(q_try_from);
 
                 // KvAssoc
-                let typ = args.clone().assoc.internal();
-                quotes.push(quote! {
-                    impl #q_t_g_args KvAssoc for #t_name #q_t_g_args #q_t_where {
-                        type Value = #typ;
-                    }
-                });
+                if let Some(typ) = args.clone().assoc.internal() {
+                    quotes.push(quote! {
+                        impl #q_t_g_args KvAssoc for #t_name #q_t_g_args #q_t_where {
+                            type Value = #typ;
+                        }
+                    });
+                } else {
+                    panic!(
+                        "Attribute property '{}' is necessary.",
+                        AttributePropertyAssocMarker::KEYWORD
+                    );
+                }
 
                 // IsHidden
                 let q_is_hidden = match args.hidden.internal() {
@@ -666,6 +695,9 @@ pub fn state_tag(item: TokenStream) -> TokenStream {
         }
         syn::Data::Struct(_) => {
             let args = state_tag_args(&input.attrs);
+            if args.phantom.is_some() {
+                panic!("attribute [phantom] can only be used on unit enum.")
+            }
             if args.generics.is_some() {
                 panic!("attribute [generics] can only be used on unit enum.")
             }
