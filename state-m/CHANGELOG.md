@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.8.44 - 2026-09-22
+#### Bug Fixes
+- update lifetime of UseStateMachine - (8742ceb) - wangjirong
+
+- - -
+
 ## state-m-0.8.43 - 2026-09-21
 #### Bug Fixes
 - update generics support - (5b13915) - wangjirong
