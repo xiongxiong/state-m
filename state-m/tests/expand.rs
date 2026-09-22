@@ -6,7 +6,7 @@
 // #[state_tag(assoc = String, label = format!("my_id_{}", self.0))]
 // pub struct MyId(u8);
 
-// sm_merge_same!(2);
+// watch_group_sm!(2);
 
 // #[derive(Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, StateTag)]
 // pub enum Tag<A, B>

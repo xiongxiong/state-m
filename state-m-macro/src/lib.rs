@@ -943,7 +943,7 @@ pub fn watch_sm(input: TokenStream) -> TokenStream {
                             let mut states = (#(#all_states)*);
                             let (#(#all_state_names)*) = states;
                             if let Err(e) = func(#(#all_state_names)*).await {
-                                tracing::error!("{id} | {:?} | watch error -- {e:?}", #tag_name);
+                                tracing::error!("{id} | {:?} | error -- {e:?}", #tag_name);
                             }
                         }
                         Err(_) => break,
@@ -1649,6 +1649,14 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
         quote! {,},
     )
     .collect();
+    let tag_names: Vec<_> = itertools::intersperse(
+        (0..n).map(|i| {
+            let typ = format_ident!("T{}", i);
+            quote! { std::any::type_name::<#typ>() }
+        }),
+        quote! {,},
+    )
+    .collect();
     let key_typ_cons: Vec<_> = (0..n)
         .map(|i| {
             let typ = format_ident!("T{}", i);
@@ -1772,7 +1780,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
                             }
                         }).collect::<Vec<_>>();
                         if let Err(e) = func(#(#states_names)*).await {
-                            tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
+                            tracing::error!("{id} | {} | {:?} | error -- {e:?}", #method_name_str, t);
                         }
                     }
                     _ => break
@@ -1801,7 +1809,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
             let cancel_token = CancellationToken::new();
             let cancel_token_c = cancel_token.clone();
             tokio::spawn(async move {
-                tracing::info!("{id} | {} -- start", #method_name_str);
+                tracing::info!("{id} | {} | {:?} -- start", #method_name_str, (#(#tag_names)*));
                 loop {
                     tokio::select! {
                         biased;
@@ -1809,7 +1817,7 @@ pub fn watch_group_sm(input: TokenStream) -> TokenStream {
                         #(#sel_branchs)*
                     }
                 }
-                tracing::info!("{id} | {} -- close", #method_name_str);
+                tracing::info!("{id} | {} | {:?} -- start", #method_name_str, (#(#tag_names)*));
             });
             Ok(cancel_token)
         }

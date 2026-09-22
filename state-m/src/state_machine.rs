@@ -10,6 +10,7 @@ use dashmap::DashMap;
 use itertools::Itertools;
 use state_m_macro::*;
 use std::{
+    any::type_name,
     fmt::{self, Debug},
     pin::Pin,
     sync::Arc,
@@ -363,7 +364,7 @@ where
         let handle = self.get_handle(tag.clone())?;
         let (mut rx, token) = handle.fanout();
         tokio::spawn(async move {
-            tracing::info!("{id} | {tag:?} -- start");
+            tracing::info!("{id} | watch | {tag:?} -- start");
             loop {
                 tokio::select! {
                     biased;
@@ -372,7 +373,7 @@ where
                     r = rx.recv() => match r {
                         Ok((s_cur, s_old)) => {
                             if let Err(e) = func((tag.clone(), StateChange::Change(s_cur, s_old))).await {
-                                tracing::error!("{id} | {:?} | watch error -- {e:?}", tag);
+                                tracing::error!("{id} | watch | {:?} | error -- {e:?}", tag);
                             }
                         }
                         Err(_) => break,
@@ -444,7 +445,7 @@ where
         let cancel_token = CancellationToken::new();
         let cancel_token_c = cancel_token.clone();
         tokio::spawn(async move {
-            tracing::info!("{id} | watch_group -- start");
+            tracing::info!("{id} | watch_group | {} -- start", type_name::<T>());
             loop {
                 tokio::select! {
                     biased;
@@ -460,7 +461,7 @@ where
                                     }
                                 }).collect::<Vec<_>>();
                                 if let Err(e) = func(states).await {
-                                    tracing::error!("{id} | {:?} | watch_group error -- {e:?}", t);
+                                    tracing::error!("{id} | watch_group | {:?} | error -- {e:?}", t);
                                 }
                             }
                             _ => break
@@ -468,7 +469,7 @@ where
                     }
                 }
             }
-            tracing::info!("{id} | watch_group -- close");
+            tracing::info!("{id} | watch_group | {} -- close", type_name::<T>());
         });
         Ok(cancel_token)
     }
