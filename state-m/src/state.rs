@@ -32,7 +32,7 @@ where
     S: Debug + Default,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} | {:?}", self.timestamp, self.value)
+        write!(f, "{:?} | {}", self.value, self.timestamp)
     }
 }
 
