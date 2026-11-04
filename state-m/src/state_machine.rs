@@ -1,5 +1,5 @@
 use crate::{
-    AsKey, AsState, IsHidden, KeyIsTag, KvAssoc, State, StateEvent,
+    AsKey, AsState, DebugState, IsHidden, KeyIsTag, KvAssoc, State, StateEvent,
     barrier::AsPassCheck,
     handle::{ArcHandle, AsHandle, Handle, StateChangeError as HandleStateChangeError},
     reader::Reader,
@@ -38,11 +38,7 @@ where
     K: AsKey,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for item in self.1.iter().sorted_by_key(|k| k.key().clone()) {
-            let (_, (label, _, handle)) = item.pair();
-            write!(f, "{:<20} | {:?}\n", label, handle.debug_state())?
-        }
-        Ok(())
+        write!(f, "{} | keys - {}", self.0, self.1.len())
     }
 }
 
@@ -83,6 +79,23 @@ where
     /// * `id` - used to distinguish between different log messages.
     pub fn new(id: &str) -> Self {
         Self(id.into(), Default::default())
+    }
+
+    /// Structured debug state of state machine.
+    pub fn debug_state(&self) -> Vec<DebugState> {
+        let mut states: Vec<DebugState> = Vec::new();
+        for item in self.1.iter().sorted_by_key(|k| k.key().clone()) {
+            let (_, (label, hidden, handle)) = item.pair();
+            let state_h = handle.debug_state();
+            if !hidden {
+                states.push(DebugState {
+                    label: label.clone(),
+                    state: state_h.state,
+                    timestamp: state_h.timestamp,
+                });
+            }
+        }
+        states
     }
 
     /// Judge if a Tag for state machine is a Source or Reader.
@@ -175,17 +188,6 @@ where
         T::Value: AsState,
     {
         Ok(self.get_handle(tag)?.state())
-    }
-
-    pub fn debug_state(&self) -> Vec<String> {
-        let mut states = Vec::new();
-        for item in self.1.iter().sorted_by_key(|k| k.key().clone()) {
-            let (_, (label, hidden, handle)) = item.pair();
-            if !hidden {
-                states.push(format!("{:<20} | {:?}", label, handle.debug_state()));
-            }
-        }
-        states
     }
 
     pub async fn add_source<T>(
@@ -851,7 +853,7 @@ pub trait UseStateMachine: 'static + HasStateMachine {
         T::Value: AsState;
 
     /// Get debug state of state machine, ordered by tag.
-    fn debug_state(&self) -> Vec<String>;
+    fn debug_state(&self) -> Vec<DebugState>;
 
     /// Watch a state handle, responding to state change events.
     /// * `tag` - the 'Tag' of the state handle.
@@ -1188,7 +1190,7 @@ where
         self.state_machine().wait_cmp_amend(tag, f, s_cmp).await
     }
 
-    fn debug_state(&self) -> Vec<String> {
+    fn debug_state(&self) -> Vec<DebugState> {
         self.state_machine().debug_state()
     }
 

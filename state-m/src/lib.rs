@@ -6,6 +6,7 @@ mod state;
 mod state_machine;
 
 pub use barrier::*;
+use chrono::{DateTime, Utc};
 pub use reader::*;
 pub use state::*;
 pub use state_m_macro::StateTag;
@@ -36,3 +37,21 @@ impl<T> AsState for T where T: 'static + Clone + Debug + Default + PartialEq + S
 pub trait AsKey: 'static + Clone + Debug + Eq + Hash + Ord + Send + Sync {}
 
 impl<T> AsKey for T where T: 'static + Clone + Debug + Eq + Hash + Ord + Send + Sync {}
+
+/// Structured debug state of handle
+#[derive(Clone, PartialEq)]
+pub struct DebugState {
+    pub label: String,
+    pub state: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl Debug for DebugState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:<20} | {} | {}",
+            self.label, self.state, self.timestamp
+        )
+    }
+}

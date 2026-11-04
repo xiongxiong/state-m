@@ -5,7 +5,7 @@ use crate::{
     source::Source,
     state::{State, StateEvent},
 };
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use downcast_rs::{Downcast, impl_downcast};
 use std::{
     fmt::Debug,
@@ -26,8 +26,13 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+pub(crate) struct DebugStateH {
+    pub state: String,
+    pub timestamp: DateTime<Utc>,
+}
+
 pub trait AsHandle: Debug + Downcast + Send + Sync {
-    fn debug_state(&self) -> Box<dyn Debug>;
+    fn debug_state(&self) -> DebugStateH;
 }
 
 impl_downcast!(AsHandle);
@@ -55,8 +60,12 @@ where
     T: 'static + Clone + Debug + KvAssoc + Send + Sync,
     T::Value: AsState,
 {
-    fn debug_state(&self) -> Box<dyn Debug> {
-        Box::new(self.0.state())
+    fn debug_state(&self) -> DebugStateH {
+        let state = self.state();
+        DebugStateH {
+            state: format!("{:?}", state.value),
+            timestamp: state.timestamp.clone(),
+        }
     }
 }
 
