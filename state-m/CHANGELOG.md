@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.9.0 - 2026-11-05
+#### Features
+- changed debug info apis - (c17ea02) - 王继荣
+#### Bug Fixes
+- changed debug info of state - (c049d02) - wangjirong
+
+- - -
+
 ## 0.5.44 - 2026-11-04
 ### Package updates
 - state-m bumped to state-m-0.8.47
