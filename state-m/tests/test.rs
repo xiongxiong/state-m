@@ -289,7 +289,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge_reader() -> Result<()> {
+    async fn test_influx_reader() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
@@ -314,7 +314,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge_group() -> Result<()> {
+    async fn test_influx_group() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
@@ -341,7 +341,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge_sm() -> Result<()> {
+    async fn test_merge() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
@@ -370,7 +370,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_merge_group_sm() -> Result<()> {
+    async fn test_merge_group() -> Result<()> {
         init_tracing();
         let unit_a = Unit::<TagS, TagS>::new("A");
         unit_a.add_source(TagInner(0), 10, None).await?;
