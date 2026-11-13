@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.9.0 - 2026-11-13
+#### Features
+- changed debug info apis - (c17ea02) - 王继荣
+#### Bug Fixes
+- update reader's cache_r value when init - (9254373) - wangjirong
+- changed some functions' name - (dee45d6) - wangjirong
+- changed debug info of state - (c049d02) - wangjirong
+#### Miscellaneous Chores
+- (**version**) 0.6.0 - (cf23c99) - 王继荣
+
+- - -
+
 ## state-m-0.9.0 - 2026-11-05
 #### Features
 - changed debug info apis - (c17ea02) - 王继荣
