@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.9.1 - 2026-11-13
+#### Bug Fixes
+- update - (179ed88) - wangjirong
+
+- - -
+
 ## state-m-0.9.0 - 2026-11-13
 #### Features
 - changed debug info apis - (c17ea02) - 王继荣
