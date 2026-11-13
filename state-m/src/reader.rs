@@ -1,21 +1,35 @@
 use crate::{
     AsState,
-    source::Inner,
+    inner::Inner,
     state::{State, StateEvent},
 };
+use derivative::Derivative;
 use state_m_macro::influx_reader;
-use std::{fmt::Debug, ops::Deref, sync::Arc};
+use std::{
+    ops::Deref,
+    pin::Pin,
+    sync::{Arc, RwLock},
+};
 use tokio::{
     select,
     sync::broadcast::{Sender, channel, error::RecvError},
 };
 use tokio_stream::{StreamExt as _, StreamMap, wrappers::BroadcastStream};
 
+pub type GetIni<S> = Pin<Arc<dyn Fn() -> Pin<Box<dyn Future<Output = S> + Send>> + Send + Sync>>;
+
 /// Reader of state, to receive state change events.
-#[derive(Clone, Debug)]
-pub struct Reader<S>(Inner<S>)
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
+pub struct Reader<S>
 where
-    S: AsState;
+    S: AsState,
+{
+    pub(crate) inner: Inner<S>,
+    pub(crate) cache_r: Arc<RwLock<State<S>>>,
+    #[derivative(Debug = "ignore")]
+    pub(crate) get_ini: GetIni<S>,
+}
 
 impl<S> Deref for Reader<S>
 where
@@ -24,7 +38,7 @@ where
     type Target = Inner<S>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
@@ -32,16 +46,24 @@ impl<S> Reader<S>
 where
     S: AsState,
 {
-    pub(crate) fn from(inner: Inner<S>) -> Self {
-        Self(inner)
+    pub(crate) fn from(inner: Inner<S>, get_ini: GetIni<S>) -> Self {
+        Self {
+            inner,
+            cache_r: Default::default(),
+            get_ini,
+        }
     }
 
-    pub(crate) fn new(capacity: usize, sender: Sender<StateEvent<S>>) -> Self {
-        Self(Inner {
-            capacity,
-            sender,
-            pass_checks: Default::default(),
-        })
+    pub(crate) fn new(capacity: usize, sender: Sender<StateEvent<S>>, get_ini: GetIni<S>) -> Self {
+        Self {
+            inner: Inner {
+                capacity,
+                sender,
+                pass_checks: Default::default(),
+            },
+            cache_r: Default::default(),
+            get_ini,
+        }
     }
 }
 
@@ -51,7 +73,7 @@ where
 {
     /// Check is the channel has been closed.
     pub fn is_closed(&self) -> bool {
-        self.sender.subscribe().is_closed()
+        self.inner.sender.subscribe().is_closed()
     }
 
     /// Convert data type of state reader.
@@ -73,11 +95,13 @@ where
     pub fn derive_by<T, F>(&self, f: F) -> Reader<T>
     where
         T: AsState,
-        F: Fn(S) -> T + Send + 'static,
+        F: Fn(S) -> T + Send + Sync + 'static,
     {
-        let (tx, _) = channel(self.capacity);
+        let (tx, _) = channel(self.inner.capacity);
         let tx_c = tx.clone();
-        let mut rx_o = self.sender.subscribe();
+        let mut rx_o = self.inner.sender.subscribe();
+        let arc_f = Arc::new(f);
+        let arc_f_c = arc_f.clone();
         tokio::spawn(async move {
             loop {
                 select! {
@@ -87,7 +111,7 @@ where
                                 tracing::trace!("recv -- {:?}", s.state);
                                 let s_new = StateEvent {
                                     state: State {
-                                        value: f(s.state.value),
+                                        value: arc_f.as_ref()(s.state.value),
                                         timestamp: s.state.timestamp,
                                     },
                                     is_touch: s.is_touch,
@@ -110,11 +134,24 @@ where
                 }
             }
         });
-        Reader(Inner {
-            capacity: self.capacity,
-            sender: tx,
-            pass_checks: self.pass_checks.clone(),
-        })
+        let get_ini_s = self.get_ini.clone();
+        let get_ini_t: GetIni<T> = Arc::pin(move || {
+            let get_ini_sc = get_ini_s.clone();
+            let arc_f_cc = arc_f_c.clone();
+            Box::pin(async move {
+                let s = get_ini_sc.as_ref()().await;
+                arc_f_cc.as_ref()(s)
+            })
+        });
+        Reader {
+            inner: Inner {
+                capacity: self.inner.capacity,
+                sender: tx,
+                pass_checks: self.inner.pass_checks.clone(),
+            },
+            cache_r: Default::default(),
+            get_ini: get_ini_t,
+        }
     }
 
     /// Convert data type of state reader, with an async closure.
@@ -128,9 +165,11 @@ where
         F: Fn(S) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = T> + Send,
     {
-        let (tx, _) = channel(self.capacity);
+        let (tx, _) = channel(self.inner.capacity);
         let tx_c = tx.clone();
-        let mut rx_o = self.sender.subscribe();
+        let mut rx_o = self.inner.sender.subscribe();
+        let arc_f = Arc::new(f);
+        let arc_f_c = arc_f.clone();
         tokio::spawn(async move {
             loop {
                 select! {
@@ -140,7 +179,7 @@ where
                                 tracing::trace!("recv -- {:?}", s.state);
                                 let s_new = StateEvent {
                                     state: State {
-                                        value: f(s.state.value).await,
+                                        value: arc_f.as_ref()(s.state.value).await,
                                         timestamp: s.state.timestamp,
                                     },
                                     is_touch: s.is_touch,
@@ -163,11 +202,24 @@ where
                 }
             }
         });
-        Reader(Inner {
-            capacity: self.capacity,
-            sender: tx,
-            pass_checks: self.pass_checks.clone(),
-        })
+        let get_ini_s = self.get_ini.clone();
+        let get_ini_t: GetIni<T> = Arc::pin(move || {
+            let get_ini_sc = get_ini_s.clone();
+            let arc_f_cc = arc_f_c.clone();
+            Box::pin(async move {
+                let s = get_ini_sc.as_ref()().await;
+                arc_f_cc.as_ref()(s).await
+            })
+        });
+        Reader {
+            inner: Inner {
+                capacity: self.inner.capacity,
+                sender: tx,
+                pass_checks: self.inner.pass_checks.clone(),
+            },
+            cache_r: Default::default(),
+            get_ini: get_ini_t,
+        }
     }
 }
 
@@ -180,7 +232,7 @@ where
     let tx_c = tx.clone();
     let mut stream_map: StreamMap<usize, _> = StreamMap::new();
     for (i, item) in readers.iter().enumerate() {
-        stream_map.insert(i, BroadcastStream::new(item.sender.subscribe()));
+        stream_map.insert(i, BroadcastStream::new(item.inner.sender.subscribe()));
     }
     tokio::spawn(async move {
         loop {
@@ -199,17 +251,22 @@ where
         }
     });
     let pass_checks: Vec<_> = itertools::concat(readers.iter().map(|item| {
-        item.pass_checks
+        item.inner
+            .pass_checks
             .as_ref()
             .iter()
             .map(|v| v.clone())
             .collect::<Vec<_>>()
     }));
-    Reader(Inner {
-        capacity,
-        sender: tx,
-        pass_checks: Arc::new(pass_checks),
-    })
+    Reader {
+        inner: Inner {
+            capacity,
+            sender: tx,
+            pass_checks: Arc::new(pass_checks),
+        },
+        cache_r: Default::default(),
+        get_ini: Arc::pin(|| Box::pin(async move { T::default() })),
+    }
 }
 
 influx_reader!(2);

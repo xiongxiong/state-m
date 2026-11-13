@@ -74,8 +74,8 @@ enum HandleI<S>
 where
     S: AsState,
 {
-    Source(Source<S>, Arc<RwLock<S>>, Arc<RwLock<State<S>>>),
-    Reader(Reader<S>, Arc<RwLock<State<S>>>),
+    Source(Source<S>),
+    Reader(Reader<S>),
 }
 
 #[derive(Debug)]
@@ -108,22 +108,22 @@ where
 {
     fn recver(&self) -> Receiver<StateEvent<T::Value>> {
         match self.inner {
-            HandleI::Source(ref source, _, _) => source.sender.subscribe(),
-            HandleI::Reader(ref reader, _) => reader.sender.subscribe(),
+            HandleI::Source(ref source) => source.sender.subscribe(),
+            HandleI::Reader(ref reader) => reader.sender.subscribe(),
         }
     }
 
     fn pass_checks(&self) -> Arc<Vec<Arc<dyn AsPassCheck + Send + Sync>>> {
         match self.inner {
-            HandleI::Source(ref source, _, _) => source.pass_checks.clone(),
-            HandleI::Reader(ref reader, _) => reader.pass_checks.clone(),
+            HandleI::Source(ref source) => source.pass_checks.clone(),
+            HandleI::Reader(ref reader) => reader.pass_checks.clone(),
         }
     }
 
     pub fn cache_r(&self) -> Arc<RwLock<State<T::Value>>> {
         match self.inner {
-            HandleI::Source(_, _, ref cache_r) => cache_r.clone(),
-            HandleI::Reader(_, ref cache_r) => cache_r.clone(),
+            HandleI::Source(ref source) => source.cache_r.clone(),
+            HandleI::Reader(ref reader) => reader.cache_r.clone(),
         }
     }
 
@@ -135,7 +135,7 @@ where
         to_cmp: Option<T::Value>,
     ) -> Result<(), StateChangeError<T::Value>> {
         match self.inner {
-            HandleI::Source(ref source, ref cache_w, _) => {
+            HandleI::Source(ref source) => {
                 let sm_id = &self.sm_id;
                 let tag = &self.tag;
                 for check in source.pass_checks.iter() {
@@ -145,7 +145,7 @@ where
                     }
                 }
                 let res = {
-                    let mut guard = cache_w.write().unwrap();
+                    let mut guard = source.cache_w.write().unwrap();
                     let v_old = guard.clone();
                     let v = f(v_old.clone());
                     if let Some(v_cmp) = to_cmp
@@ -206,7 +206,7 @@ where
                     tokio::task::yield_now().await;
                 }
             }
-            HandleI::Reader(_, _) => return Err(StateChangeError::StateReadOnly),
+            HandleI::Reader(_) => return Err(StateChangeError::StateReadOnly),
         }
         Ok(())
     }
@@ -219,15 +219,15 @@ where
 {
     pub fn is_source(&self) -> bool {
         match self.inner {
-            HandleI::Source(_, _, _) => true,
-            HandleI::Reader(_, _) => false,
+            HandleI::Source(_) => true,
+            HandleI::Reader(_) => false,
         }
     }
 
     pub fn capacity(&self) -> usize {
         match self.inner {
-            HandleI::Source(ref source, _, _) => source.capacity,
-            HandleI::Reader(ref reader, _) => reader.capacity,
+            HandleI::Source(ref source) => source.capacity,
+            HandleI::Reader(ref reader) => reader.capacity,
         }
     }
 
@@ -235,7 +235,7 @@ where
         Self {
             sm_id,
             tag,
-            inner: HandleI::Source(source, Default::default(), Default::default()),
+            inner: HandleI::Source(source),
             cancel_token: Default::default(),
             fanout_tx: OnceLock::new(),
         }
@@ -245,7 +245,7 @@ where
         Self {
             sm_id,
             tag,
-            inner: HandleI::Reader(reader, Default::default()),
+            inner: HandleI::Reader(reader),
             cancel_token: Default::default(),
             fanout_tx: OnceLock::new(),
         }
@@ -253,8 +253,8 @@ where
 
     pub fn reader(&self) -> Reader<T::Value> {
         match self.inner {
-            HandleI::Source(ref source, _, _) => source.reader(),
-            HandleI::Reader(ref reader, _) => reader.clone(),
+            HandleI::Source(ref source) => source.reader(),
+            HandleI::Reader(ref reader) => reader.clone(),
         }
     }
 
@@ -354,17 +354,23 @@ where
     T::Value: AsState,
 {
     pub async fn init(&self) {
-        let sm_id = self.sm_id.clone();
-        let tag = self.tag.clone();
-        let is_source = self.is_source();
-        let cache_r = self.cache_r();
-        let cancel_token = self.cancel_token.clone();
-        let pass_checks = self.pass_checks();
-        let mut recver = self.recver();
         let (fanout_tx, mut fanout_rx) = channel(self.capacity());
         self.fanout_tx
             .set(fanout_tx.clone())
             .expect("The 'init' method can only be called once.");
+        let cache_r = self.cache_r();
+        match self.inner {
+            HandleI::Reader(ref reader) => {
+                *cache_r.write().unwrap() = State::new(reader.get_ini.as_ref()().await);
+            }
+            _ => {}
+        }
+        let sm_id = self.sm_id.clone();
+        let tag = self.tag.clone();
+        let cancel_token = self.cancel_token.clone();
+        let pass_checks = self.pass_checks();
+        let mut recver = self.recver();
+        let is_source = self.is_source();
         tokio::spawn(async move {
             tracing::info!("{sm_id} | {tag:?} | init -- start");
             loop {

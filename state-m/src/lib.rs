@@ -1,5 +1,6 @@
 mod barrier;
 mod handle;
+mod inner;
 mod reader;
 mod source;
 mod state;

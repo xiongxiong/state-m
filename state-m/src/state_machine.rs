@@ -556,7 +556,11 @@ where
             }
             tracing::info!("{id} | merge_group -- close");
         });
-        Ok(Reader::new(capacity, tx))
+        Ok(Reader::new(
+            capacity,
+            tx,
+            Arc::pin(|| Box::pin(async move { Default::default() })),
+        ))
     }
 
     watch_sm!(2);

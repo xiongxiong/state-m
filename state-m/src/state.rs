@@ -36,6 +36,18 @@ where
     }
 }
 
+impl<S> State<S>
+where
+    S: Debug + Default,
+{
+    pub fn new(value: S) -> Self {
+        Self {
+            value,
+            timestamp: Utc::now(),
+        }
+    }
+}
+
 /// State change event.
 /// * `state` - state associated with event.
 #[derive(Clone, Derivative)]

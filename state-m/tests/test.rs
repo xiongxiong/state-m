@@ -147,6 +147,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_init() -> Result<()> {
+        init_tracing();
+        let unit_a = Unit::<TagS, TagS>::new("A");
+        unit_a.add_source(TagInner(0), 10, None).await?;
+        unit_a.alter(TagInner(0), "0".into()).await?;
+        let unit_b = Unit::<TagS, TagS>::new("B");
+        unit_b
+            .add_reader(TagOuter(0, 0), unit_a.reader(TagInner(0))?)
+            .await?;
+        assert_eq!(unit_b.value(TagOuter(0, 0))?, String::from("0"));
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_alter() -> Result<()> {
         init_tracing();
         let unit = Unit::<TagS, TagS>::new("X");

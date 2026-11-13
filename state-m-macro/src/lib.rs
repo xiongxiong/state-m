@@ -819,11 +819,15 @@ pub fn influx_reader(input: TokenStream) -> TokenStream {
             let pass_checks: Vec<_> = itertools::concat(vec![
                 #(#pc_params)*
             ]);
-            Reader(Inner {
-                capacity,
-                sender: tx,
-                pass_checks: Arc::new(pass_checks),
-            })
+            Reader {
+                inner: Inner {
+                    capacity,
+                    sender: tx,
+                    pass_checks: Arc::new(pass_checks),
+                },
+                cache_r: Default::default(),
+                get_ini: Arc::pin(|| Box::pin(async move { T::default() })),
+            }
         }
     }
     .into()
@@ -1295,7 +1299,7 @@ pub fn merge_reader_sm(input: TokenStream) -> TokenStream {
                 }
                 tracing::info!("{id} | merge_reader_{} | {tags:?} -- close", #n);
             });
-            Ok(Reader::new(capacity, tx))
+            Ok(Reader::new(capacity, tx, Arc::pin(|| Box::pin(async move { Default::default() }))))
         }
     }.into()
 }
@@ -1497,7 +1501,7 @@ pub fn split_reader_sm(input: TokenStream) -> TokenStream {
         (0..n).map(|i| {
             let tx_name = format_ident!("tx_{}", i);
             quote! {
-                Reader::new(capacity, #tx_name)
+                Reader::new(capacity, #tx_name, Arc::pin(|| Box::pin(async move { Default::default() })))
             }
         }),
         quote! {,},
@@ -2107,7 +2111,7 @@ pub fn merge_group_sm(input: TokenStream) -> TokenStream {
                 }
                 tracing::info!("{id} | {} -- close", #method_name_str);
             });
-            Ok(Reader::new(capacity, tx))
+            Ok(Reader::new(capacity, tx, Arc::pin(|| Box::pin(async move { Default::default() }))))
         }
     }
     .into()
