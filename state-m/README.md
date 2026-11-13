@@ -191,7 +191,7 @@ let reader_2 = unit_b
 
 ```rust
 let reader = unit_a
-    .merge_same::<TagInner, _, _>(10, |states| {
+    .merge_group::<TagInner, _, _>(10, |states| {
         states
             .iter()
             .fold("".into(), |init, item| format!("{init}, {}", item.1))
