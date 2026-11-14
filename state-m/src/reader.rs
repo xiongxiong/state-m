@@ -78,6 +78,11 @@ where
             get_ini,
         }
     }
+
+    /// Get initial value of a reader
+    pub async fn init_value(&self) -> S {
+        self.get_ini.as_ref()().await
+    }
 }
 
 impl<S> Reader<S>
