@@ -19,7 +19,7 @@ use tokio_stream::{StreamExt as _, StreamMap, wrappers::BroadcastStream};
 pub type GetIni<S> = Pin<Arc<dyn Fn() -> Pin<Box<dyn Future<Output = S> + Send>> + Send + Sync>>;
 
 /// Reader of state, to receive state change events.
-#[derive(Clone, Derivative)]
+#[derive(Derivative)]
 #[derivative(Debug)]
 pub struct Reader<S>
 where
@@ -39,6 +39,19 @@ where
 
     fn deref(&self) -> &Self::Target {
         &self.inner
+    }
+}
+
+impl<S> Clone for Reader<S>
+where
+    S: AsState,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            cache_r: Default::default(),
+            get_ini: self.get_ini.clone(),
+        }
     }
 }
 
