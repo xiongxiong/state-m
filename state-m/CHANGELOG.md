@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## state-m-0.9.2 - 2026-11-14
+#### Bug Fixes
+- reader clones should not share cache_r - (2b0936a) - wangjirong
+
+- - -
+
 ## state-m-0.9.1 - 2026-11-13
 #### Bug Fixes
 - update - (179ed88) - wangjirong
